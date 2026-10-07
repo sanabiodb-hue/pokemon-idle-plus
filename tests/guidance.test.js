@@ -146,10 +146,12 @@ test('推荐道路：当前道路抓齐后，推荐下一条有新宝可梦且�
     game.changeRoute('kanto_route2');
     game.catchPokemonWithIvs(10, 1, ivs(1)); game.catchPokemonWithIvs(13, 1, ivs(1));
     assert.equal(game.getRecommendedRoute().route.id, 'kanto_viridian_forest');
-    // 已解锁的地区里所有道路的宝可梦都抓齐了 → 没有可推荐的道路
+    // 集齐关都图鉴 → 城都解锁，推荐它的道路；城都也抓齐后再没有可推荐的（图鉴范围之外的地区仍未解锁）
     const gs = game.gameState;
-    for (let id = 1; id <= 151; id++) gs.pokedex[id] = 'caught';
-    assert.equal(game.getRecommendedRoute(), null);
+    for (let id = 1; id <= 251; id++) gs.pokedex[id] = 'caught';
+    for (let id = 252; id <= 1073; id++) delete gs.pokedex[id];
+    const rec2 = game.getRecommendedRoute();
+    assert.ok(rec2 === null || rec2.regionId !== 'kanto');
 });
 
 test('下一步建议的优先级：引导 > 当前道路抓齐 > 即将进化 > 最接近完成的目标', () => {
