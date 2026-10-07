@@ -4885,3 +4885,44 @@ body {
 .hunt-activity { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; font-size: 13px; }
 .hunt-activity li { padding: 6px 8px; border-radius: 8px; background: var(--bg-primary); overflow-wrap: anywhere; }
 .hunt-time { color: var(--text-secondary); font-size: 11px; margin-right: 4px; }
+
+/* ============ Caça: recursos, loja, upgrades e análise (economia · fase 6) ============ */
+.hunt-section.hidden { display: none; }
+.hunt-resources { display: flex; gap: 12px; flex-wrap: wrap; font-size: 15px; padding: 8px 12px; border-radius: 10px; background: var(--bg-secondary); border: 1px solid var(--border); }
+.hunt-res strong { font-size: 16px; }
+.hunt-segs { display: flex; gap: 6px; flex-wrap: wrap; }
+.hunt-sections { position: sticky; top: 0; z-index: 2; background: var(--bg-primary); padding: 4px 0; }
+.hunt-seg { flex: 1 1 0; min-width: 0; min-height: 40px; padding: 6px 4px; border-radius: 8px; border: 1px solid var(--border); background: var(--bg-secondary); color: var(--text-secondary); font-size: 13px; font-weight: bold; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.hunt-seg.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+.hunt-btn.small { flex: 1 1 90px; min-height: 40px; padding: 6px 8px; font-size: 13px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px; }
+.hunt-btn.small small { font-weight: normal; font-size: 11px; opacity: 0.85; }
+.hunt-btn:disabled { opacity: 0.45; cursor: default; filter: none; }
+.hunt-shop-item, .hunt-upg, .hunt-route-card { background: var(--bg-primary); border-radius: 10px; padding: 10px; margin-bottom: 8px; border: 1px solid transparent; min-width: 0; }
+.hunt-shop-head, .hunt-upg-head { display: flex; gap: 10px; align-items: flex-start; }
+.hunt-shop-icon { font-size: 26px; line-height: 1; }
+.hunt-shop-meta { display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; font-size: 13px; margin: 8px 0; }
+.hunt-upg.locked { opacity: 0.7; }
+.hunt-upg-level { font-size: 13px; margin: 6px 0; color: var(--text-secondary); }
+.hunt-upg-deal { font-size: 13px; margin: 6px 0; line-height: 1.4; }
+.hunt-upg-max { color: var(--success); font-weight: bold; font-size: 13px; }
+.hunt-tag-build { font-size: 10px; padding: 1px 6px; border-radius: 8px; background: var(--bg-card); color: var(--text-primary); margin-left: 4px; }
+.hunt-metrics { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; margin: 8px 0; }
+.hunt-metric { background: var(--bg-primary); border-radius: 8px; padding: 6px 4px; text-align: center; min-width: 0; }
+.hunt-metric-value { display: block; font-size: 13px; font-weight: bold; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hunt-metric-label { display: block; font-size: 10px; color: var(--text-secondary); margin-top: 2px; }
+.hunt-bests { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; margin: 8px 0; }
+.hunt-best { background: var(--bg-primary); border-radius: 8px; padding: 6px; font-size: 12px; text-align: center; min-width: 0; }
+.hunt-best span { display: block; color: var(--text-secondary); font-size: 10px; }
+.hunt-best strong { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hunt-route-card.current { border-color: var(--accent); }
+.hunt-route-card-head { font-size: 13px; line-height: 1.5; overflow-wrap: anywhere; }
+.hunt-route-metrics { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px 10px; font-size: 12px; margin-top: 6px; color: var(--text-secondary); }
+.hunt-route-metrics strong { color: var(--text-primary); }
+.hunt-badge-src { font-size: 10px; padding: 1px 6px; border-radius: 8px; font-weight: bold; }
+.hunt-badge-src.real { background: rgba(46, 204, 113, 0.2); color: var(--success); }
+.hunt-badge-src.est { background: rgba(243, 156, 18, 0.2); color: var(--warning); }
+.hunt-badge-src.none, .hunt-badge-src.cur { background: var(--bg-card); color: var(--text-primary); }
+.hunt-warn { margin-top: 6px; font-size: 12px; color: var(--warning); line-height: 1.4; }
+@media (min-width: 600px) {
+    .hunt-metrics { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+}

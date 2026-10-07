@@ -26,6 +26,13 @@ const RouteCompareMethods = {
             Object.keys(g.badges || {}), g.talents || {}, g.tower && g.tower.highestFloor, (g.gems || []).length, g.settings && g.settings.captureDuplicates, band(this.getProgressLevel())]);
     },
 
+    // 已缓存的估算（指纹不一致或没算过 → null）；不会触发模拟
+    getCachedEstimate(routeId) {
+        const cache = this._routeEstimates;
+        if (!cache || cache.key !== this._estimateFingerprint()) return null;
+        return cache.map.get(routeId) || null;
+    },
+
     // 估算一条路线（同步，约几十毫秒）。返回 { routeId, source:'estimated', rates, agg, simulatedMs } 或 null
     estimateRoute(routeId) {
         if (!this.gameState) return null;
@@ -56,6 +63,7 @@ const RouteCompareMethods = {
         const agg = this.getRouteAgg(routeId);
         const minMs = this.getEconomyConfig().analyzer.minSampleMs;
         if (agg && agg.ms >= minMs) return { routeId, source: 'real', agg, rates: huntRates(agg, this.getShinyRate()), simulatedMs: agg.ms, last: agg.last };
+        if (allowEstimate === 'cached') return this.getCachedEstimate(routeId);        // 只用已经算好的估算，不触发新的模拟
         return allowEstimate ? this.estimateRoute(routeId) : null;
     },
 
@@ -90,9 +98,9 @@ const RouteCompareMethods = {
         return w;
     },
 
-    // 对比表。opts.estimate=false 时只用真实数据（没有数据的路线 rates=null，pending=true），界面用它分片估算
+    // 对比表。opts.estimate：true（缺的路线现场估算）/ 'cached'（只用已缓存的估算）/ false（只用真实数据）。false 时只用真实数据（没有数据的路线 rates=null，pending=true），界面用它分片估算
     compareRoutes(opts = {}) {
-        const allowEstimate = opts.estimate !== false;
+        const allowEstimate = opts.estimate === undefined ? true : opts.estimate;
         const ids = opts.routeIds || this.getCandidateRoutes();
         const current = this.gameState.currentRoute;
         const rows = ids.map(id => {

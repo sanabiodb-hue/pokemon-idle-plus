@@ -20,6 +20,7 @@ const HUNT_STATE_VIEW = {
 const HUNT_LIVE_EVENTS = [
     'battle_completed', 'pokemon_captured', 'heal', 'hunt_started', 'hunt_paused', 'hunt_resumed', 'hunt_stopped',
     'route_changed', 'policy_changed', 'pokemon_switched', 'level_up', 'evolution',
+    'money_earned', 'money_spent', 'potion_bought', 'upgrade_purchased', 'hunt_completed',
 ];
 
 function huntFormatDuration(ms) {
@@ -41,14 +42,32 @@ class HuntView {
         this._renderTimer = null;
         this._lastLimits = { battleLimit: 100, timeLimitMinutes: 60 };   // 取消勾选后再勾选时恢复的数值
         if (!this.root) return;
+        this.section = 'ops';
+        this.eco = new EconomyView(ui, this);
         this.root.innerHTML = `
             <h2>🎯 Caça</h2>
-            <div id="hunt-status" class="hunt-card"></div>
-            <div id="hunt-activity" class="hunt-card"></div>
-            <div id="hunt-route" class="hunt-card"></div>
-            <div id="hunt-team" class="hunt-card"></div>
-            <div id="hunt-settings" class="hunt-card"></div>`;
+            <div id="hunt-resources" class="hunt-resources"></div>
+            <div class="hunt-segs hunt-sections" role="tablist">
+                <button class="hunt-seg active" data-hunt-section="ops">Operação</button>
+                <button class="hunt-seg" data-hunt-section="shop">Loja</button>
+                <button class="hunt-seg" data-hunt-section="upgrades">Upgrades</button>
+                <button class="hunt-seg" data-hunt-section="analysis">Análise</button>
+            </div>
+            <div data-section="ops" class="hunt-section">
+                <div id="hunt-status" class="hunt-card"></div>
+                <div id="hunt-activity" class="hunt-card"></div>
+                <div id="hunt-route" class="hunt-card"></div>
+                <div id="hunt-team" class="hunt-card"></div>
+                <div id="hunt-settings" class="hunt-card"></div>
+            </div>
+            <div data-section="shop" class="hunt-section hidden"><div id="hunt-shop" class="hunt-card"></div></div>
+            <div data-section="upgrades" class="hunt-section hidden"><div id="hunt-upgrades" class="hunt-card"></div></div>
+            <div data-section="analysis" class="hunt-section hidden"><div id="hunt-analysis" class="hunt-card"></div></div>`;
         this.root.addEventListener('click', (e) => {
+            const sec = e.target.closest('[data-hunt-section]');
+            if (sec) { this.showSection(sec.dataset.huntSection); return; }
+            const eco = e.target.closest('[data-eco-action]');
+            if (eco && !eco.disabled) { this.eco.handleAction(eco.dataset.ecoAction, eco.dataset); return; }
             const el = e.target.closest('[data-hunt-action]');
             if (el && !el.disabled) this.handleAction(el.dataset.huntAction, el.dataset);
         });
@@ -68,6 +87,7 @@ class HuntView {
     }
 
     onHide() {
+        if (this.eco) this.eco.cancelEstimate();
         for (const off of this._unsubs) off();
         this._unsubs = [];
         if (this._tick) { clearInterval(this._tick); this._tick = null; }
@@ -86,15 +106,41 @@ class HuntView {
     render() {
         this.renderLive();
         this.renderSettings();
+        this.renderSection();
+    }
+
+    // ---------- 分区（Operação / Loja / Upgrades / Análise）----------
+    showSection(name) {
+        if (!['ops', 'shop', 'upgrades', 'analysis'].includes(name)) return;
+        if (this.section === 'analysis' && name !== 'analysis') this.eco.cancelEstimate();
+        this.section = name;
+        this.root.querySelectorAll('[data-hunt-section]').forEach(b => b.classList.toggle('active', b.dataset.huntSection === name));
+        this.root.querySelectorAll('[data-section]').forEach(d => d.classList.toggle('hidden', d.dataset.section !== name));
+        if (name === 'analysis') this.game.noteAnalyzerOpened();
+        this.renderSection();
+    }
+
+    // 只渲染当前可见的分区（其余分区切换时才渲染，保持手机上很轻）
+    renderSection() {
+        if (!this.root || !this.game.gameState) return;
+        this.eco.renderResources();
+        if (this.section === 'shop') this.eco.renderShop();
+        else if (this.section === 'upgrades') this.eco.renderUpgrades();
+        else if (this.section === 'analysis') this.eco.renderAnalysis();
     }
 
     // 会随战斗变化的部分
     renderLive() {
         if (!this.root || !this.game.gameState) return;
-        this.renderStatus();
-        this.renderActivity();
-        this.renderRoute();
-        this.renderTeam();
+        this.eco.renderResources();
+        if (this.section === 'ops') {
+            this.renderStatus();
+            this.renderActivity();
+            this.renderRoute();
+            this.renderTeam();
+        } else if (this.section !== 'analysis' || !this.eco._estimating) {
+            this.renderSection();
+        }
     }
 
     // 每秒：只更新时间和血条文字，不重绘
@@ -113,6 +159,7 @@ class HuntView {
             if (txt) txt.textContent = `${Math.max(0, Math.ceil(b.playerCurrentHp))}/${Math.ceil(b.playerMaxHp)}`;
         }
         this.root.querySelectorAll('[data-hunt-potions]').forEach(pot => { pot.textContent = ptNumber(g.getPotions()); });
+        this.eco.tickResources();
     }
 
     // ---------- 状态与统计 ----------
@@ -244,10 +291,18 @@ class HuntView {
             return `<button class="hunt-chip${prio ? ' prio' : ''}" data-hunt-action="toggle-target" data-id="${id}" title="${prio ? 'Remover da prioridade' : 'Dar prioridade de captura'}">${known ? `<img src="${escapeHtml(getPokemonSpriteUrl(id))}" alt="" loading="lazy">` : '<span class="hunt-chip-unknown">?</span>'}<span>${escapeHtml(name)} ${mark}${shiny}</span><span class="hunt-chip-star">${prio ? '⭐' : '☆'}</span></button>`;
         }).join('');
         let recHtml = '';
-        if (rec) {
+        // 有已计算的比较数据时，推荐按"分析"页的目标给出（新）；否则退回按队伍等级的简单推荐
+        const goal = g.getAnalyzerGoal();
+        const cmp = g.compareRoutes({ estimate: 'cached' });
+        if (cmp.rows.filter(r => r.rates).length >= 2) {
+            const grec = g.recommendRouteForGoal(goal, cmp);
+            recHtml = grec.none
+                ? `<div class="hunt-rec">⭐ <strong>Recomendação (objetivo: ${escapeHtml(ECO_GOAL_LABELS[goal])}):</strong> ${escapeHtml(grec.text)}</div>`
+                : `<div class="hunt-rec">⭐ <strong>Recomendação (objetivo: ${escapeHtml(ECO_GOAL_LABELS[goal])}):</strong> ${escapeHtml(grec.name)}. ${escapeHtml(grec.text)} <button class="hunt-link" data-hunt-action="use-recommended" data-id="${escapeHtml(grec.routeId)}">Usar</button></div>`;
+        } else if (rec) {
             recHtml = rec.routeId === route.id
                 ? `<div class="hunt-rec">⭐ <strong>Recomendação:</strong> esta é a rota recomendada. ${escapeHtml(rec.reason)}</div>`
-                : `<div class="hunt-rec">⭐ <strong>Recomendação:</strong> ${escapeHtml(rec.name)}. ${escapeHtml(rec.reason)} <button class="hunt-link" data-hunt-action="use-recommended" data-id="${escapeHtml(rec.routeId)}">Usar</button></div>`;
+                : `<div class="hunt-rec">⭐ <strong>Recomendação:</strong> ${escapeHtml(rec.name)}. ${escapeHtml(rec.reason)} <button class="hunt-link" data-hunt-action="use-recommended" data-id="${escapeHtml(rec.routeId)}">Usar</button><br><small>Abra Análise → Estimar rotas para recomendar pelo seu objetivo.</small></div>`;
         }
         el.innerHTML = `
             <h3>🗺️ Rota</h3>
@@ -358,7 +413,7 @@ class HuntView {
             case 'pause': this._report(g.dispatchAutomationAction({ type: 'PAUSE_HUNT' })); break;
             case 'resume': this._report(g.dispatchAutomationAction({ type: 'RESUME_HUNT' })); break;
             case 'stop': this._report(g.dispatchAutomationAction({ type: 'STOP_HUNT' })); break;
-            case 'use-recommended': this._report(g.selectHuntRoute(data.id)); break;
+            case 'use-recommended': this._report(g.selectHuntRoute(data.id, 'recommended')); break;
             case 'manage-team': this.ui.switchTab('tab-pc'); break;
             case 'toggle-target': this._toggleTarget(Number(data.id)); break;
             case 'remove-target': this._toggleTarget(Number(data.id), false); break;

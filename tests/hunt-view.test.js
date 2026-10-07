@@ -289,7 +289,7 @@ test('ciclo de vida: só assina eventos com a aba aberta e solta tudo ao sair (s
     assert.equal(game.bus.hasListeners(), false);
     assert.equal(view._tick, null);
     view.onShow(); view.onShow();                      // abrir de novo não duplica assinaturas
-    assert.equal(view._unsubs.length, 12);
+    assert.equal(view._unsubs.length, 17);
     view.onHide();
     assert.equal(game.bus.hasListeners(), false);
 });

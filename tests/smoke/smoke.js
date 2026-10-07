@@ -213,6 +213,30 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
             await page.locator('[data-hunt-action="start"]').click();
             await page.waitForFunction(() => game.isHuntRunning());
             check(`Caça ${vp.name}: Torre recusa entrada com a caçada rodando`, await page.evaluate(() => { const r = game.enterTower(); return r.success === false && /caçada/.test(r.message); }));
+            // economia: Recursos / Loja / Upgrades / Análise dentro da aba Caça
+            await page.evaluate(() => { game.dispatchAutomationAction({ type: 'STOP_HUNT' }); game.earnMoney(5000, 'reward'); });
+            await page.locator('[data-hunt-section="shop"]').click();
+            await page.waitForSelector('#hunt-shop [data-eco-action="buy-item"]');
+            check(`Caça ${vp.name}: loja mostra poção com preço, efeito e estoque, e recursos no topo`, await page.evaluate(() => /Preço: \$\d/.test(document.getElementById('hunt-shop').innerText) && /Recupera/.test(document.getElementById('hunt-shop').innerText) && /💰/.test(document.getElementById('hunt-resources').innerText)));
+            const potBefore = await page.evaluate(() => ({ p: game.getPotions(), m: game.getMoney(), price: game.getPotionPrice() }));
+            await page.locator('#hunt-shop [data-qty="5"]').click();
+            check(`Caça ${vp.name}: comprar 5 poções desconta moedas e soma ao estoque`, await page.evaluate((b) => game.getPotions() === b.p + 5 && game.gameState.economy.byReason.potion_purchase.spent >= 5 * b.price, potBefore));
+            check(`Caça ${vp.name}: loja sem rolagem horizontal`, await noOverflow());
+            await page.locator('[data-hunt-section="upgrades"]').click();
+            await page.waitForSelector('#hunt-upgrades [data-eco-action="buy-upgrade"]');
+            check(`Caça ${vp.name}: upgrades mostram custo e efeito ("Gastar $X para ir de A para B") e bloqueios`, await page.evaluate(() => /Gastar \$\d+ para ir de/.test(document.getElementById('hunt-upgrades').innerText) && /Requer/.test(document.getElementById('hunt-upgrades').innerText)));
+            await page.locator('#hunt-upgrades [data-id="heal_efficiency"]').click();
+            check(`Caça ${vp.name}: comprar upgrade sobe o nível`, await page.evaluate(() => game.getUpgradeLevel('heal_efficiency') === 1));
+            check(`Caça ${vp.name}: upgrades sem rolagem horizontal`, await noOverflow());
+            await page.locator('[data-hunt-section="analysis"]').click();
+            await page.waitForSelector('#hunt-analysis [data-eco-action="set-goal"]');
+            await page.locator('#hunt-analysis [data-goal="money"]').click();
+            check(`Caça ${vp.name}: objetivo da análise muda e persiste`, await page.evaluate(() => game.getAnalyzerGoal() === 'money'));
+            await page.locator('#hunt-analysis [data-eco-action="estimate"]').click();
+            await page.waitForFunction(() => document.querySelectorAll('#hunt-analysis .hunt-badge-src.est').length >= 1, null, { timeout: 30000 });
+            check(`Caça ${vp.name}: estimativas aparecem marcadas como "Estimado" e a rota não muda sozinha`, await page.evaluate(() => /Estimado/.test(document.getElementById('hunt-analysis').innerText) && game.gameState.currentRoute === 'kanto_route2'));
+            check(`Caça ${vp.name}: análise sem rolagem horizontal`, await noOverflow());
+            await page.locator('[data-hunt-section="ops"]').click();
             await context.close();
         }
 
