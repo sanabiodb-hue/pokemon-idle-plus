@@ -2260,10 +2260,18 @@ class GameCore {
                 }
             }
         } else {
-            // 已捕获过：先按旧规则比较并更新主个体（或图鉴存档）的个体值（取高的），不更新等级
+            // 先决定要不要把这只收为一只新的独立个体（必须在“个体值取高”之前判断：
+            // 策略 better 要拿它跟已有个体原来的个体值比）。
+            // 物种只剩图鉴存档（没有活着的个体）时，除非策略为 off，都会收下它作为新的个体。
+            const hasLive = !!this.roster.primaryOf(wildPokemon.id);
+            const wantsNew = hasLive
+                ? this._shouldCaptureDuplicate(wildPokemon)
+                : this.getCaptureDuplicatePolicy() !== 'off';
+
+            // 旧规则照旧：比较并更新主个体（或图鉴存档）的个体值（取高的），不更新等级
             let updated = false;
             const updatedStats = [];
-            
+
             for (const stat in wildPokemon.ivs) {
                 if (wildPokemon.ivs[stat] > stored.ivs[stat]) {
                     const oldVal = stored.ivs[stat];
@@ -2280,13 +2288,6 @@ class GameCore {
                 this.syncBestIvsInFamily(baseId, stored.ivs);
             }
 
-
-            // 再决定要不要把这只收为一只新的独立个体。
-            // 物种只剩图鉴存档（没有活着的个体）时，除非策略为 off，都会收下它作为新的个体。
-            const hasLive = !!this.roster.primaryOf(wildPokemon.id);
-            const wantsNew = hasLive
-                ? this._shouldCaptureDuplicate(wildPokemon)
-                : this.getCaptureDuplicatePolicy() !== 'off';
             const captured = wantsNew ? this._captureDuplicate(wildPokemon) : null;
 
             if ((updated || captured) && this.onCatch) {
