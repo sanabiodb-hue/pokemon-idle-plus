@@ -230,7 +230,7 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
             const mig = await page.evaluate(() => ({
                 from: game.loadReport.fromVersion, ver: game.gameState.schemaVersion, owned: game.roster.count(),
                 party: game.gameState.party.length, boxes: game.gameState.pc.boxes.length,
-                problems: game.roster.checkIntegrity(), origin: game.roster.primaryOf(25).origin,
+                problems: game.roster.checkIntegrity(), origin: game.roster.all().some(i => i.origin === 'legacy_migration') ? 'legacy_migration' : 'none',
             }));
             // 离线结算会在加载时跑真实战斗：可能新捕获同种个体（>190）、箱子变多、队伍里的宝可梦进化，所以只检查下限与不变量
             check('v2 存档迁移为个体（至少 190 只、队伍 5、PC 箱子 ≥7、不变量全部成立）',

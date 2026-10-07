@@ -2601,6 +2601,51 @@ class GameCore {
         return r;
     }
 
+    // 玩家打开了 PC 页面：引导里“打开 PC”这一步 + 统计
+    notePcOpened() {
+        this.guideNote('pcOpened');
+        if (this.analytics) {
+            try { this.analytics.oncePerSession('pc_open', {}); this.analytics.count('pcOpens'); } catch (e) { /* 忽略 */ }
+        }
+    }
+
+    // 整理 PC：每个物种只保留一只最强的（等级高者优先，同级取个体值总和高者）。
+    // 受保护的不会被放生：队伍里的、闪光的、有昵称的。返回将要放生的个体 uid 列表。
+    previewReleaseDuplicates() {
+        const bySpecies = new Map();
+        for (const uid of this.roster.pc.uids()) {
+            const inst = this.roster.get(uid);
+            if (!inst) continue;
+            if (!bySpecies.has(inst.speciesId)) bySpecies.set(inst.speciesId, []);
+            bySpecies.get(inst.speciesId).push(inst);
+        }
+        const out = [];
+        for (const [speciesId, pcList] of bySpecies) {
+            // 队伍里已经有同物种时，PC 里的受保护集合之外的全都是多余的；否则要在 PC 里留一只最强的
+            const inParty = this.roster.ofSpecies(speciesId).some(i => this.roster.party.contains(i.uid));
+            const releasable = pcList.filter(i => !i.shiny && !i.nickname);
+            const protectedOnes = pcList.length - releasable.length;
+            let keep = null;
+            if (!inParty && protectedOnes === 0) {
+                keep = releasable.reduce((best, i) => {
+                    if (!best) return i;
+                    if (i.level !== best.level) return i.level > best.level ? i : best;
+                    return ivTotal(i.ivs) > ivTotal(best.ivs) ? i : best;
+                }, null);
+            }
+            for (const i of releasable) if (i !== keep) out.push(i.uid);
+        }
+        return out;
+    }
+
+    releaseDuplicates() {
+        const uids = this.previewReleaseDuplicates();
+        let released = 0;
+        for (const uid of uids) if (this.roster.release(uid, { reason: 'release' }).ok) released++;
+        if (released) { this._dexBonus = null; this.save(); }
+        return { ok: true, released };
+    }
+
     // PC 内部整理：把 PC 里的一只移到另一个箱子的第一个空格
     pcMoveToBox(uid, boxIndex) {
         const pc = this.roster.pc;

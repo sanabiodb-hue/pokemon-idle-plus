@@ -64,9 +64,10 @@ window.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    // 新手引导（只弹一次）
+    // 新手引导的欢迎页（只弹一次；老存档/已跳过引导的不弹）
     try {
-        if (!localStorage.getItem('pokemon_idle_tutorial_done')) {
+        const g = game.gameState && game.gameState.guide;
+        if (g && g.onboarding === 'active' && !localStorage.getItem('pokemon_idle_tutorial_done')) {
             gameUI.showTutorialDialog(() => {
                 localStorage.setItem('pokemon_idle_tutorial_done', '1');
             });

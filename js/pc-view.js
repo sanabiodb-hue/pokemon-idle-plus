@@ -67,6 +67,7 @@ class PCView {
                     <button class="setting-btn" data-pc-action="box-next" title="下一个箱子">▶</button>
                     <button class="setting-btn" data-pc-action="box-rename" title="给当前箱子改名">✏️ 改名</button>
                     <button class="setting-btn" data-pc-action="box-add" title="新建箱子">➕ 新箱子</button>
+                    <button class="setting-btn" data-pc-action="tidy" title="每个物种只保留最强的一只（闪光、有昵称、队伍里的不受影响）">🧹 整理重复</button>
                 </div>
                 <input type="text" id="pc-search-input" class="pc-search" placeholder="🔍 搜索 PC 里的宝可梦（名称/昵称/编号）" autocomplete="off">
                 <div id="pc-grid" class="pc-grid"></div>
@@ -93,7 +94,7 @@ class PCView {
         if (this.selectedUid && !this.game.roster.has(this.selectedUid)) this.selectedUid = null;
         const r = this.game.roster;
         this.root.querySelector('#pc-summary').textContent =
-            `共 ${r.count()} 只 · PC ${r.pc.count()}/${r.pc.totalCapacity()}`;
+            `共 ${r.count()} 只 · PC ${r.pc.count()}/${r.pc.totalCapacity()}${r.hasRoom() ? '' : ' · ⚠️ PC 已满，新宝可梦（闪光除外也一样）无法收下'}`;
         this.renderParty();
         this.renderGrid();
         this.renderDetail();
@@ -125,6 +126,10 @@ class PCView {
     renderParty() {
         const gs = this.game.gameState;
         this.root.querySelector('#pc-party-count').textContent = `(${gs.party.length}/${PARTY_MAX})`;
+        const free = PARTY_MAX - gs.party.length;
+        const freeHint = free > 0
+            ? `<div class="pc-empty">还有 ${free} 个空位：${this.game.roster.pc.count() > 0 ? '在下面的箱子里点一只宝可梦，再点「加入队伍」。队伍里的伙伴会一起获得经验。' : '继续战斗，新捕获的伙伴会出现在下面的箱子里。'}</div>`
+            : '';
         const html = gs.party.map((uid, i) => {
             const d = this.game.describeInstance(uid);
             if (!d) return '';
@@ -139,7 +144,7 @@ class PCView {
                 </div>
             </div>`;
         }).join('');
-        this.root.querySelector('#pc-party').innerHTML = html;
+        this.root.querySelector('#pc-party').innerHTML = html + freeHint;
     }
 
     _matches(d, term) {
@@ -167,6 +172,13 @@ class PCView {
         if (!box) { grid.innerHTML = ''; return; }
         const used = box.slots.filter(u => u !== null).length;
         title.textContent = `📦 ${box.name}（${this.boxIndex + 1}/${boxes.length}）${used}/${box.capacity}`;
+        if (used === 0) {
+            const total = this.game.roster.pc.count();
+            grid.innerHTML = `<div class="pc-empty">${total === 0
+                ? 'PC 还是空的。击败野生宝可梦后，新捕获的宝可梦会被送到这里。'
+                : '这个箱子是空的，点 ▶ 看看别的箱子。'}</div>`;
+            return;
+        }
         grid.innerHTML = box.slots.map(uid => {
             const d = uid ? this.game.describeInstance(uid) : null;
             return d ? this._card(d) : '<div class="pc-card empty"></div>';
@@ -251,6 +263,16 @@ class PCView {
             case 'box-next':
                 this.search = ''; this.root.querySelector('#pc-search-input').value = '';
                 this.boxIndex = Math.min(g.gameState.pc.boxes.length - 1, this.boxIndex + 1); this.renderGrid(); return;
+            case 'tidy': {
+                const uids = g.previewReleaseDuplicates();
+                if (uids.length === 0) { this.ui.showToast('✨ 没有需要整理的重复宝可梦'); return; }
+                const ok = window.confirm(`将放生 ${uids.length} 只重复的宝可梦。\n每个物种会保留最强的一只；闪光、有昵称、队伍里的不受影响。\n放生后无法找回，确定吗？`);
+                if (!ok) return;
+                const r = g.releaseDuplicates();
+                this.ui.showToast(`🧹 已放生 ${r.released} 只`);
+                this._refreshAll();
+                return;
+            }
             case 'box-add': {
                 const r = g.roster.pc.addBox('');
                 if (this._report(r, '已新建箱子')) { this.boxIndex = r.box; g.save(); this.render(); }

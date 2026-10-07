@@ -4722,3 +4722,76 @@ body {
 .filter-btn, .sub-filter-btn, .region-filter-btn, .setting-btn,
 .team-slot-actions button, .pc-party-actions button { min-height: 36px; min-width: 36px; }
 .pc-party-actions button:disabled, .team-slot-actions button:disabled { opacity: 0.55; }
+
+/* ============ 第 4 阶段：下一步条 / 事件卡片 / 空状态 ============ */
+.guide-bar {
+    display: flex; align-items: center; gap: 8px; margin: 0 0 6px; padding: 8px 10px; border-radius: 10px;
+    background: var(--bg-card); border: 1px solid var(--accent); flex-shrink: 0;
+}
+.guide-bar.hidden { display: none; }
+.guide-bar.guide-onboarding { border-color: var(--accent-light); box-shadow: 0 0 8px rgba(233, 69, 96, 0.35); }
+.guide-bar.guide-route { border-color: #2ecc71; }
+.guide-icon { font-size: 22px; flex-shrink: 0; }
+.guide-main { flex: 1; min-width: 0; }
+.guide-title { font-size: 13px; font-weight: bold; }
+.guide-step { background: var(--accent); color: #fff; border-radius: 6px; padding: 0 5px; font-size: 11px; margin-right: 4px; }
+.guide-text { font-size: 12px; color: var(--text-secondary); line-height: 1.35; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.guide-progress { position: relative; height: 14px; background: rgba(255,255,255,0.12); border-radius: 7px; margin-top: 4px; overflow: hidden; }
+.guide-progress-fill { height: 100%; background: linear-gradient(90deg, var(--accent), var(--accent-light)); border-radius: 7px; transition: width 0.4s; }
+.guide-progress span { position: absolute; inset: 0; text-align: center; font-size: 10px; line-height: 14px; color: #fff; text-shadow: 0 0 2px #000; }
+.guide-actions { display: flex; flex-direction: column; gap: 4px; flex-shrink: 0; }
+.guide-btn { border: none; border-radius: 8px; padding: 6px 10px; min-height: 36px; font-size: 12px; cursor: pointer; background: rgba(255,255,255,0.15); color: var(--text-primary); }
+.guide-btn.primary { background: var(--accent); color: #fff; }
+.guide-btn.ghost { background: transparent; color: var(--text-secondary); min-height: 28px; font-size: 11px; }
+.tab-btn.guide-pulse { animation: guidePulse 1.2s ease-in-out infinite; }
+@keyframes guidePulse { 0%, 100% { background: transparent; } 50% { background: rgba(233, 69, 96, 0.45); } }
+.tab-dot {
+    position: absolute; top: 2px; left: 55%; min-width: 16px; height: 16px; line-height: 16px; border-radius: 8px;
+    background: #e74c3c; color: #fff; font-size: 10px; text-align: center; padding: 0 3px; box-sizing: border-box; pointer-events: none;
+}
+
+#event-cards {
+    position: fixed; left: 8px; right: 8px; bottom: 70px; z-index: 900; display: flex; flex-direction: column; gap: 6px;
+    pointer-events: none; max-width: 520px; margin: 0 auto;
+}
+.event-card {
+    pointer-events: auto; display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; border-radius: 12px;
+    background: var(--bg-secondary); border: 2px solid var(--accent); box-shadow: 0 4px 16px rgba(0,0,0,0.5);
+    animation: cardIn 0.3s ease;
+}
+.event-card.success { border-color: #2ecc71; }
+.event-card.shiny { border-color: #f1c40f; box-shadow: 0 0 14px rgba(241, 196, 15, 0.6); }
+.event-card.evolution { border-color: #9b59b6; }
+.event-card-icon { font-size: 26px; flex-shrink: 0; }
+.event-card-body { flex: 1; min-width: 0; }
+.event-card-title { font-size: 14px; font-weight: bold; }
+.event-card-text { font-size: 12px; color: var(--text-secondary); margin-top: 2px; line-height: 1.4; }
+.event-card-actions { margin-top: 6px; display: flex; gap: 6px; flex-wrap: wrap; }
+.event-card-close { background: none; border: none; color: var(--text-secondary); font-size: 16px; min-width: 32px; min-height: 32px; cursor: pointer; }
+@keyframes cardIn { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
+
+.float-text { position: absolute; left: 22%; top: 55%; font-weight: bold; font-size: 15px; color: #f1c40f; text-shadow: 0 0 3px #000; pointer-events: none; animation: floatUp 1.3s ease-out forwards; z-index: 5; }
+@keyframes floatUp { from { opacity: 1; transform: translateY(0); } to { opacity: 0; transform: translateY(-40px); } }
+
+.route-new-chip, .route-done-chip, .route-rec-tag { font-size: 11px; border-radius: 8px; padding: 1px 6px; margin-left: 6px; }
+.route-new-chip { background: rgba(243, 156, 18, 0.25); color: #f39c12; }
+.route-done-chip { background: rgba(46, 204, 113, 0.2); color: #2ecc71; }
+.route-rec-tag { background: #2ecc71; color: #fff; }
+.route-card.recommended { border-color: #2ecc71; }
+
+.empty-state, .team-empty-slots {
+    text-align: center; color: var(--text-secondary); font-size: 13px; line-height: 1.6; padding: 16px 12px;
+    grid-column: 1 / -1; border: 1px dashed var(--border); border-radius: 10px; margin: 6px 0;
+}
+.empty-state .setting-btn, .team-empty-slots .setting-btn { margin-top: 8px; }
+
+.goals-modal { max-height: 80vh; display: flex; flex-direction: column; }
+.goal-intro { font-size: 12px; color: var(--text-secondary); margin: 0 0 8px; }
+.goal-list { overflow-y: auto; flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 8px; }
+.goal-row { background: var(--bg-card); border-radius: 8px; padding: 8px 10px; }
+.goal-row.done { opacity: 0.6; }
+.goal-head { display: flex; justify-content: space-between; font-size: 13px; font-weight: bold; gap: 8px; }
+.goal-count { color: var(--text-secondary); font-weight: normal; white-space: nowrap; }
+.goal-desc { font-size: 11px; color: var(--text-secondary); margin: 2px 0 4px; }
+.route-progress-line { margin: 2px 0 4px; }
+.route-progress-line .route-new-chip, .route-progress-line .route-done-chip { margin-left: 0; }

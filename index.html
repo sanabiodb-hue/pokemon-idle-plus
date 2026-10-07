@@ -28,6 +28,8 @@
         <main id="main-content">
             <!-- Tab 1: 战斗界面 -->
             <div id="tab-battle" class="tab-content active">
+                <!-- 下一步条：永远回答“我现在该做什么” -->
+                <div id="guide-bar" class="guide-bar hidden" role="status"></div>
                 <div id="battle-area">
                     <div id="battle-scene">
                         <div id="enemy-side">
@@ -266,13 +268,13 @@
                         <button class="region-filter-btn" data-region="mega">Mega地区</button>
                     </div>
                     <div id="pokedex-filters">
-                        <button class="filter-btn active" data-filter="all">全部</button>
-                        <button class="filter-btn" data-filter="caught">已捕获</button>
+                        <button class="filter-btn" data-filter="all">全部</button>
+                        <button class="filter-btn active" data-filter="caught">已捕获</button>
                         <button class="filter-btn" data-filter="uncaught">未捕获</button>
                         <button class="filter-btn shiny-filter" data-filter="shiny">✨ 闪光</button>
                         <button class="filter-btn not-shiny-filter" data-filter="not_shiny">未闪光</button>
                     </div>
-                    <div id="pokedex-sub-filters" class="hidden">
+                    <div id="pokedex-sub-filters">
                         <button class="sub-filter-btn active" data-sort="none">默认排序</button>
                         <button class="sub-filter-btn" data-sort="power">战力排序</button>
                         <button class="sub-filter-btn" data-sort="potential">潜力排序</button>
@@ -336,6 +338,8 @@
                         </label>
                         <p class="setting-desc">只记录“打开游戏、第一次捕获、进化”这类匿名事件，用来改进新手体验；不包含任何个人信息。关闭后不再记录。</p>
                         <button id="btn-copy-beta-report" class="setting-btn">复制测试报告</button>
+                        <button id="btn-open-goals" class="setting-btn">🏆 查看全部目标</button>
+                        <button id="btn-restart-onboarding" class="setting-btn">🎓 重新查看新手引导</button>
                         <p class="setting-desc">参加测试时，可以把报告发给开发者（只含匿名的进度与时长摘要）。</p>
                     </div>
                     <div class="settings-section gameplay-entry">
@@ -512,6 +516,7 @@
     <script src="js/game-core.js"></script>
     <script src="js/guidance.js"></script>
     <script src="js/pc-view.js"></script>
+    <script src="js/guide-view.js"></script>
     <script src="js/ui.js"></script>
     <script src="js/main.js"></script>
 </body>

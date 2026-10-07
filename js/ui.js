@@ -6,13 +6,16 @@ class GameUI {
     constructor(game) {
         this.game = game;
         this.currentTab = 'tab-battle';
-        this.pokedexFilter = 'all';
+        this.pokedexFilter = 'caught';   // 默认先看自己已有的；“全部”会有上千条“???”
         this.pokedexRegionFilter = 'all'; // 地区筛选：all, kanto, johto, hoenn, sinnoh, unova, kalos, alola, galar, paldea
         this.pokedexSort = 'none';
         this.pokedexSortDesc = true; // true = 从高到低, false = 从低到高
         this._createOfflineOverlay();
         this.setupEventListeners();
         this.pcView = new PCView(this);
+        this.guideView = new GuideView(this);
+        this.game.onGuideEvent = (e) => this.guideView.onGuideEvent(e);
+        this._setupBetaSettings();
     }
 
     // 创建离线模拟进度遮罩层
@@ -354,11 +357,16 @@ class GameUI {
         if (tabId === 'tab-talent') this.renderTalentPage();
         if (tabId === 'tab-tower') this.renderTowerPage();
         if (tabId === 'tab-pokedex') this.renderPokedex();
-        if (tabId === 'tab-pc') this.pcView.render();
+        if (tabId === 'tab-pc') {
+            this.game.notePcOpened();
+            this.guideView.clearPcBadge();
+            this.pcView.render();
+        }
         if (tabId === 'tab-settings') this.renderSettings();
         if (tabId === 'tab-battle') {
             this.renderTeam();
         }
+        this.guideView.renderBar();
     }
 
     // ===================== 战斗界面 =====================
@@ -411,14 +419,14 @@ class GameUI {
                 break;
             case 'shinyDefeated':
                 this.addBattleLog(`✨ 获得了 ${data.name} 的闪光形态！可在图鉴中切换展示`, 'shiny');
-                this.showToast(`✨ 恭喜！获得了 ${data.name} 的闪光形态！`);
+                this.guideView.onShiny(data.name);
                 break;
             case 'badgeUnlocked':
                 this._handleBadgeUnlocked(data, false);
                 break;
             case 'regionUnlocked':
                 this.addBattleLog(`🎉 恭喜！${data.regionName}已解锁！`, 'evolution');
-                this.showToast(`🎉 ${data.regionName}已解锁！可以在地图中前往了`);
+                this.guideView.onRegionUnlocked(data);
                 break;
             case 'playerDodge':
                 this.addBattleLog(`💫 闪避了敌方的攻击！`, 'attack');
@@ -693,6 +701,7 @@ class GameUI {
             message += ` 💚 回复 ${data.healed} HP`;
         }
         this.addBattleLog(message, 'defeat');
+        this._floatText(`+${data.exp} EXP`, 'exp');
         this.scheduleRenderTeam();
         // 更新金币显示
         this.updateGoldDisplay();
@@ -888,6 +897,88 @@ class GameUI {
             `;
             teamList.appendChild(slot);
         });
+
+        // 队伍没满：告诉玩家空位是干什么的、怎么补
+        const size = this.game.gameState.party.length;
+        if (size < PARTY_MAX) {
+            const free = PARTY_MAX - size;
+            const spare = this.game.roster.pc.count();
+            const hint = document.createElement('div');
+            hint.className = 'team-empty-slots';
+            hint.innerHTML = spare > 0
+                ? `队伍还有 ${free} 个空位。PC 里有 ${spare} 只伙伴——加入队伍后会一起获得经验、提供队友加成。<br><button class="setting-btn" onclick="gameUI.switchTab('tab-pc')">🖥️ 去 PC 选伙伴</button>`
+                : `队伍还有 ${free} 个空位。继续战斗，捕获的新伙伴会出现在 PC，之后就能加入队伍。`;
+            teamList.appendChild(hint);
+        }
+        this.guideView.renderBar();
+    }
+
+    // 战斗场景里飘一行字（获得经验等）
+    _floatText(text, kind) {
+        const scene = document.getElementById('battle-scene');
+        if (!scene) return;
+        while (scene.querySelectorAll('.float-text').length >= 3) scene.querySelector('.float-text').remove();
+        const el = document.createElement('div');
+        el.className = `float-text ${kind || ''}`;
+        el.textContent = text;
+        scene.appendChild(el);
+        setTimeout(() => el.remove(), 1400);
+    }
+
+    // 设置页的“测试期”入口：匿名统计开关、测试报告、目标面板、重新查看引导
+    _setupBetaSettings() {
+        const analytics = this.game.analytics;
+        const toggle = document.getElementById('setting-analytics');
+        if (toggle) {
+            toggle.checked = analytics ? analytics.isEnabled() : false;
+            toggle.disabled = !analytics;
+            toggle.addEventListener('change', () => {
+                if (analytics) analytics.setEnabled(toggle.checked);
+                this.showToast(toggle.checked ? '✅ 已开启匿名统计' : '❌ 已关闭匿名统计');
+            });
+        }
+        const copyBtn = document.getElementById('btn-copy-beta-report');
+        if (copyBtn) {
+            copyBtn.addEventListener('click', async () => {
+                const text = this.buildBetaReport();
+                try {
+                    await navigator.clipboard.writeText(text);
+                    this.showToast('📋 测试报告已复制，可以发给开发者');
+                } catch (e) {
+                    const area = document.getElementById('save-data-area');
+                    if (area) { area.value = text; area.select(); }
+                    this.showToast('📋 报告已放进上方文本框，请手动复制');
+                }
+            });
+        }
+        const goalsBtn = document.getElementById('btn-open-goals');
+        if (goalsBtn) goalsBtn.addEventListener('click', () => this.guideView.showGoals());
+        const restartBtn = document.getElementById('btn-restart-onboarding');
+        if (restartBtn) {
+            restartBtn.addEventListener('click', () => {
+                this.game.guideRestartOnboarding();
+                this.switchTab('tab-battle');
+                this.showToast('🎓 新手引导已重新开始');
+            });
+        }
+    }
+
+    // 给开发者的测试报告：匿名进度 + 统计摘要（不含存档内容和昵称）
+    buildBetaReport() {
+        const g = this.game;
+        const stats = g.getPokedexStats();
+        const report = {
+            version: (document.querySelector('.version-tag') || {}).textContent || '',
+            time: new Date().toISOString(),
+            screen: `${window.innerWidth}x${window.innerHeight}`,
+            progress: {
+                species: stats.caught, individuals: g.roster.count(), partySize: g.gameState.party.length,
+                battles: g.gameState.stats.totalBattles, onboarding: g.gameState.guide ? g.gameState.guide.onboarding : null,
+                goalsDone: g.getGoals().filter(x => x.done).length, route: g.gameState.currentRoute,
+            },
+            analytics: g.analytics ? g.analytics.getSummary() : null,
+        };
+        return JSON.stringify(report, null, 2);
     }
 
     setActive(index) {
@@ -1083,6 +1174,7 @@ class GameUI {
 
     // ===================== 地图界面 =====================
     renderMap() {
+        this._recommendedRoute = this.game.getRecommendedRoute();
         const regionList = document.getElementById('region-list');
         regionList.innerHTML = '';
 
@@ -1128,12 +1220,15 @@ class GameUI {
                     <h3>🔒 ${region.name}</h3>
                     <p style="color:var(--text-secondary)">${region.description}</p>
                     <div class="unlock-progress">
-                        <div class="unlock-progress-text">解锁进度: ${progress.current}/${progress.total} (${progress.percent}%)</div>
+                        <div class="unlock-progress-text">解锁进度: ${progress.current}/${progress.total} (${progress.percent}%) · 还差 ${progress.total - progress.current} 种</div>
                         <div class="unlock-progress-bar">
                             <div class="unlock-progress-fill" style="width:${progress.percent}%"></div>
                         </div>
                     </div>
                 `;
+                card.addEventListener('click', () => {
+                    this.showToast(`🔒 再收集 ${progress.total - progress.current} 种宝可梦（图鉴 ${progress.current}/${progress.total}）就能解锁${region.name}`);
+                });
             }
             regionList.appendChild(card);
         }
@@ -1205,17 +1300,28 @@ class GameUI {
             if (all6V) routeBadges += ' <span class="route-badge-6v">6V</span>';
             if (allShiny) routeBadges += ' <span class="route-badge-shiny">✨</span>';
 
+            // 这条道路上还有几种没抓到；被推荐的道路高亮
+            const prog = this.game.getRouteProgress(route);
+            const rec = this._recommendedRoute;
+            const isRec = !isActive && rec && rec.route.id === route.id;
+            const chip = prog.newCount > 0
+                ? `<span class="route-new-chip">还有 ${prog.newCount} 种没抓到</span>`
+                : '<span class="route-done-chip">✓ 已抓齐</span>';
+            if (isRec) card.classList.add('recommended');
             card.innerHTML = `
-                <h3>${route.name}${routeBadges} ${isActive ? '📍' : ''}</h3>
+                <h3>${route.name}${routeBadges} ${isActive ? '📍' : ''}${isRec ? '<span class="route-rec-tag">推荐</span>' : ''}</h3>
                 <p>${route.description}</p>
                 <div class="route-level-range">Lv.${route.levelRange[0]} ~ Lv.${route.levelRange[1]}</div>
+                <div class="route-progress-line">${chip}</div>
                 <div class="route-pokemon-preview">${pokemonPreview}</div>
             `;
 
             card.addEventListener('click', () => {
                 this.game.changeRoute(route.id);
+                this._recommendedRoute = this.game.getRecommendedRoute();
                 this.showRoutes(regionId); // 刷新显示
                 this.showToast(`📍 移动到了 ${route.name}`);
+                this.guideView.renderBar();
             });
 
             routeList.appendChild(card);
@@ -1330,6 +1436,23 @@ class GameUI {
             });
         } else {
             allIds.sort((a, b) => a - b);
+        }
+
+        // 空状态：说清楚为什么是空的、下一步做什么
+        if (allIds.length === 0) {
+            const q = (document.getElementById('pokedex-search-input') || {}).value || '';
+            let msg;
+            if (q.trim()) msg = `没有找到“${q.trim()}”。试试换个名字或编号。`;
+            else if (this.pokedexFilter === 'shiny') msg = '还没有闪光宝可梦。每次遇到都有约 1/4096 的概率，多战斗、多换道路就有机会！';
+            else if (this.pokedexFilter === 'not_shiny') msg = '这里还没有宝可梦——先去战斗，捕获的宝可梦会出现在这里。';
+            else if (this.pokedexFilter === 'caught') msg = this.pokedexRegionFilter === 'all'
+                ? '还没有捕获任何宝可梦。击败野生宝可梦就会自动捕获它！'
+                : '这个地区还没有你捕获的宝可梦。去地图里解锁并探索它吧。';
+            else msg = '这个筛选条件下没有宝可梦。';
+            grid.innerHTML = `<div class="empty-state">${escapeHtml(msg)}<br><button class="setting-btn" onclick="gameUI.switchTab('tab-battle')">回到战斗</button></div>`;
+            this._pokedexAllIds = [];
+            this._pokedexRendered = 0;
+            return;
         }
 
         // 分页渲染
@@ -2373,8 +2496,14 @@ class GameUI {
 
         if (pokemon.isFirstCatch) {
             message += ` (首次捕获！)`;
+            this.guideView.onNewSpecies(pokemon);
         } else if (pokemon.isDuplicate) {
-            message += ` (又一只！已放入 PC，编号 #${pokemon.uid})`;
+            // 又收下一只同种：说清楚它和已有的有什么不同，而不是一个内部编号
+            const d = pokemon.uid ? this.game.describeInstance(pokemon.uid) : null;
+            message = `又收下一只${pokemon.shiny ? '✨闪光 ' : ' '}${pokemon.name}` +
+                (d ? `（个体值 ${d.ivPercent}%，${d.natureName}）` : '') + ' · 已放入 PC';
+            this.guideView.bumpPcBadge(1);
+            if (pokemon.shiny) this.guideView.onShiny(pokemon.name);
         } else if (pokemon.updatedStats && pokemon.updatedStats.length > 0) {
             const statNames = {
                 hp: '体力', atk: '攻击', def: '防御', 
@@ -2387,7 +2516,6 @@ class GameUI {
         }
         
         this.addBattleLog(message, 'catch');
-        if (pokemon.isDuplicate && pokemon.shiny) this.showToast(`✨ 捕获了一只闪光 ${pokemon.name}！`);
 
         // 刷新队伍 / PC
         this.scheduleRenderTeam();
@@ -2407,6 +2535,7 @@ class GameUI {
         // 改为显示在战斗日志中
         const tail = data.keptLevel ? `保留等级 Lv.${data.pokemon.level}` : '新登记的形态，等级重置为 Lv.1';
         this.addBattleLog(`🌟 ${data.oldName} 进化成了 ${data.newName}！${tail}`, 'evolution');
+        this.guideView.onEvolved(data);
         if (this.currentTab === 'tab-pc') this.pcView.render();
     }
 
@@ -2437,6 +2566,7 @@ class GameUI {
     }
 
     showTutorialDialog(onClose) {
+        // 欢迎页只说三件事；具体怎么玩由屏幕上方的“下一步条”一步一步带着做（显示 → 动手 → 奖励）
         const overlay = document.createElement('div');
         overlay.className = 'modal-overlay tutorial-overlay';
         overlay.innerHTML = `
@@ -2446,33 +2576,36 @@ class GameUI {
                 <div class="tutorial-body">
                     <div class="tutorial-item">
                         <span class="tutorial-emoji">🎯</span>
-                        <span>你的目标是<strong>收集全部宝可梦</strong>，成为最强训练家！</span>
+                        <span>目标：<strong>收集全部宝可梦</strong>，解锁新的地区。</span>
                     </div>
                     <div class="tutorial-item">
                         <span class="tutorial-emoji">⚔️</span>
-                        <span>击败野生宝可梦后会<strong>自动捕获</strong>，无需手动操作。</span>
+                        <span>战斗和捕获都是<strong>自动</strong>的，关掉页面它也会继续进行。</span>
                     </div>
                     <div class="tutorial-item">
-                        <span class="tutorial-emoji">📖</span>
-                        <span>在<strong>图鉴</strong>中可以将已捕获的宝可梦编入队伍上阵战斗。</span>
-                    </div>
-                    <div class="tutorial-item">
-                        <span class="tutorial-emoji">💪</span>
-                        <span>未上阵的宝可梦也会以一定比例为队伍提供<strong>属性加成</strong>，捕获越多越强！</span>
+                        <span class="tutorial-emoji">👆</span>
+                        <span>跟着上方的<strong>任务条</strong>走，每完成一步都有奖励。</span>
                     </div>
                 </div>
                 <div class="modal-buttons">
                     <button class="confirm-btn tutorial-start-btn">开始冒险！</button>
+                    <button class="cancel-btn tutorial-skip-btn">我会玩，跳过引导</button>
                 </div>
             </div>
         `;
 
-        overlay.querySelector('.tutorial-start-btn').addEventListener('click', () => {
+        const close = () => {
             overlay.classList.add('tutorial-closing');
             setTimeout(() => {
                 overlay.remove();
                 if (onClose) onClose();
             }, 300);
+        };
+        overlay.querySelector('.tutorial-start-btn').addEventListener('click', close);
+        overlay.querySelector('.tutorial-skip-btn').addEventListener('click', () => {
+            this.game.guideSkipOnboarding();
+            this.guideView.renderBar();
+            close();
         });
 
         document.body.appendChild(overlay);
