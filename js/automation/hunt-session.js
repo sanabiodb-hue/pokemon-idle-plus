@@ -35,6 +35,7 @@ function createHuntSession(info) {
         endedAt: null,
         activeMs: 0,                                          // 已累计的运行时长（不含暂停）
         resumedAt: null,                                      // 最近一次进入 running 的时间
+        pausedByReload: false,                                // 读档时由 running 降级而来：下一次离线结算会用快速驱动替它"挂机"
         stats: createHuntSessionStats(),
     };
 }
@@ -64,6 +65,7 @@ function huntSessionTransition(session, to, now, reason) {
             session.stopReason = HUNT_STOP_REASONS.includes(reason) ? reason : (to === 'finished' ? null : 'manual');
         }
     }
+    if (to !== 'paused') session.pausedByReload = false;
     session.state = to;
     return true;
 }
@@ -95,6 +97,7 @@ function sanitizeHuntSession(raw) {
         endedAt: raw.endedAt === null || raw.endedAt === undefined ? null : _num(raw.endedAt, 0, null),
         activeMs: _num(raw.activeMs, 0, 0),
         resumedAt: null,
+        pausedByReload: raw.state === 'running' || (state === 'paused' && raw.pausedByReload === true),
         stats: createHuntSessionStats(),
     };
     if (_isObj(raw.stats)) for (const k of HUNT_STAT_KEYS) out.stats[k] = _num(raw.stats[k], 0, 0);

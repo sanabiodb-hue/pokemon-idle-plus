@@ -254,14 +254,14 @@ test('erro dentro do motor é contido (automation_error) e a caçada continua s�
     assert.equal(game._engine._evaluating, false);
 });
 
-test('offline com caçada rodando: estatísticas acumulam, decisões não rodam no meio do lote, sem exceções', async () => {
+test('offline com caçada rodando: o driver rápido aplica a política (limite de batalhas) e acumula as estatísticas', async () => {
     const { game } = newGame({ seed: 43 });
     const s = hunt(game, { stopConditions: { battleLimit: 5 } });
     game.stopBattle();
     await runOffline(game, 10 * 60 * 1000);
-    assert.ok(s.stats.victories > 50);
-    assert.equal(s.stats.battles, s.stats.victories + s.stats.defeats);
-    assert.equal(s.state, 'running', 'decisões só em eventos ao vivo (o simulador rápido chega no bloco B9)');
+    assert.equal(s.stats.battles, 5);
+    assert.equal(s.state, 'stopped');
+    assert.equal(s.stopReason, 'battle_limit');
 });
 
 test('salvar/carregar no meio da caçada: volta pausada e o jogo antigo segue normal', () => {

@@ -48,3 +48,10 @@ class ManualClock {
     // 直接把时间设到某个时刻（不触发计时器，仅用于构造测试场景）
     set(ts) { this._now = ts; }
 }
+
+// 模拟时钟：快速驱动/模拟器专用。时间只会随"模拟出来的战斗时长"前进，和真实时间无关，
+// 所以 24 小时的狩猎也能在毫秒内跑完，且同一个种子永远得到同一个时间线。
+class SimulationClock extends ManualClock {
+    // 距离起点已经过去多久
+    elapsed(since) { return this._now - since; }
+}

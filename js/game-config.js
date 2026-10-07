@@ -20,6 +20,7 @@ const DUPLICATE_SPECIES_CAP = 20;
 const INITIAL_POTIONS = 10;          // 新玩家（以及还没有 inventory 的旧存档）的初始药水数
 const MAX_POTIONS = 99999;           // 存档清洗上限
 const POTION_HEAL_PERCENT = 0.5;     // 一瓶药水回复出战宝可梦最大生命的比例
+function potionHealAmount(maxHp) { return Math.max(1, Math.ceil(maxHp * POTION_HEAL_PERCENT)); }
 
 // ===================== 徽章配置 =====================
 const BADGE_DATA = {

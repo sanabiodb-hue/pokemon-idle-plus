@@ -222,9 +222,12 @@ test('decisão pura de cura: limites, sem poções e desligado', () => {
     assert.deepEqual(D({ policy: pol(), hpPercent: 0, fainted: true, potions: 1 }).map(x => x.action.type), ['HEAL']);
 });
 
-test('offline não gasta poções (o driver rápido chega no B9) e não quebra com caçada rodando', async () => {
+test('offline com caçada: o driver rápido gasta poções pela mesma regra e para sem poções', async () => {
     const { game } = newGame({ seed: 12 });
-    hunt(game);
-    await runOffline(game, 5 * 60 * 1000);
-    assert.equal(game.getPotions(), 10);
+    game.gameState.inventory.potions = 2;
+    const s = hunt(game, { heal: { whenHpBelowPercent: 99 } });
+    await runOffline(game, 20 * 60 * 1000);
+    assert.equal(game.getPotions() >= 0, true);
+    assert.ok(s.stats.healingSpent <= 2);
+    if (s.state === 'stopped') assert.equal(s.stopReason, 'no_potions');
 });

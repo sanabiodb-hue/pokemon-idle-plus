@@ -57,12 +57,12 @@ class AutomationEngine {
         if (!s || e.tower) return;
         if (e.result === 'victory') huntSessionRecord(s, { battles: 1, victories: 1, xp: e.xp, money: e.gold });
         else if (e.result === 'defeat') huntSessionRecord(s, { battles: 1, defeats: 1 });
-        if (e.offline) return;                          // 离线结算期间只累计统计，不在批处理中途做决策
+        if (e.offline && !this.game._fastSim) return;   // 非快速驱动的离线事件只累计统计
         this.evaluate('after_battle', { fainted: e.result === 'defeat' });
     }
 
     _onHpLow(e) {
-        if (!this._session() || e.offline) return;
+        if (!this._session() || (e.offline && !this.game._fastSim)) return;
         this.evaluate('hp_low');
     }
 
@@ -101,8 +101,10 @@ class AutomationEngine {
             fainted: !!(extra && extra.fainted),
             shinyFound: this._shinyFound,
         };
+        const fast = g._fastSim;
         const b = g.currentBattle;
-        snap.hpPercent = b && b.playerMaxHp > 0 ? b.playerCurrentHp / b.playerMaxHp * 100 : 100;
+        if (fast) snap.hpPercent = fast.playerStats.hp > 0 ? Math.max(0, fast.playerHp) / fast.playerStats.hp * 100 : 100;
+        else snap.hpPercent = b && b.playerMaxHp > 0 ? b.playerCurrentHp / b.playerMaxHp * 100 : 100;
         if (stage === 'after_battle') {
             snap.routeComplete = g._isRouteCompleteByCondition(g.gameState.currentRoute);
             if (snap.routeComplete && snap.policy.route.mode === 'switchWhenComplete') {
@@ -110,10 +112,20 @@ class AutomationEngine {
                 snap.nextRouteId = next ? next.routeId : null;
             }
         } else if (stage === 'encounter') {
-            const enemy = g.gameState.currentEnemy;
-            snap.bestIndex = enemy && snap.policy.switchPolicy.mode === 'bestMatchup' && g.gameState.team.length > 1 ? g.getBestTeamMemberForEnemy(enemy) : -1;
+            const enemy = fast ? fast.wild : g.gameState.currentEnemy;
+            const cache = fast ? { teamStats: fast.cachedTeamStats, teamLevels: fast.cachedTeamLevels } : null;
+            snap.bestIndex = enemy && snap.policy.switchPolicy.mode === 'bestMatchup' && g.gameState.team.length > 1 ? g.getBestTeamMemberForEnemy(enemy, cache) : -1;
         }
         return snap;
+    }
+
+    // 执行动作：快速驱动里需要"战斗现场"的动作（治疗/换人）由核心的快速执行器处理，其余统一走 ActionDispatcher
+    _execute(action) {
+        if (this.game._fastSim) {
+            const r = this.game._fastExecute(action);
+            if (r) return r;
+        }
+        return this.game.dispatchAutomationAction(action);
     }
 
     // 评估一次：快照 → 决策 → 逐个动作经调度器执行。返回执行结果列表（便于测试/调试）
@@ -128,7 +140,7 @@ class AutomationEngine {
                 if (!this.game.isHuntRunning()) break;           // 前一个动作（例如停止）之后不再继续
                 this.stats.decisions++;
                 this.game._emit('automation_decision', { stage, action: d.action.type, reason: d.reason });
-                const r = this.game.dispatchAutomationAction(d.action);
+                const r = this._execute(d.action);
                 if (r.ok) this.stats.actionsOk++; else this.stats.actionsRejected++;
                 results.push(r);
             }
@@ -172,11 +184,15 @@ const AutomationMethods = {
         return this._dispatcher.dispatch(action);
     },
 
+    _getEngine() {
+        if (!this._engine) this._engine = new AutomationEngine(this);
+        return this._engine;
+    },
+
     // 会话状态变化后调用：同步引擎订阅；战斗循环空闲时（例如暂停后恢复）开始下一场遭遇
     _automationSync() {
-        if (!this._engine) this._engine = new AutomationEngine(this);
-        this._engine.sync();
-        if (this.isHuntRunning() && !this.battleTimer && !this.healTimer && !this._nextBattleTimeout && !this._towerMode && !this._isOfflineSimulating) {
+        this._getEngine().sync();
+        if (this.isHuntRunning() && !this.battleTimer && !this.healTimer && !this._nextBattleTimeout && !this._towerMode && !this._isOfflineSimulating && !this._simMode) {
             this.dispatchAutomationAction({ type: 'ATTACK' });
         }
     },

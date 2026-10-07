@@ -39,6 +39,8 @@ class GameCore {
         this._isOfflineSimulating = false;
         this._offlineSimState = null;
         this._offlineSummary = null;
+        this._offlineHunt = null;
+        this._fastSim = null;
         this._towerMode = false;
         // 个体名册：个体 / 队伍 / PC / 放生记录，并维护 caughtPokemon、team 这两个旧兼容视图
         this.roster = new PokemonRoster(() => this.gameState, { now: () => this.now() });
@@ -436,6 +438,7 @@ class GameCore {
         // 停止当前战斗循环，防止模拟期间干扰
         this.stopBattle();
         this._beginOfflineSilence(elapsedMs);
+        this._beginOfflineHunt(elapsedMs);
 
         let simulateMs = elapsedMs;
 
@@ -471,23 +474,73 @@ class GameCore {
         this._simulateOfflineBattlesAsync(simulateMs, elapsedMs);
     }
 
+    // ----- 离线 + 狩猎：用快速驱动替正在狩猎的队伍"挂机"，并出一份狩猎报告 -----
+    // 触发条件：狩猎正在运行（切后台回来），或会话是读档时由 running 降级来的（关掉浏览器再打开）。
+    // 期间时钟换成模拟时钟（只随模拟出的战斗时长前进），结束后还原真实时钟。
+    _beginOfflineHunt(elapsedMs) {
+        this._offlineHunt = null;
+        const session = this.getHuntSession();
+        if (!session) return;
+        const wasRunning = session.state === 'running';
+        const resumeFromReload = session.state === 'paused' && session.pausedByReload === true;
+        if (!wasRunning && !resumeFromReload) return;
+        const realClock = this.clock;
+        const simStart = realClock.now() - elapsedMs;
+        this._offlineHunt = {
+            realClock, resumeFromReload, simStart,
+            sessionId: session.id,
+            statsBefore: { ...session.stats },
+            potionsBefore: this.getPotions(),
+            routeBefore: this.gameState.currentRoute,
+            activeMsBefore: huntSessionDurationMs(session, simStart),
+        };
+        this.clock = new SimulationClock(simStart);
+        if (resumeFromReload) {
+            huntSessionTransition(session, 'running', this.clock.now());
+            this._automationSync();
+        }
+    }
+
+    _endOfflineHunt(s, totalMs) {
+        const h = this._offlineHunt;
+        this._offlineHunt = null;
+        if (!h) return null;
+        const session = this.getHuntSession();
+        const simClock = this.clock;
+        const simulatedMs = s && s.haltedAtMs !== undefined ? s.haltedAtMs : (s ? s.totalMs : 0);
+        if (s && s.simClock) s.simClock = null;
+        // 读档恢复的狩猎：离线结算完成后回到"暂停"，由玩家决定何时继续
+        if (session && h.resumeFromReload && session.state === 'running') {
+            huntSessionTransition(session, 'paused', simClock.now());
+            this._getEngine().sync();
+        }
+        this.clock = h.realClock;
+        return buildHuntOfflineReport(this, session, h, simulatedMs, totalMs);
+    }
+
     // 异步分批模拟离线战斗
     _simulateOfflineBattlesAsync(totalMs, reportedMs = totalMs) {
-        const state = this.gameState;
-        const route = state && state.currentRoute ? this.getRoute(state.currentRoute) : null;
-        if (!route || !state.team || state.team.length === 0) {
+        const simState = this._buildFastSimState(totalMs, reportedMs);
+        if (!simState) {
             this._finishOfflineSimulation(0, reportedMs);
             return;
         }
+        this._offlineSimState = simState;
+        this._fastSim = simState;
+        this._runOfflineBatch();
+    }
+
+    // 快速驱动的模拟状态（离线结算与自动化模拟器共用）。队伍/路线无效时返回 null
+    _buildFastSimState(totalMs, reportedMs = totalMs) {
+        const state = this.gameState;
+        const route = state && state.currentRoute ? this.getRoute(state.currentRoute) : null;
+        if (!route || !state.team || state.team.length === 0) return null;
 
         this.roster.reconcile();
         const activeInst = this._partyInstance(state.activePokemonIndex);
         const activePokemonId = activeInst ? activeInst.speciesId : null;
         const playerStats = activeInst ? this.calculateBattleStats(state.activePokemonIndex) : null;
-        if (!playerStats) {
-            this._finishOfflineSimulation(0, reportedMs);
-            return;
-        }
+        if (!playerStats) return null;
 
         // ===== 预计算离线期间不变的缓存值（与在线共用同一套公式）=====
         const gemBonuses = this.getGemBonuses();
@@ -542,10 +595,10 @@ class GameCore {
             cachedPlayerTypes: POKEMON_DATA[activePokemonId]?.types || [],
             // 图鉴经验累积器（批量化）
             pokedexExpAccumulator: {},
+            simClock: this.clock instanceof SimulationClock ? this.clock : null,
         };
 
-        this._offlineSimState = simState;
-        this._runOfflineBatch();
+        return simState;
     }
 
     // 刷新离线模拟中“当前出战”相关缓存
@@ -561,132 +614,236 @@ class GameCore {
         s.cachedPlayerTypes = POKEMON_DATA[s.activePokemonId]?.types || [];
     }
 
+    // 快速驱动里"花掉"一段模拟时间：剩余时间减少，模拟时钟（如果有）同步前进
+    _fastSpend(s, ms) {
+        const used = Math.min(ms, Math.max(0, s.remainingMs));      // 最后一场可能超出剩余时间：时钟只走到截止点
+        s.remainingMs -= ms;
+        if (used > 0 && s.simClock) s.simClock.advance(used);
+    }
+
+    // 快速驱动的一场遭遇（与在线共用生成、伤害、胜利结算；狩猎进行时再叠加自动化策略）。
+    // 返回 false 表示无法继续（路线无效），调用方应终止。
+    _fastBattleStep(s) {
+        const state = this.gameState;
+        const hunting = this.isHuntRunning();
+
+        // 与在线共用的野怪生成（使用缓存的闪光率/权重参数）
+        const wildPokemon = this.generateWildPokemon(s.route, s.spawnCache);
+        if (!wildPokemon) { s.remainingMs = 0; return false; } // 路线无效：终止，避免空转
+        s.wild = wildPokemon;
+
+        // 每场新敌人生成后换最优宝可梦（使用缓存的队伍属性）。狩猎时由策略决定（与在线同一个决策函数）
+        if (hunting) {
+            this._getEngine().evaluate('encounter');
+        } else if (state.settings?.autoSwitchBest && state.team.length > 1) {
+            const bestIndex = this.getBestTeamMemberForEnemy(wildPokemon, {
+                teamStats: s.cachedTeamStats,
+                teamLevels: s.cachedTeamLevels,
+            });
+            if (bestIndex !== -1 && bestIndex !== state.activePokemonIndex) {
+                state.activePokemonIndex = bestIndex;
+                const newStats = s.cachedTeamStats[bestIndex];
+                if (newStats) this._offlineSyncActive(s, newStats);
+            }
+        }
+
+        const enemyStats = this.calculateStats(wildPokemon);
+        let enemyHp = enemyStats.hp;
+        const enemyAttackInterval = this.getAttackInterval(enemyStats.speed);
+        const wildTypes = POKEMON_DATA[wildPokemon.id]?.types || [];
+
+        // 获取最优技能（复用公共方法）
+        const bestSkill = this._getBestSkillForInstance(s.activeInst, wildTypes);
+        const playerPower = bestSkill.power > 0 ? bestSkill.power : 50;
+
+        // 模拟单场战斗
+        let battleTime = 0;
+        let playerTimer = 0;
+        let enemyTimer = 0;
+
+        while (enemyHp > 0 && s.playerHp > 0) {
+            const nextEvent = Math.min(s.playerAttackInterval - playerTimer, enemyAttackInterval - enemyTimer);
+
+            battleTime += nextEvent;
+            playerTimer += nextEvent;
+            enemyTimer += nextEvent;
+
+            if (battleTime > s.remainingMs) break;
+
+            // 玩家攻击
+            if (playerTimer >= s.playerAttackInterval) {
+                playerTimer = 0;
+                const hit = this._computeDamage(
+                    s.cachedPlayerLevel, s.playerStats.attack, enemyStats.defense,
+                    s.cachedPlayerTypes, wildTypes, playerPower,
+                    s.critParams.rate, s.critParams.multiplier
+                );
+                enemyHp -= hit.damage;
+                s.activeInst.stats.damageDealt += hit.damage;
+                if (hit.criticalHit) s.activeInst.stats.criticalHits++;
+            }
+
+            // 敌方攻击
+            if (enemyTimer >= enemyAttackInterval) {
+                enemyTimer = 0;
+                if (!(s.dodgeRate > 0 && this.rng() < s.dodgeRate)) {
+                    const taken = this._computeDamage(
+                        wildPokemon.level, enemyStats.attack, s.playerStats.defense,
+                        wildTypes, s.cachedPlayerTypes, 50,
+                        s.enemyCritParams.rate, s.enemyCritParams.multiplier
+                    ).damage;
+                    s.playerHp -= taken;
+                    s.activeInst.stats.damageTaken += taken;
+                    // 狩猎：血量掉到阈值以下 → 与在线相同的 hp_low 检查（治疗或没药水则停）
+                    if (hunting && s.playerHp > 0) {
+                        this._fastCheckLowHp(s, false);
+                        if (!this.isHuntRunning()) { this._fastHalt(s); break; }
+                    }
+                }
+            }
+        }
+
+        this._fastSpend(s, battleTime);
+        if (s.halt) return true;
+
+        // 玩家被击败：狩猎时先看策略（药水复活 / 没药水停止），否则等待回满血（与在线 20%/秒 一致）
+        if (s.playerHp <= 0) {
+            s.activeInst.stats.faints++;
+            state.currentEnemy = null;
+            if (hunting) {
+                this._emit('battle_completed', { result: 'defeat', enemyId: wildPokemon.id, xp: 0, gold: 0, route: state.currentRoute, tower: false });
+                if (!this.isHuntRunning()) { this._fastHalt(s); return true; }
+            }
+            if (s.playerHp <= 0) {
+                this._fastSpend(s, DEFEAT_HEAL_MS);
+                s.playerHp = s.playerStats.hp;
+            }
+            return true;
+        }
+
+        // 敌方被击败 - 与在线共用的胜利结算
+        if (enemyHp <= 0) {
+            s.battlesSimulated++;
+
+            const rewards = this._processVictoryRewards(
+                wildPokemon, s.activePokemonId, s.playerStats.hp, s.playerHp, s
+            );
+            s.playerHp = rewards.newPlayerHp;
+
+            // 自动切换地图后刷新路线
+            if (rewards.autoSwitchResult) {
+                const newRoute = this.getRoute(state.currentRoute);
+                if (newRoute) s.route = newRoute;
+            }
+
+            // 仅在升级/队伍变化时才刷新缓存（避免每场都重算）
+            const teamKey = state.party.join(',');
+            if (rewards.anyLevelUp || teamKey !== s.teamKey) {
+                const teamChanged = teamKey !== s.teamKey;
+                s.teamKey = teamKey;
+                for (let i = 0; i < state.team.length; i++) {
+                    const member = this._partyInstance(i);
+                    const newLv = member?.level || 0;
+                    const newSp = member?.speciesId || 0;
+                    if (teamChanged || newLv !== s.cachedTeamLevels[i] || newSp !== s.cachedTeamSpecies[i]) {
+                        s.cachedTeamStats[i] = this.calculateBattleStats(i);
+                        s.cachedTeamLevels[i] = newLv;
+                        s.cachedTeamSpecies[i] = newSp;
+                    }
+                }
+                const refreshed = s.cachedTeamStats[state.activePokemonIndex];
+                if (refreshed) this._offlineSyncActive(s, refreshed);
+            }
+
+            // 狩猎：胜利回血结算后检查是否需要治疗；自动化可能换了路线/队伍
+            if (hunting) {
+                if (this.isHuntRunning()) this._fastCheckLowHp(s, true);
+                if (!this.isHuntRunning()) { this._fastHalt(s); return true; }
+                if (state.currentRoute !== s.route.id) {
+                    const nr = this.getRoute(state.currentRoute);
+                    if (nr) s.route = nr;
+                }
+            }
+
+            this._fastSpend(s, this._getNextBattleDelay(s.playerAttackInterval));
+        }
+        return true;
+    }
+
+    // 狩猎在快速驱动里被停止（条件满足/没药水…）：不再消耗剩余时间
+    _fastHalt(s) {
+        s.halt = true;
+    }
+
+    // 执行一步并处理"狩猎被停止"：记录停止时刻（已模拟的时间），剩余时间清零
+    _fastStep(s) {
+        const ok = this._fastBattleStep(s);
+        if (s.halt && s.haltedAtMs === undefined) {
+            s.haltedAtMs = s.totalMs - s.remainingMs;
+            s.remainingMs = 0;
+        }
+        return ok;
+    }
+
+    // 同步跑完整个快速模拟（模拟器/基准用；离线结算用异步分批的 _runOfflineBatch）
+    _runFastSync(s) {
+        while (s.remainingMs > 0 && !s.halt) {
+            if (!this._fastStep(s)) break;
+        }
+        this._flushPokedexExpAccumulator(s.pokedexExpAccumulator);
+    }
+
+    // 快速驱动里的"血量检查"：与在线 _checkLowHp 同一套阈值，决策交给引擎
+    _fastCheckLowHp(s, force) {
+        const heal = this.getAutomationPolicy().heal;
+        if (!heal.enabled || s.playerStats.hp <= 0) return;
+        const pct = s.playerHp / s.playerStats.hp * 100;
+        if (pct >= heal.whenHpBelowPercent) { s.lowHpNotified = false; return; }
+        if (s.lowHpNotified && !force) return;
+        s.lowHpNotified = true;
+        this._emit('hp_low', { hpPercent: pct, hp: s.playerHp, maxHp: s.playerStats.hp });
+    }
+
+    // 快速驱动执行"需要战斗现场"的动作（HEAL / SWITCH_POKEMON）；其余动作走统一的 ActionDispatcher
+    _fastExecute(action) {
+        const s = this._fastSim;
+        if (action.type === 'HEAL') {
+            const inv = this.ensureInventory();
+            if (inv.potions <= 0) return { ok: false, type: 'HEAL', code: 'no_potions' };
+            const max = s.playerStats.hp;
+            if (s.playerHp > 0 && s.playerHp >= max) return { ok: false, type: 'HEAL', code: 'full_hp' };
+            const hpBefore = s.playerHp;
+            const revived = hpBefore <= 0;
+            s.playerHp = Math.min(max, Math.max(0, hpBefore) + potionHealAmount(max));
+            inv.potions--;
+            s.lowHpNotified = false;
+            this._emit('heal', { potion: true, reason: 'automation', amount: s.playerHp - Math.max(0, hpBefore), hpBefore, hpAfter: s.playerHp, maxHp: max, revived, potionsLeft: inv.potions });
+            return { ok: true, type: 'HEAL', amount: s.playerHp - Math.max(0, hpBefore), potionsLeft: inv.potions, revived };
+        }
+        if (action.type === 'SWITCH_POKEMON') {
+            const state = this.gameState;
+            if (!Number.isInteger(action.index) || action.index < 0 || action.index >= state.team.length) return { ok: false, type: action.type, code: 'invalid_member' };
+            if (action.index === state.activePokemonIndex) return { ok: false, type: action.type, code: 'already_active' };
+            const newStats = s.cachedTeamStats[action.index];
+            if (!newStats) return { ok: false, type: action.type, code: 'invalid_member' };
+            const from = state.activePokemonIndex;
+            state.activePokemonIndex = action.index;
+            this._offlineSyncActive(s, newStats);
+            this._emit('pokemon_switched', { from, to: action.index, reason: 'best_matchup' });
+            return { ok: true, type: action.type, from, to: action.index };
+        }
+        return null;
+    }
+
     // 每批模拟 OFFLINE_BATCH_SIZE 场战斗，然后让出主线程更新进度
     _runOfflineBatch() {
         const s = this._offlineSimState;
         if (!s) return;
-        const state = this.gameState;
 
         let batchCount = 0;
-
         while (s.remainingMs > 0 && batchCount < OFFLINE_BATCH_SIZE) {
-            // 与在线共用的野怪生成（使用缓存的闪光率/权重参数）
-            const wildPokemon = this.generateWildPokemon(s.route, s.spawnCache);
-            if (!wildPokemon) { s.remainingMs = 0; break; } // 路线无效：终止，避免空转
-
-            // 每场新敌人生成后执行自动切换最优宝可梦（使用缓存的队伍属性）
-            if (state.settings?.autoSwitchBest && state.team.length > 1) {
-                const bestIndex = this.getBestTeamMemberForEnemy(wildPokemon, {
-                    teamStats: s.cachedTeamStats,
-                    teamLevels: s.cachedTeamLevels,
-                });
-                if (bestIndex !== -1 && bestIndex !== state.activePokemonIndex) {
-                    state.activePokemonIndex = bestIndex;
-                    const newStats = s.cachedTeamStats[bestIndex];
-                    if (newStats) this._offlineSyncActive(s, newStats);
-                }
-            }
-
-            const enemyStats = this.calculateStats(wildPokemon);
-            let enemyHp = enemyStats.hp;
-            const enemyAttackInterval = this.getAttackInterval(enemyStats.speed);
-            const wildTypes = POKEMON_DATA[wildPokemon.id]?.types || [];
-
-            // 获取最优技能（复用公共方法）
-            const bestSkill = this._getBestSkillForInstance(s.activeInst, wildTypes);
-            const playerPower = bestSkill.power > 0 ? bestSkill.power : 50;
-
-            // 模拟单场战斗
-            let battleTime = 0;
-            let playerTimer = 0;
-            let enemyTimer = 0;
-
-            while (enemyHp > 0 && s.playerHp > 0) {
-                const nextEvent = Math.min(s.playerAttackInterval - playerTimer, enemyAttackInterval - enemyTimer);
-
-                battleTime += nextEvent;
-                playerTimer += nextEvent;
-                enemyTimer += nextEvent;
-
-                if (battleTime > s.remainingMs) break;
-
-                // 玩家攻击
-                if (playerTimer >= s.playerAttackInterval) {
-                    playerTimer = 0;
-                    const hit = this._computeDamage(
-                        s.cachedPlayerLevel, s.playerStats.attack, enemyStats.defense,
-                        s.cachedPlayerTypes, wildTypes, playerPower,
-                        s.critParams.rate, s.critParams.multiplier
-                    );
-                    enemyHp -= hit.damage;
-                    s.activeInst.stats.damageDealt += hit.damage;
-                    if (hit.criticalHit) s.activeInst.stats.criticalHits++;
-                }
-
-                // 敌方攻击
-                if (enemyTimer >= enemyAttackInterval) {
-                    enemyTimer = 0;
-                    if (!(s.dodgeRate > 0 && this.rng() < s.dodgeRate)) {
-                        const taken = this._computeDamage(
-                            wildPokemon.level, enemyStats.attack, s.playerStats.defense,
-                            wildTypes, s.cachedPlayerTypes, 50,
-                            s.enemyCritParams.rate, s.enemyCritParams.multiplier
-                        ).damage;
-                        s.playerHp -= taken;
-                        s.activeInst.stats.damageTaken += taken;
-                    }
-                }
-            }
-
-            s.remainingMs -= battleTime;
-
-            // 玩家被击败：等待回满血后继续（与在线 20%/秒 一致）
-            if (s.playerHp <= 0) {
-                s.activeInst.stats.faints++;
-                s.remainingMs -= DEFEAT_HEAL_MS;
-                s.playerHp = s.playerStats.hp;
-                state.currentEnemy = null;
-                batchCount++;
-                continue;
-            }
-
-            // 敌方被击败 - 与在线共用的胜利结算
-            if (enemyHp <= 0) {
-                s.battlesSimulated++;
-                batchCount++;
-
-                const rewards = this._processVictoryRewards(
-                    wildPokemon, s.activePokemonId, s.playerStats.hp, s.playerHp, s
-                );
-                s.playerHp = rewards.newPlayerHp;
-
-                // 自动切换地图后刷新路线
-                if (rewards.autoSwitchResult) {
-                    const newRoute = this.getRoute(state.currentRoute);
-                    if (newRoute) s.route = newRoute;
-                }
-
-                // 仅在升级/队伍变化时才刷新缓存（避免每场都重算）
-                const teamKey = state.party.join(',');
-                if (rewards.anyLevelUp || teamKey !== s.teamKey) {
-                    const teamChanged = teamKey !== s.teamKey;
-                    s.teamKey = teamKey;
-                    for (let i = 0; i < state.team.length; i++) {
-                        const member = this._partyInstance(i);
-                        const newLv = member?.level || 0;
-                        const newSp = member?.speciesId || 0;
-                        if (teamChanged || newLv !== s.cachedTeamLevels[i] || newSp !== s.cachedTeamSpecies[i]) {
-                            s.cachedTeamStats[i] = this.calculateBattleStats(i);
-                            s.cachedTeamLevels[i] = newLv;
-                            s.cachedTeamSpecies[i] = newSp;
-                        }
-                    }
-                    const refreshed = s.cachedTeamStats[state.activePokemonIndex];
-                    if (refreshed) this._offlineSyncActive(s, refreshed);
-                }
-
-                s.remainingMs -= this._getNextBattleDelay(s.playerAttackInterval);
-            }
+            if (!this._fastStep(s)) break;
+            batchCount++;
         }
 
         // 计算进度并通知UI — 使用保存的原始回调
@@ -728,12 +885,15 @@ class GameCore {
                 enemyHp: 0
             };
         }
+        const huntReport = this._endOfflineHunt(s, totalMs);       // 先结束狩猎并还原真实时钟，再保存
         this._offlineSimState = null;
+        this._fastSim = null;
 
         this.saveNow();
         this._log(`⚡ 离线结算: 模拟了 ${battlesSimulated} 场战斗`);
 
         const summary = this._endOfflineSilence(battlesSimulated);
+        if (summary && huntReport) summary.hunt = huntReport;
         if (this.guideAutoUpdate) this.guideUpdate({ force: true });
         if (summary) {
             this._track('offline_return', {
@@ -756,6 +916,7 @@ class GameCore {
                 totalMs,
                 summary,
                 offlineEvents: summary ? summary.events : [],
+                hunt: huntReport,
             });
         }
 
@@ -1859,7 +2020,7 @@ class GameCore {
         const fainted = b.playerCurrentHp <= 0;
         if (!fainted && b.playerCurrentHp >= b.playerMaxHp) return { ok: false, code: 'full_hp' };
         const hpBefore = b.playerCurrentHp;
-        const amount = Math.max(1, Math.ceil(b.playerMaxHp * POTION_HEAL_PERCENT));
+        const amount = potionHealAmount(b.playerMaxHp);
         b.playerCurrentHp = Math.min(b.playerMaxHp, b.playerCurrentHp + amount);
         b._lowHpNotified = false;
         inv.potions--;
@@ -3092,13 +3253,14 @@ class GameCore {
 
     // 请求保存（防抖）：战斗、升级等高频路径使用，约 2 秒后合并写入，最迟 10 秒
     save() {
-        if (!this.gameState) return;
+        if (!this.gameState || this._simMode) return;     // 自动化模拟期间不写存档
         this.saver.request();
     }
 
     // 立即保存：手动保存、导出、离开页面、导入/删除后使用
     saveNow() {
         if (!this.gameState) return { ok: false, code: 'no_state' };
+        if (this._simMode) return { ok: true, simulated: true };
         return this.saver.flush(true);
     }
 
