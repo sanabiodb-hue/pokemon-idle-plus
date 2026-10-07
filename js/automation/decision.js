@@ -7,7 +7,7 @@
 //   encounter     新遭遇开始时：按换人策略选出战宝可梦
 // 快照字段（按阶段需要）：
 //   policy, stats（会话累计）, durationMs, routeComplete, nextRouteId, currentRouteId,
-//   bestIndex, activeIndex, hpPercent（0–100）, fainted, potions
+//   bestIndex, activeIndex, hpPercent（0–100）, fainted, potions, shinyFound（本场击败了闪光）
 // 返回 [{ action: {type, ...}, reason }]；"停止"动作优先，且一次评估里停止之后不再有别的动作。
 
 function decideAutomationActions(stage, snap) {
@@ -34,6 +34,7 @@ function _decideHeal(policy, snap) {
 function _decideAfterBattle(policy, snap) {
     const sc = policy.stopConditions;
     const stats = snap.stats || {};
+    if (sc.shinyFound && snap.shinyFound) return _stop('shiny_found');
     if (sc.battleLimit > 0 && (stats.battles || 0) >= sc.battleLimit) return _stop('battle_limit');
     if (sc.timeLimitMinutes > 0 && (snap.durationMs || 0) >= sc.timeLimitMinutes * 60000) return _stop('time_limit');
 

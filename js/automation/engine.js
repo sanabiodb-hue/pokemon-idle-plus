@@ -15,6 +15,7 @@ class AutomationEngine {
         this.game = game;
         this._unsubs = [];
         this._evaluating = false;
+        this._shinyFound = false;                       // 击败过闪光，等下一次评估时按 stopConditions.shinyFound 处理
         this.stats = { evaluations: 0, decisions: 0, actionsOk: 0, actionsRejected: 0 };
     }
 
@@ -33,6 +34,7 @@ class AutomationEngine {
             bus.on('battle_started', (e) => this._onBattleStarted(e)),
             bus.on('pokemon_captured', (e) => this._onCaptured(e)),
             bus.on('route_changed', (e) => this._onRouteChanged(e)),
+            bus.on('pokemon_defeated', (e) => { if (e.shiny) this._shinyFound = true; }),
             bus.on('hp_low', (e) => this._onHpLow(e)),
             bus.on('heal', (e) => this._onHeal(e)),
         ];
@@ -97,6 +99,7 @@ class AutomationEngine {
             activeIndex: g.gameState.activePokemonIndex,
             potions: g.getPotions(),
             fainted: !!(extra && extra.fainted),
+            shinyFound: this._shinyFound,
         };
         const b = g.currentBattle;
         snap.hpPercent = b && b.playerMaxHp > 0 ? b.playerCurrentHp / b.playerMaxHp * 100 : 100;
@@ -132,6 +135,7 @@ class AutomationEngine {
         } catch (err) {
             this.game._emit('automation_error', { stage, message: String(err && err.message).slice(0, 120) });
         } finally {
+            if (stage === 'after_battle') this._shinyFound = false;
             this._evaluating = false;
         }
         return results;
