@@ -9,6 +9,17 @@ window.addEventListener('DOMContentLoaded', () => {
     // 初始化游戏核心
     game = new GameCore();
 
+    // 测试期统计：只依赖浏览器自带能力，失败不影响游戏
+    let analytics = null;
+    try {
+        analytics = new Analytics({
+            storage: window.localStorage,
+            gtag: typeof window.gtag === 'function' ? window.gtag : null,
+            doNotTrack: navigator.doNotTrack === '1' || window.doNotTrack === '1',
+        });
+        game.analytics = analytics;
+    } catch (e) { console.warn('统计初始化失败:', e); }
+
     // 尝试加载存档（主存档损坏时自动尝试备份）
     let loaded = false;
     try {
@@ -19,6 +30,21 @@ window.addEventListener('DOMContentLoaded', () => {
     const loadReport = game.loadReport;
     if (!loaded) {
         game.initNewGame();
+    }
+
+    if (analytics) {
+        analytics.startSession({ new_player: !loaded });
+        // 这次安装的第一次操作（点击/触摸/按键）
+        const firstAction = (e) => {
+            const tab = e.target && e.target.closest ? e.target.closest('[data-tab]') : null;
+            analytics.once('first_action', { via: e.type, tab: tab ? tab.dataset.tab : 'none' });
+        };
+        for (const type of ['pointerdown', 'keydown']) document.addEventListener(type, firstAction, { once: true, capture: true });
+        document.addEventListener('visibilitychange', () => {
+            if (document.hidden) analytics.onHidden();
+            else analytics.onVisible();
+        });
+        window.addEventListener('pagehide', () => analytics.endSession('pagehide'));
     }
 
     // 初始化UI

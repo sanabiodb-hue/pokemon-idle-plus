@@ -11,6 +11,7 @@ class GameCore {
         this.battleSpeed = 1;
         this.onBattleEvent = null; // UI回调
         this.onCatch = null;
+        this.analytics = null;         // 测试期统计（见 analytics.js）；main.js 注入，测试里为空
         this.onLevelUp = null;
         this._nextBattleTimeout = null; // 下一场战斗延迟计时器
         this._nextBattleScheduledAt = null; // 下一场战斗计划开始的时间戳
@@ -54,6 +55,20 @@ class GameCore {
 
     _log(...args) {
         if (this.debug) console.log(...args);
+    }
+
+    // 统计只是旁路：任何错误都不能影响游戏。离线结算期间不逐条记事件（只累加计数，结束时汇总成 offline_return）
+    _track(name, props) {
+        if (!this.analytics || this._isOfflineSimulating) return;
+        try { this.analytics.track(name, props); } catch (e) { /* 忽略 */ }
+    }
+    _trackOnce(name, props) {
+        if (!this.analytics || this._isOfflineSimulating) return;
+        try { this.analytics.once(name, props); } catch (e) { /* 忽略 */ }
+    }
+    _count(key, n = 1) {
+        if (!this.analytics) return;
+        try { this.analytics.count(key, n); } catch (e) { /* 忽略 */ }
     }
 
     // ===================== 缓存失效 =====================
@@ -704,6 +719,19 @@ class GameCore {
         this._log(`⚡ 离线结算: 模拟了 ${battlesSimulated} 场战斗`);
 
         const summary = this._endOfflineSilence(battlesSimulated);
+        if (summary) {
+            this._track('offline_return', {
+                minutes: Math.round(totalMs / 60000), battles: battlesSimulated,
+                new_species: summary.newCatches.length, new_individuals: summary.duplicateCatches.length,
+                evolutions: summary.events.filter(e => e.event === 'evolved').length,
+            });
+            // 离线期间逐条事件被静默了：把里程碑补记上（首次捕获、进化、闪光）
+            if (summary.newCatches.length > 0) this._trackOnce('first_capture', { id: summary.newCatches[0].id, offline: true });
+            for (const ev of summary.events) {
+                if (ev.event === 'evolved') this._track('evolution', { from: ev.data.oldId, to: ev.data.newId, kept_level: !!ev.data.keptLevel, offline: true });
+                else if (ev.event === 'shinyDefeated') this._track('shiny_found', { id: ev.data.id, new_species_shiny: true, offline: true });
+            }
+        }
 
         // 通知UI模拟结束（带摘要，事件不再丢失）
         if (this.onBattleEvent) {
@@ -1509,6 +1537,16 @@ class GameCore {
         const wasShinyKnown = !!state.shinyDex[wildPokemon.id];
         this.processDefeat(wildPokemon);
 
+        // 统计：精确计数每场；事件只在第一场胜利和之后每 25 场记一次，避免刷屏
+        this._count('battles');
+        if (this.analytics && !this._isOfflineSimulating) {
+            const total = this.analytics.state.counters.battles;
+            if (total === 1 || total % 25 === 0) {
+                this._track('battle_complete', { total, route: state.currentRoute, level: activeInst ? activeInst.level : 0 });
+            }
+        }
+        if (wildPokemon.isShiny) this._track('shiny_found', { id: wildPokemon.id, new_species_shiny: !wasShinyKnown });
+
         // 闪光记录：击败闪光宝可梦后，双向传播闪光给整条进化链
         if (wildPokemon.isShiny && !wasShinyKnown) {
             state.shinyDex[wildPokemon.id] = true;
@@ -1691,6 +1729,10 @@ class GameCore {
         // 清除已使用的存档状态（避免下一场战斗重复恢复）
         if (savedBattleHp) {
             delete this.gameState.battleHp;
+        }
+
+        if (this.analytics && !this._isOfflineSimulating) {
+            try { this.analytics.oncePerSession('battle_start', { route: this.gameState.currentRoute }); } catch (e) { /* 忽略 */ }
         }
 
         if (this.onBattleEvent) {
@@ -2049,6 +2091,14 @@ class GameCore {
             this._syncShinyInFamily(inst.speciesId);
         }
 
+        // 统计：只记队伍成员，且 ≤Lv10 或 5 的倍数
+        if (leveledUp) {
+            this._count('levelUps');
+            if ((inst.level <= 10 || inst.level % 5 === 0) && this.roster.party.contains(inst.uid)) {
+                this._track('level_up', { id: inst.speciesId, level: inst.level });
+            }
+        }
+
         // 升级通知合并为一条（显示起始等级 → 最终等级）
         if (leveledUp && this.onLevelUp) {
             this.onLevelUp({
@@ -2130,6 +2180,9 @@ class GameCore {
         this._touchInstance(inst);
         if (shinyRecorded) this._syncShinyInFamily(evo.id);
 
+        this._count('evolutions');
+        this._track('evolution', { from: baseId, to: evo.id, kept_level: !firstRegistration, level: inst.level });
+
         if (this.onBattleEvent) {
             if (shinyRecorded && !firstRegistration) {
                 this.onBattleEvent('shinyEvolved', {
@@ -2187,9 +2240,13 @@ class GameCore {
                 shiny: !!wildPokemon.isShiny,
                 traits: rollTraits(wildPokemon.id, this.rng),
             });
+            this._count('captures');
+            this._track('capture', { id: wildPokemon.id, species_count: this.getPokedexStats().caught, shiny: !!wildPokemon.isShiny });
+            this._trackOnce('first_capture', { id: wildPokemon.id });
             
             // 检查是否因此次捕获解锁了城都地区
             if (!wasJohtoUnlocked && this.isRegionUnlocked('johto')) {
+                this._track('route_unlock', { region: 'johto' });
                 if (this.onBattleEvent) {
                     this.onBattleEvent('regionUnlocked', { regionId: 'johto', regionName: '城都地区' });
                 }
@@ -2197,6 +2254,7 @@ class GameCore {
 
             // 检查是否因此次捕获解锁了丰缘地区
             if (!wasHoennUnlocked && this.isRegionUnlocked('hoenn')) {
+                this._track('route_unlock', { region: 'hoenn' });
                 if (this.onBattleEvent) {
                     this.onBattleEvent('regionUnlocked', { regionId: 'hoenn', regionName: '丰缘地区' });
                 }
@@ -2204,6 +2262,7 @@ class GameCore {
 
             // 检查是否因此次捕获解锁了神奥地区
             if (!wasSinnohUnlocked && this.isRegionUnlocked('sinnoh')) {
+                this._track('route_unlock', { region: 'sinnoh' });
                 if (this.onBattleEvent) {
                     this.onBattleEvent('regionUnlocked', { regionId: 'sinnoh', regionName: '神奥地区' });
                 }
@@ -2211,6 +2270,7 @@ class GameCore {
 
             // 检查是否因此次捕获解锁了合众地区
             if (!wasUnovaUnlocked && this.isRegionUnlocked('unova')) {
+                this._track('route_unlock', { region: 'unova' });
                 if (this.onBattleEvent) {
                     this.onBattleEvent('regionUnlocked', { regionId: 'unova', regionName: '合众地区' });
                 }
@@ -2218,6 +2278,7 @@ class GameCore {
 
             // 检查是否因此次捕获解锁了卡洛斯地区
             if (!wasKalosUnlocked && this.isRegionUnlocked('kalos')) {
+                this._track('route_unlock', { region: 'kalos' });
                 if (this.onBattleEvent) {
                     this.onBattleEvent('regionUnlocked', { regionId: 'kalos', regionName: '卡洛斯地区' });
                 }
@@ -2225,6 +2286,7 @@ class GameCore {
 
             // 检查是否因此次捕获解锁了阿罗拉地区
             if (!wasAlolaUnlocked && this.isRegionUnlocked('alola')) {
+                this._track('route_unlock', { region: 'alola' });
                 if (this.onBattleEvent) {
                     this.onBattleEvent('regionUnlocked', { regionId: 'alola', regionName: '阿罗拉地区' });
                 }
@@ -2232,6 +2294,7 @@ class GameCore {
 
             // 检查是否因此次捕获解锁了伽勒尔地区
             if (!wasGalarUnlocked && this.isRegionUnlocked('galar')) {
+                this._track('route_unlock', { region: 'galar' });
                 if (this.onBattleEvent) {
                     this.onBattleEvent('regionUnlocked', { regionId: 'galar', regionName: '伽勒尔地区' });
                 }
@@ -2239,6 +2302,7 @@ class GameCore {
 
             // 检查是否因此次捕获解锁了帕底亚地区
             if (!wasPaldeaUnlocked && this.isRegionUnlocked('paldea')) {
+                this._track('route_unlock', { region: 'paldea' });
                 if (this.onBattleEvent) {
                     this.onBattleEvent('regionUnlocked', { regionId: 'paldea', regionName: '帕底亚地区' });
                 }
@@ -2246,6 +2310,7 @@ class GameCore {
 
             // 检查是否因此次捕获解锁了Mega进化地区
             if (!wasMegaUnlocked && this.isRegionUnlocked('mega')) {
+                this._track('route_unlock', { region: 'mega' });
                 if (this.onBattleEvent) {
                     this.onBattleEvent('regionUnlocked', { regionId: 'mega', regionName: 'Mega进化地区' });
                 }
@@ -2290,6 +2355,7 @@ class GameCore {
             }
 
             const captured = wantsNew ? this._captureDuplicate(wildPokemon) : null;
+            if (captured) this._count('duplicates');
 
             if ((updated || captured) && this.onCatch) {
                 this.onCatch({
@@ -2609,7 +2675,9 @@ class GameCore {
                 }
             }
         }
+        const changed = this.gameState.currentRoute !== routeId;
         this.gameState.currentRoute = routeId;
+        if (changed) this._track('route_change', { route: routeId });
         // 不立即刷新敌方，当前战斗继续，下一场战斗将生成新路线的宝可梦
         this.resetRateTracker(); // 切换地图时重置速率统计
         this.save();

@@ -4715,3 +4715,10 @@ body {
 .setting-btn.danger { background: #c0392b; }
 .slot-traits { font-size: 10px; color: var(--text-secondary); margin-top: 2px; }
 .team-slot-actions button:disabled { opacity: 0.4; cursor: default; }
+
+/* ============ 第 4 阶段：移动端可用性 ============ */
+.tab-btn { position: relative; }
+.tab-btn .lock-icon { top: 1px; right: 3px; }   /* 原来 right:-2px 会让页面出现横向滚动 */
+.filter-btn, .sub-filter-btn, .region-filter-btn, .setting-btn,
+.team-slot-actions button, .pc-party-actions button { min-height: 36px; min-width: 36px; }
+.pc-party-actions button:disabled, .team-slot-actions button:disabled { opacity: 0.55; }
