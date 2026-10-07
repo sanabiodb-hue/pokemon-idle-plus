@@ -13,6 +13,15 @@ const ECONOMY_CONFIG = {
         spend: ['gem_purchase', 'berry_seed', 'talent_reset', 'potion_purchase', 'upgrade_purchase'],
     },
 
+    // 药水（第一个商店物品）。价格随进度缩放：price = max(basePrice, ceil(winsPerPotion × 一场胜利的基础金币(进度等级)))
+    // 进度等级 = 玩家拥有过的最高等级（只增不减，避免在低级路线买便宜药水去高级路线用）
+    potion: {
+        basePrice: 40,
+        winsPerPotion: 10,         // 一瓶药水 ≈ 这么多场"同等级"胜利的收入（起点值，最终值由模拟决定）
+        capacityBase: 30,          // 药水库存上限（可由升级提高）
+        packs: [1, 5, 10],         // 界面上的快捷购买数量
+    },
+
     // 余额上限（防止数值溢出）
     maxMoney: Number.MAX_SAFE_INTEGER / 4,
 };
@@ -23,6 +32,7 @@ function sanitizeEconomyState(raw) {
     if (!_isObj(raw)) return out;
     out.earned = _num(raw.earned, 0, 0);
     out.spent = _num(raw.spent, 0, 0);
+    if (_has(raw, 'progressLevel')) out.progressLevel = _int(raw.progressLevel, 1, 1e6, 1);
     const all = ECONOMY_CONFIG.reasons.earn.concat(ECONOMY_CONFIG.reasons.spend);
     if (_isObj(raw.byReason)) {
         for (const reason of all) {

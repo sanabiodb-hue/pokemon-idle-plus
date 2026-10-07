@@ -38,6 +38,7 @@ const ANALYTICS_EVENT_NAMES = [
     'game_open', 'session_start', 'session_end', 'first_action', 'first_capture',
     'battle_start', 'battle_complete', 'level_up', 'evolution', 'pc_open', 'route_unlock', 'shiny_found',
     'capture', 'route_change', 'onboarding_step', 'onboarding_skip', 'goal_complete', 'offline_return',
+    'potion_bought', 'upgrade_purchased', 'hunt_completed', 'route_recommended', 'route_selected', 'analyzer_opened',
 ];
 
 // 会话中“走到哪一步”的先后顺序，用来标记放弃点（last_step）
