@@ -439,3 +439,38 @@ const TOWER_MIN_BASE_STAT_TOTAL = 500;  // 候选怪物种族值总和下限
 // ===================== 离线模拟配置 =====================
 const MAX_OFFLINE_TIME = 24 * 60 * 60 * 1000;  // 离线模拟上限24小时（毫秒）
 const OFFLINE_BATCH_SIZE = 200;                  // 每批模拟战斗数
+
+// ===================== 地区图鉴范围（唯一来源） =====================
+// 各地区宝可梦编号区间。核心逻辑、UI、数据校验都从这里读取，避免多处硬编码。
+const REGION_POKEDEX_RANGES = {
+    kanto:  [1, 151],
+    johto:  [152, 251],
+    hoenn:  [252, 386],
+    sinnoh: [387, 493],
+    unova:  [494, 649],
+    kalos:  [650, 721],
+    alola:  [722, 809],
+    galar:  [810, 905],
+    paldea: [906, 1025],
+    mega:   [1026, 1073],
+};
+
+// ===================== 战斗/进度公共常量（在线与离线共用） =====================
+const BASE_CRIT_RATE = 0.05;            // 基础会心率（在线/离线统一）
+const BASE_CRIT_MULTIPLIER = 1.5;       // 基础会心倍率
+const BASE_SHINY_RATE = 1 / 4096;       // 基础闪光概率
+const DEFEAT_HEAL_PERCENT_PER_SEC = 0.2; // 战败后每秒回复最大生命的比例
+const VICTORY_HEAL_PERCENT = 0.1;       // 胜利后回复最大生命的比例
+const TEAM_EXP_RATE = 0.5;              // 队伍其他成员获得的经验比例
+const RESERVE_EXP_RATE = 0.01;          // 图鉴其余宝可梦获得的经验比例
+const NEXT_BATTLE_MAX_DELAY_MS = 800;   // 两场战斗之间的最大间隔
+
+// ===================== 存档配置 =====================
+const SAVE_KEY = 'pokemon_idle_save';
+const SAVE_SCHEMA_VERSION = 2;          // 当前存档结构版本（旧存档无此字段，视为 1）
+const SAVE_DEBOUNCE_MS = 2000;          // 防抖：最后一次请求后 2 秒写入
+const SAVE_MAX_WAIT_MS = 10000;         // 防抖上限：持续请求时最迟 10 秒写入
+const SAVE_BACKUP_COUNT = 3;            // 轮转备份份数
+const SAVE_BACKUP_INTERVAL_MS = 10 * 60 * 1000; // 自动备份最小间隔
+const SAVE_IMPORT_MAX_CHARS = 30 * 1000 * 1000; // 导入文本长度上限
+const DEFEAT_HEAL_MS = Math.ceil(1 / DEFEAT_HEAL_PERCENT_PER_SEC) * 1000; // 从 0 血回满所需时间

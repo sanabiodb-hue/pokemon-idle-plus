@@ -12,3 +12,7 @@ Desktop.ini
 
 # Logs
 *.log
+
+# Node
+node_modules/
+npm-debug.log*

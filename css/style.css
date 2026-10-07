@@ -4620,3 +4620,39 @@ body {
 
 
 
+
+
+/* ===================== 存档状态横幅 / 离线结算报告 ===================== */
+.save-banner {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 8px 12px;
+    font-size: 13px;
+    line-height: 1.4;
+    color: #fff;
+    position: relative;
+    z-index: 1500;
+}
+.save-banner.hidden { display: none; }
+.save-banner.error { background: #c0392b; }
+.save-banner.warn { background: #b9770e; }
+.save-banner .save-banner-text { flex: 1 1 240px; }
+.save-banner button {
+    background: rgba(255, 255, 255, 0.2);
+    color: #fff;
+    border: 1px solid rgba(255, 255, 255, 0.5);
+    border-radius: 6px;
+    padding: 4px 10px;
+    cursor: pointer;
+    font-size: 12px;
+}
+.save-banner button:hover { background: rgba(255, 255, 255, 0.35); }
+
+.offline-report { text-align: left; margin-top: 8px; max-height: 60vh; overflow-y: auto; }
+.offline-report.hidden { display: none; }
+.offline-report-line { font-size: 13px; color: var(--text-secondary); padding: 3px 0; word-break: break-all; }
+.offline-report-line.highlight { color: var(--text-primary); font-weight: bold; margin-top: 6px; }
+.offline-report-line.event { padding-left: 12px; }
+.offline-report-close { display: block; margin: 14px auto 0; min-width: 120px; }

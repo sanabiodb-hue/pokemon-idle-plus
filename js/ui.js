@@ -31,6 +31,7 @@ class GameUI {
                     <span id="offline-percent-text">0%</span>
                     <span id="offline-battles-text">已完成 0 场战斗</span>
                 </div>
+                <div id="offline-report" class="offline-report hidden"></div>
             </div>
         `;
         document.body.appendChild(overlay);
@@ -115,8 +116,9 @@ class GameUI {
 
         // 设置按钮
         document.getElementById('btn-save').addEventListener('click', () => {
-            this.game.save();
-            this.showToast('💾 游戏已保存！');
+            const r = this.game.saveNow();
+            if (r && r.ok) this.showToast('💾 游戏已保存！');
+            else this.showToast('❌ 保存失败：' + ((r && r.error) || '未知错误'));
         });
 
         document.getElementById('btn-export').addEventListener('click', () => {
@@ -131,15 +133,7 @@ class GameUI {
                 this.showToast('⚠️ 请先在文本框中粘贴存档数据！');
                 return;
             }
-            if (this.game.importSave(data)) {
-                this.showToast('✅ 存档导入成功！');
-                this.refreshAll();
-                this.game.stopBattle();
-                // 导入存档后检查是否需要离线结算
-                this._checkOfflineAfterImport();
-            } else {
-                this.showToast('❌ 存档数据无效！');
-            }
+            this._handleImportResult(this.game.importSave(data), '✅ 存档导入成功！', '❌ 存档导入失败');
         });
 
         document.getElementById('btn-delete').addEventListener('click', () => {
@@ -186,14 +180,7 @@ class GameUI {
                     this.showToast('⚠️ 文件内容为空！');
                     return;
                 }
-                if (this.game.importSave(data)) {
-                    this.showToast('📂 存档文件加载成功！');
-                    this.refreshAll();
-                    this.game.stopBattle();
-                    this._checkOfflineAfterImport();
-                } else {
-                    this.showToast('❌ 存档文件数据无效！');
-                }
+                this._handleImportResult(this.game.importSave(data), '📂 存档文件加载成功！', '❌ 存档文件导入失败');
             };
             reader.readAsText(file);
         });
@@ -262,6 +249,9 @@ class GameUI {
         this.game.onBattleEvent = (event, data) => this.handleBattleEvent(event, data);
         this.game.onCatch = (pokemon) => this.showCatchNotification(pokemon);
         this.game.onLevelUp = (pokemon) => this.showLevelUpNotification(pokemon);
+        this.game.onSaveError = (err) => this.showSaveError(err);
+        this.game.onSaveRecover = () => this.hideSaveBanner();
+        this.game.onSaveConflict = () => this.showSaveConflict();
 
         // 键盘快捷键
         document.addEventListener('keydown', (e) => {
@@ -415,43 +405,7 @@ class GameUI {
                 this.showToast(`✨ 恭喜！获得了 ${data.name} 的闪光形态！`);
                 break;
             case 'badgeUnlocked':
-                this.addBattleLog(`🏅 恭喜！获得了 ${data.badgeName}！`, 'evolution');
-                this.showToast(`🏅 恭喜！获得了 ${data.badgeName}！`);
-                this.updateBadgeTabVisibility();
-                // 丰缘徽章解锁时同步解锁树果系统
-                if (data.regionId === 'hoenn') {
-                    this.updateBerryTabVisibility();
-                    this._initBerrySystem();
-                    setTimeout(() => {
-                        this.showToast('🌱 树果系统已解锁！可以种植树果增强宝可梦了');
-                    }, 2000);
-                }
-                // 合众徽章解锁时同步解锁技能系统
-                if (data.regionId === 'unova') {
-                    this.updateSkillTabVisibility();
-                    setTimeout(() => {
-                        this.showToast('⚡ 技能系统已解锁！1000级以上宝可梦可升级技能');
-                    }, 2000);
-                }
-                // 阿罗拉徽章解锁时同步解锁天赋系统
-                if (data.regionId === 'alola') {
-                    this.updateTalentTabVisibility();
-                    setTimeout(() => {
-                        this.showToast('🌟 天赋系统已解锁！消耗天赋点强化各项能力');
-                    }, 2000);
-                }
-                // 帕底亚徽章解锁时显示自动切换地图设置 + 解锁挑战塔
-                if (data.regionId === 'paldea') {
-                    this.updateAutoRouteSettingVisibility();
-                    this._initAutoRouteSetting();
-                    this.updateTowerTabVisibility();
-                    setTimeout(() => {
-                        this.showToast('💎 自动切换地图已解锁！可在设置中开启');
-                    }, 2000);
-                    setTimeout(() => {
-                        this.showToast('🏝️ 挑战岛已解锁！挑战获取全局加成');
-                    }, 4000);
-                }
+                this._handleBadgeUnlocked(data, false);
                 break;
             case 'regionUnlocked':
                 this.addBattleLog(`🎉 恭喜！${data.regionName}已解锁！`, 'evolution');
@@ -495,7 +449,7 @@ class GameUI {
                 this._updateOfflineProgress(data.progress, data.battles, data.percent);
                 break;
             case 'offlineEnd':
-                this._hideOfflineOverlay(data.battles, data.totalMs, data.offlineEvents);
+                this._hideOfflineOverlay(data.battles, data.totalMs, data.summary);
                 break;
             case 'autoSwitched': {
                 const pokemonId = this.game.gameState.team[data.newIndex];
@@ -503,7 +457,7 @@ class GameUI {
                 if (pokemonData) {
                     this.addBattleLog(`🔄 自动切换出战：${pokemonData.name}`, 'normal');
                 }
-                this.renderTeam();
+                this.scheduleRenderTeam();
                 break;
             }
             case 'autoRouteSwitch': {
@@ -513,6 +467,40 @@ class GameUI {
                 this.showToast(`💎 自动切换到 ${data.routeName}`);
                 break;
             }
+        }
+    }
+
+    // 徽章解锁后的界面联动。silent=true 用于回放离线期间的事件（不弹 toast/日志）
+    _handleBadgeUnlocked(data, silent) {
+        if (!silent) {
+            this.addBattleLog(`🏅 恭喜！获得了 ${data.badgeName}！`, 'evolution');
+            this.showToast(`🏅 恭喜！获得了 ${data.badgeName}！`);
+        }
+        const later = (fn, ms) => { if (!silent) setTimeout(fn, ms); };
+        this.updateBadgeTabVisibility();
+        // 丰缘徽章解锁时同步解锁树果系统
+        if (data.regionId === 'hoenn') {
+            this.updateBerryTabVisibility();
+            this._initBerrySystem();
+            later(() => this.showToast('🌱 树果系统已解锁！可以种植树果增强宝可梦了'), 2000);
+        }
+        // 合众徽章解锁时同步解锁技能系统
+        if (data.regionId === 'unova') {
+            this.updateSkillTabVisibility();
+            later(() => this.showToast('⚡ 技能系统已解锁！1000级以上宝可梦可升级技能'), 2000);
+        }
+        // 阿罗拉徽章解锁时同步解锁天赋系统
+        if (data.regionId === 'alola') {
+            this.updateTalentTabVisibility();
+            later(() => this.showToast('🌟 天赋系统已解锁！消耗天赋点强化各项能力'), 2000);
+        }
+        // 帕底亚徽章解锁时显示自动切换地图设置 + 解锁挑战塔
+        if (data.regionId === 'paldea') {
+            this.updateAutoRouteSettingVisibility();
+            this._initAutoRouteSetting();
+            this.updateTowerTabVisibility();
+            later(() => this.showToast('💎 自动切换地图已解锁！可在设置中开启'), 2000);
+            later(() => this.showToast('🏝️ 挑战岛已解锁！挑战获取全局加成'), 4000);
         }
     }
 
@@ -638,29 +626,42 @@ class GameUI {
         this.addBattleLog(`${critText}受到 ${data.damage} 点伤害 ${effectText}`, 'attack');
     }
 
+    // 缓存 DOM 引用 / 避免重复写入相同的值（tick 每 50ms 触发一次）
+    _el(id) {
+        let el = this._elCache[id];
+        if (!el) { el = document.getElementById(id); this._elCache[id] = el; }
+        return el;
+    }
+    _setText(el, text) {
+        if (el._lastText !== text) { el.textContent = text; el._lastText = text; }
+    }
+    _setWidth(el, percent) {
+        const v = percent.toFixed(1) + '%';
+        if (el._lastWidth !== v) { el.style.width = v; el._lastWidth = v; }
+    }
+    _setHpBar(el, percent) {
+        this._setWidth(el, percent);
+        const cls = 'hp-bar' + (percent <= 20 ? ' low' : percent <= 50 ? ' medium' : '');
+        if (el._lastCls !== cls) { el.className = cls; el._lastCls = cls; }
+    }
+
     updateBattleHP(data) {
         // 敌方HP
         const enemyPercent = Math.max(0, data.enemyHp / data.enemyMaxHp * 100);
-        const enemyBar = document.getElementById('enemy-hp-bar');
-        enemyBar.style.width = enemyPercent + '%';
-        enemyBar.className = 'hp-bar' + (enemyPercent <= 20 ? ' low' : enemyPercent <= 50 ? ' medium' : '');
-        document.getElementById('enemy-hp-text').textContent = `${Math.max(0, data.enemyHp)}/${data.enemyMaxHp}`;
+        this._setHpBar(this._el('enemy-hp-bar'), enemyPercent);
+        this._setText(this._el('enemy-hp-text'), `${Math.max(0, data.enemyHp)}/${data.enemyMaxHp}`);
 
         // 玩家HP
         const playerPercent = Math.max(0, data.playerHp / data.playerMaxHp * 100);
-        const playerBar = document.getElementById('player-hp-bar');
-        playerBar.style.width = playerPercent + '%';
-        playerBar.className = 'hp-bar' + (playerPercent <= 20 ? ' low' : playerPercent <= 50 ? ' medium' : '');
-        document.getElementById('player-hp-text').textContent = `${Math.max(0, data.playerHp)}/${data.playerMaxHp}`;
+        this._setHpBar(this._el('player-hp-bar'), playerPercent);
+        this._setText(this._el('player-hp-text'), `${Math.max(0, data.playerHp)}/${data.playerMaxHp}`);
 
         // 攻击进度条
         if (data.playerAttackProgress !== undefined) {
-            const playerAtkPercent = Math.min(100, Math.max(0, data.playerAttackProgress * 100));
-            document.getElementById('player-atk-bar').style.width = playerAtkPercent + '%';
+            this._setWidth(this._el('player-atk-bar'), Math.min(100, Math.max(0, data.playerAttackProgress * 100)));
         }
         if (data.enemyAttackProgress !== undefined) {
-            const enemyAtkPercent = Math.min(100, Math.max(0, data.enemyAttackProgress * 100));
-            document.getElementById('enemy-atk-bar').style.width = enemyAtkPercent + '%';
+            this._setWidth(this._el('enemy-atk-bar'), Math.min(100, Math.max(0, data.enemyAttackProgress * 100)));
         }
     }
 
@@ -681,39 +682,55 @@ class GameUI {
             message += ` 💚 回复 ${data.healed} HP`;
         }
         this.addBattleLog(message, 'defeat');
-        this.renderTeam();
+        this.scheduleRenderTeam();
         // 更新金币显示
         this.updateGoldDisplay();
     }
 
-    // 战斗日志数组，最多保存100条
+    // 战斗日志：最多保留 100 条；只增量操作 DOM（用 textContent，日志内容不会被当作 HTML）
     battleLogs = [];
+    _elCache = {};
+    static LOG_CLASSES = {
+        catch: 'log-catch', levelup: 'log-levelup', attack: 'log-attack',
+        defeat: 'log-defeat', evolution: 'log-evolution',
+    };
 
     addBattleLog(msg, type = 'normal') {
         const now = new Date();
         const timeStr = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}:${now.getSeconds().toString().padStart(2, '0')}`;
-        
+
         this.battleLogs.unshift({ time: timeStr, message: msg, type });
-        
-        // 只保留最近100条
-        if (this.battleLogs.length > 100) {
-            this.battleLogs = this.battleLogs.slice(0, 100);
-        }
-        
-        this.renderBattleLogs();
+        if (this.battleLogs.length > 100) this.battleLogs.length = 100;
+
+        const container = this._el('battle-messages');
+        if (!container) return;
+        const entry = document.createElement('div');
+        entry.className = 'log-entry ' + (GameUI.LOG_CLASSES[type] || '');
+        const timeEl = document.createElement('span');
+        timeEl.className = 'log-time';
+        timeEl.textContent = `[${timeStr}]`;
+        entry.appendChild(timeEl);
+        entry.appendChild(document.createTextNode(' ' + msg));
+        container.insertBefore(entry, container.firstChild);
+        while (container.childElementCount > 100) container.removeChild(container.lastChild);
     }
 
+    // 全量重绘（仅在需要时使用，如从其它视图恢复）
     renderBattleLogs() {
-        const container = document.getElementById('battle-messages');
-        container.innerHTML = this.battleLogs.map(log => {
-            let colorClass = '';
-            if (log.type === 'catch') colorClass = 'log-catch';
-            else if (log.type === 'levelup') colorClass = 'log-levelup';
-            else if (log.type === 'attack') colorClass = 'log-attack';
-            else if (log.type === 'defeat') colorClass = 'log-defeat';
-            else if (log.type === 'evolution') colorClass = 'log-evolution';
-            return `<div class="log-entry ${colorClass}"><span class="log-time">[${log.time}]</span> ${log.message}</div>`;
-        }).join('');
+        const container = this._el('battle-messages');
+        if (!container) return;
+        container.textContent = '';
+        for (let i = this.battleLogs.length - 1; i >= 0; i--) {
+            const log = this.battleLogs[i];
+            const entry = document.createElement('div');
+            entry.className = 'log-entry ' + (GameUI.LOG_CLASSES[log.type] || '');
+            const timeEl = document.createElement('span');
+            timeEl.className = 'log-time';
+            timeEl.textContent = `[${log.time}]`;
+            entry.appendChild(timeEl);
+            entry.appendChild(document.createTextNode(' ' + log.message));
+            container.insertBefore(entry, container.firstChild);
+        }
     }
 
     // ===================== 队伍面板（含属性/个体值/经验值） =====================
@@ -725,8 +742,24 @@ class GameUI {
         return num.toString();
     }
 
+    // 战斗中高频触发的刷新（击败/捕获/自动换人）：战斗页不可见时只打脏标记，
+    // 可见时每 500ms 至多重绘一次。用户主动操作仍直接调用 renderTeam()。
+    scheduleRenderTeam() {
+        if (this.currentTab !== 'tab-battle') { this._teamDirty = true; return; }
+        const elapsed = Date.now() - (this._lastTeamRender || 0);
+        if (elapsed >= 500) { this.renderTeam(); return; }
+        if (!this._teamRenderTimer) {
+            this._teamRenderTimer = setTimeout(() => {
+                this._teamRenderTimer = null;
+                if (this.currentTab === 'tab-battle') this.renderTeam(); else this._teamDirty = true;
+            }, 500 - elapsed);
+        }
+    }
+
     renderTeam() {
         if (!this.game.gameState) return;
+        this._lastTeamRender = Date.now();
+        this._teamDirty = false;
 
         const teamList = document.getElementById('team-list');
         // 获取实际速率
@@ -2018,6 +2051,7 @@ class GameUI {
     _showOfflineOverlay(totalMs) {
         const overlay = this._offlineOverlay;
         if (!overlay) return;
+        this._setOfflineReportMode(false);
         // 显示离线时间
         const timeText = document.getElementById('offline-time-text');
         if (timeText) timeText.textContent = `离线时间：${this._formatOfflineTime(totalMs)}`;
@@ -2041,7 +2075,91 @@ class GameUI {
         if (battlesText) battlesText.textContent = `已完成 ${battles.toLocaleString()} 场战斗`;
     }
 
-    _hideOfflineOverlay(battles, totalMs) {
+    // 切换遮罩内容：进度条 ↔ 结算报告
+    _setOfflineReportMode(on) {
+        const overlay = this._offlineOverlay;
+        if (!overlay) return;
+        overlay.querySelectorAll('.offline-progress-bar-wrapper, .offline-overlay-info').forEach(el => {
+            el.style.display = on ? 'none' : '';
+        });
+        const report = document.getElementById('offline-report');
+        if (report) {
+            report.classList.toggle('hidden', !on);
+            if (!on) report.textContent = '';
+        }
+        const icon = overlay.querySelector('.offline-overlay-icon');
+        if (icon) icon.style.animation = on ? 'none' : '';
+        const title = overlay.querySelector('.offline-overlay-title');
+        if (title) title.textContent = on ? '离线结算完成' : '离线结算中...';
+    }
+
+    // 把一条离线事件转成文字（只含游戏内置名称，全部以文本节点渲染）
+    _describeOfflineEvent(ev) {
+        const d = ev.data || {};
+        switch (ev.event) {
+            case 'evolved': return `🌟 ${d.oldName} 进化成了 ${d.newName}`;
+            case 'shinyEvolved': return `✨ ${d.newName} 获得了闪光形态`;
+            case 'shinySpread': return `✨ ${d.sourceName} 的闪光传播给了 ${d.targetName}`;
+            case 'shinyDefeated': return `✨ 获得了 ${d.name} 的闪光形态`;
+            case 'badgeUnlocked': return `🏅 获得了 ${d.badgeName}`;
+            case 'regionUnlocked': return `🎉 ${d.regionName}已解锁`;
+            case 'autoRouteSwitch': return `💎 自动前往 ${d.regionName} · ${d.routeName}`;
+            default: return null;
+        }
+    }
+
+    // 把离线期间的事件落到界面：同步解锁状态、写入战斗日志
+    _applyOfflineEvents(summary) {
+        if (!summary) return;
+        for (const ev of summary.events) {
+            if (ev.event === 'badgeUnlocked') this._handleBadgeUnlocked(ev.data, true);
+            const text = this._describeOfflineEvent(ev);
+            if (text) this.addBattleLog(text, ev.event === 'badgeUnlocked' || ev.event === 'regionUnlocked' ? 'evolution' : 'shiny');
+        }
+    }
+
+    _renderOfflineReport(totalMs, summary) {
+        const report = document.getElementById('offline-report');
+        if (!report) return;
+        report.textContent = '';
+        const addLine = (text, cls) => {
+            const div = document.createElement('div');
+            div.className = 'offline-report-line' + (cls ? ' ' + cls : '');
+            div.textContent = text;
+            report.appendChild(div);
+        };
+        addLine(`⏱ 离线时间：${this._formatOfflineTime(totalMs)}`);
+        addLine(`⚔️ 完成战斗：${summary.battles.toLocaleString()} 场`);
+        if (summary.expGained > 0) addLine(`📊 获得经验：${summary.expGained.toLocaleString()}`);
+        if (summary.goldGained > 0) addLine(`🪙 获得金币：${summary.goldGained.toLocaleString()}`);
+        if (summary.newCatches.length > 0) {
+            const names = summary.newCatches.slice(0, 12).map(c => c.name).join('、');
+            const more = summary.newCatches.length > 12 ? ` 等 ${summary.newCatches.length} 只` : '';
+            addLine(`🆕 新捕获：${names}${more}`, 'highlight');
+        }
+        if (summary.ivUpgrades > 0) addLine(`💎 个体值提升：${summary.ivUpgrades} 次`);
+        if (summary.levelUps.length > 0) {
+            const top = summary.levelUps.slice(0, 5).map(l => `${l.name} Lv.${l.from}→${l.to}`).join('；');
+            addLine(`⬆️ 升级最多：${top}`);
+        }
+        const lines = summary.events.map(ev => this._describeOfflineEvent(ev)).filter(Boolean);
+        if (lines.length > 0) {
+            addLine('📜 重要事件：', 'highlight');
+            lines.slice(0, 15).forEach(t => addLine(t, 'event'));
+            const rest = lines.length - 15 + summary.eventsOverflow;
+            if (rest > 0) addLine(`……另有 ${rest} 条事件`, 'event');
+        }
+        const btn = document.createElement('button');
+        btn.className = 'setting-btn offline-report-close';
+        btn.textContent = '确定';
+        btn.addEventListener('click', () => {
+            this._offlineOverlay.classList.add('hidden');
+            this.renderTeam();
+        });
+        report.appendChild(btn);
+    }
+
+    _hideOfflineOverlay(battles, totalMs, summary) {
         const overlay = this._offlineOverlay;
         if (!overlay) return;
         // 先把进度填满
@@ -2052,12 +2170,27 @@ class GameUI {
         const battlesText = document.getElementById('offline-battles-text');
         if (battlesText) battlesText.textContent = `完成 ${battles.toLocaleString()} 场战斗`;
 
+        // 事件不再丢失：同步解锁状态并写入日志
+        this._applyOfflineEvents(summary);
+        if (battles > 0) {
+            this.addBattleLog(`⚡ 离线 ${this._formatOfflineTime(totalMs)} 完成了 ${battles.toLocaleString()} 场战斗！`, 'evolution');
+        }
+
+        // 时间较长或有重要事件时，保留一份可阅读的结算报告
+        const showReport = !!summary && battles > 0 &&
+            (summary.events.length > 0 || summary.newCatches.length > 0 || totalMs >= 5 * 60 * 1000);
+        if (showReport) {
+            this._setOfflineReportMode(true);
+            this._renderOfflineReport(totalMs, summary);
+            overlay.classList.remove('hidden');
+            this.renderTeam();
+            return;
+        }
+
         // 延迟一下再隐藏，让用户看到100%
         setTimeout(() => {
             overlay.classList.add('hidden');
-            // 显示结算通知
             if (battles > 0) {
-                this.addBattleLog(`⚡ 离线 ${this._formatOfflineTime(totalMs)} 完成了 ${battles.toLocaleString()} 场战斗！`, 'evolution');
                 this.showToast(`⚡ 离线结算: 完成了 ${battles.toLocaleString()} 场战斗！`);
             }
             this.renderTeam();
@@ -2072,15 +2205,109 @@ class GameUI {
         if (importedLastSave) {
             const elapsed = Date.now() - importedLastSave;
             if (elapsed > 2000) {
-                const offlineBonusValue = this.game.getBadgeEffectValue('offline_time_bonus');
-                const maxOffline = offlineBonusValue !== null ? offlineBonusValue : (24 * 3600 * 1000);
-                const cappedElapsed = Math.min(elapsed, maxOffline);
-                console.log(`[离线-导入] 距上次保存 ${Math.floor(cappedElapsed / 60000)} 分钟，开始结算...`);
-                requestAnimationFrame(() => { this.game._processOfflineBattles(cappedElapsed); });
+                const cappedElapsed = Math.min(elapsed, this.game.getMaxOfflineTime());
+                setTimeout(() => { this.game._processOfflineBattles(cappedElapsed); }, 0);
                 return; // _processOfflineBattles 完成后会自动 startBattle
             }
         }
         this.game.startBattle();
+    }
+
+    // 导入结果统一处理：失败给出具体原因；成功时提示被自动修正的内容
+    _handleImportResult(result, okMessage, failMessage) {
+        if (!result || !result.success) {
+            this.showToast(`${failMessage}：${(result && result.message) || '未知错误'}`);
+            return;
+        }
+        const warn = result.warnings && result.warnings.length ? `（已自动修正 ${result.warnings.length} 处）` : '';
+        this.showToast(okMessage + warn);
+        (result.warnings || []).slice(0, 5).forEach(w => this.addBattleLog(`⚠️ 导入存档：${w}`, 'normal'));
+        this.refreshAll();
+        // 导入存档后检查是否需要离线结算
+        this._checkOfflineAfterImport();
+    }
+
+    // ===================== 存档状态提示（横幅） =====================
+    // actions: [{ label, onClick }]
+    _showBanner(kind, text, actions = [], dismissible = true) {
+        const banner = document.getElementById('save-banner');
+        if (!banner) return;
+        banner.className = `save-banner ${kind}`;
+        banner.textContent = '';
+        const span = document.createElement('span');
+        span.className = 'save-banner-text';
+        span.textContent = text;
+        banner.appendChild(span);
+        for (const a of actions) {
+            const b = document.createElement('button');
+            b.textContent = a.label;
+            b.addEventListener('click', a.onClick);
+            banner.appendChild(b);
+        }
+        if (dismissible) {
+            const x = document.createElement('button');
+            x.textContent = '✕';
+            x.title = '关闭';
+            x.addEventListener('click', () => this.hideSaveBanner(true));
+            banner.appendChild(x);
+        }
+        this._bannerKind = kind;
+    }
+
+    hideSaveBanner(force = false) {
+        const banner = document.getElementById('save-banner');
+        if (!banner) return;
+        // 自动恢复只清除“保存失败”横幅，不吞掉其他提示
+        if (!force && this._bannerKind !== 'error') return;
+        banner.className = 'save-banner hidden';
+        banner.textContent = '';
+        this._bannerKind = null;
+        if (!force) this.showToast('✅ 存档已恢复正常');
+    }
+
+    showSaveError(err) {
+        this._showBanner('error', `⚠️ ${err.message}`, [
+            { label: '导出存档文件', onClick: () => document.getElementById('btn-export-file').click() },
+            { label: '重试保存', onClick: () => {
+                const r = this.game.saveNow();
+                if (r && r.ok) this.showToast('💾 保存成功');
+            } },
+        ], false);
+        // 避免连续失败时刷屏
+        const now = Date.now();
+        if (!this._lastSaveErrorToast || now - this._lastSaveErrorToast > 60000) {
+            this._lastSaveErrorToast = now;
+            this.showToast('❌ 存档保存失败！请查看页面顶部提示');
+        }
+    }
+
+    showSaveConflict() {
+        this._showBanner('warn',
+            '⚠️ 检测到另一个标签页也在使用本游戏。为避免互相覆盖，本页已暂停自动保存。请关闭其他标签页后刷新，或点击“接管”让本页继续保存。',
+            [{ label: '接管', onClick: () => {
+                const r = this.game.takeOverSave();
+                if (r && r.ok) { this.hideSaveBanner(true); this.showToast('💾 已接管存档'); }
+            } }], false);
+    }
+
+    // 启动时汇报读档情况（从备份恢复 / 存档损坏 / 版本升级 / 自动修正）
+    showLoadReport(report) {
+        if (!report) return;
+        if (!report.ok && !report.empty) {
+            this._showBanner('error',
+                `⚠️ 存档读取失败（${report.error || '未知原因'}），已开始新游戏。损坏的存档副本已保留在浏览器存储中，请先不要清除网站数据，并联系开发者协助恢复。`);
+            return;
+        }
+        if (report.ok && report.recovered) {
+            this._showBanner('warn',
+                `⚠️ 主存档已损坏，已自动从备份（${report.source}）恢复，可能丢失最近一段时间的进度。`);
+        } else if (report.ok && report.fromVersion && report.fromVersion < SAVE_SCHEMA_VERSION) {
+            this.showToast(`🔧 存档已升级到新版本（v${report.fromVersion} → v${SAVE_SCHEMA_VERSION}）`);
+        }
+        if (report.ok && report.warnings && report.warnings.length) {
+            this.showToast(`⚠️ 读档时自动修正了 ${report.warnings.length} 处异常数据`);
+            console.warn('[存档] 读档修正：', report.warnings);
+        }
     }
 
     showToast(message) {
@@ -2111,7 +2338,7 @@ class GameUI {
         this.addBattleLog(message, 'catch');
 
         // 刷新队伍
-        this.renderTeam();
+        this.scheduleRenderTeam();
     }
 
     showLevelUpNotification(pokemon) {
@@ -2589,12 +2816,12 @@ class GameUI {
                 const gem = badge.gem;
                 const gemAttrSum = gem ? gem.attrs.reduce((sum, a) => sum + a.value, 0) : 0;
                 const gemHtml = gem ? `
-                    <div class="badge-gem-slot filled" style="border-color:${gem.qualityColor}">
-                        <div class="gem-quality" style="color:${gem.qualityColor}">💎 ${gem.qualityName}</div>
-                        <div class="gem-attrs-mini">${gem.attrs.map(a => `<span>${a.icon} ${a.name}+${a.value}${a.unit}</span>`).join('')}</div>
+                    <div class="badge-gem-slot filled" style="border-color:${safeCssColor(gem.qualityColor)}">
+                        <div class="gem-quality" style="color:${safeCssColor(gem.qualityColor)}">💎 ${escapeHtml(gem.qualityName)}</div>
+                        <div class="gem-attrs-mini">${gem.attrs.map(a => `<span>${escapeHtml(a.icon)} ${escapeHtml(a.name)}+${escapeHtml(a.value)}${escapeHtml(a.unit)}</span>`).join('')}</div>
                         <div class="gem-slot-bottom">
                             <button class="gem-unequip-btn" data-region="${regionId}">卸下</button>
-                            <span class="gem-attr-sum" style="color:${gem.qualityColor}">属性总和：${gemAttrSum}%</span>
+                            <span class="gem-attr-sum" style="color:${safeCssColor(gem.qualityColor)}">属性总和：${gemAttrSum}%</span>
                         </div>
                     </div>
                 ` : `
@@ -2851,11 +3078,11 @@ class GameUI {
         overlay.className = 'modal-overlay';
 
         const listHtml = candidates.map((g, idx) => {
-            const attrsText = g.attrs.map(a => `${a.icon}${a.name}+${a.value}${a.unit}`).join('、');
+            const attrsText = g.attrs.map(a => `${escapeHtml(a.icon)}${escapeHtml(a.name)}+${escapeHtml(a.value)}${escapeHtml(a.unit)}`).join('、');
             return `
                 <label class="synthesis-item">
-                    <input type="checkbox" class="synthesis-check" value="${g.uid}" ${idx < 10 ? 'checked' : ''}>
-                    <span class="synthesis-item-name">💎 ${g.qualityName}宝石</span>
+                    <input type="checkbox" class="synthesis-check" value="${escapeHtml(g.uid)}" ${idx < 10 ? 'checked' : ''}>
+                    <span class="synthesis-item-name">💎 ${escapeHtml(g.qualityName)}宝石</span>
                     <span class="synthesis-item-attrs">${attrsText}</span>
                 </label>
             `;
@@ -3013,11 +3240,11 @@ class GameUI {
         overlay.className = 'modal-overlay';
 
         const listHtml = eternalGems.map((g, idx) => {
-            const attrsText = g.attrs.map(a => `${a.icon}${a.name}+${a.value}${a.unit}`).join('、');
+            const attrsText = g.attrs.map(a => `${escapeHtml(a.icon)}${escapeHtml(a.name)}+${escapeHtml(a.value)}${escapeHtml(a.unit)}`).join('、');
             return `
                 <label class="synthesis-item">
-                    <input type="checkbox" class="reforge-check" value="${g.uid}" ${idx < 2 ? 'checked' : ''}>
-                    <span class="synthesis-item-name">💎 ${g.qualityName}宝石</span>
+                    <input type="checkbox" class="reforge-check" value="${escapeHtml(g.uid)}" ${idx < 2 ? 'checked' : ''}>
+                    <span class="synthesis-item-name">💎 ${escapeHtml(g.qualityName)}宝石</span>
                     <span class="synthesis-item-attrs">${attrsText}</span>
                 </label>
             `;
@@ -3112,10 +3339,10 @@ class GameUI {
         for (const gem of sorted) {
             const card = document.createElement('div');
             card.className = `gem-card gem-${gem.quality}`;
-            card.style.borderColor = gem.qualityColor;
+            card.style.borderColor = safeCssColor(gem.qualityColor);
 
             const attrsHtml = gem.attrs.map(a =>
-                `<div class="gem-attr-line">${a.icon} ${a.name} <span class="gem-attr-value">+${a.value}${a.unit}</span></div>`
+                `<div class="gem-attr-line">${escapeHtml(a.icon)} ${escapeHtml(a.name)} <span class="gem-attr-value">+${escapeHtml(a.value)}${escapeHtml(a.unit)}</span></div>`
             ).join('');
 
             // 获取可镶嵌的徽章列表（仅显示空槽徽章）
@@ -3128,7 +3355,7 @@ class GameUI {
             }
 
             const equipBtnsHtml = badgeOptions.map(b =>
-                `<button class="gem-equip-btn" data-gem-uid="${gem.uid}" data-region="${b.regionId}">镶嵌到${b.name}</button>`
+                `<button class="gem-equip-btn" data-gem-uid="${escapeHtml(gem.uid)}" data-region="${b.regionId}">镶嵌到${b.name}</button>`
             ).join('');
 
             const newBadgeHtml = gem.isNew ? '<span class="gem-new-badge" title="新购买">NEW</span>' : '';
@@ -3136,14 +3363,14 @@ class GameUI {
             const gemAttrTotal = gem.attrs.reduce((sum, a) => sum + a.value, 0);
             card.innerHTML = `
                 ${newBadgeHtml}
-                <div class="gem-name">${gem.locked ? '🔒 ' : ''}💎 ${gem.qualityName}宝石</div>
+                <div class="gem-name">${gem.locked ? '🔒 ' : ''}💎 ${escapeHtml(gem.qualityName)}宝石</div>
                 <div class="gem-hover-panel">
                     <div class="gem-attrs">${attrsHtml}</div>
-                    <div class="gem-attr-sum-row" style="color:${gem.qualityColor}">属性总和：${gemAttrTotal}%</div>
+                    <div class="gem-attr-sum-row" style="color:${safeCssColor(gem.qualityColor)}">属性总和：${gemAttrTotal}%</div>
                     <div class="gem-equip-actions">${equipBtnsHtml}</div>
                     <div class="gem-action-row">
-                        <button class="gem-lock-btn${gem.locked ? ' locked' : ''}" data-gem-uid="${gem.uid}">${gem.locked ? '🔓 解锁' : '🔒 锁定'}</button>
-                        <button class="gem-discard-btn" data-gem-uid="${gem.uid}">🗑️ 丢弃</button>
+                        <button class="gem-lock-btn${gem.locked ? ' locked' : ''}" data-gem-uid="${escapeHtml(gem.uid)}">${gem.locked ? '🔓 解锁' : '🔒 锁定'}</button>
+                        <button class="gem-discard-btn" data-gem-uid="${escapeHtml(gem.uid)}">🗑️ 丢弃</button>
                     </div>
                 </div>
             `;

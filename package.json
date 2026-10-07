@@ -1,0 +1,16 @@
+{
+  "name": "pokemon-idle-plus",
+  "version": "2.71.0",
+  "private": true,
+  "description": "宝可梦挂机放置游戏（浏览器端，无运行时依赖）",
+  "license": "AGPL-3.0",
+  "scripts": {
+    "test": "node --test tests/*.test.js",
+    "validate": "node tools/validate-data.js",
+    "smoke": "node tests/smoke/smoke.js",
+    "check": "npm run validate && npm test && npm run smoke"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

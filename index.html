@@ -16,9 +16,11 @@
 </head>
 <body>
     <div id="app">
+        <!-- 存档状态提示（保存失败 / 多标签页冲突 / 读档恢复） -->
+        <div id="save-banner" class="save-banner hidden" role="alert"></div>
         <!-- 顶部状态栏 -->
         <header id="header">
-            <h1>宝可梦收集放置 <span class="version-tag">v2.70</span></h1>
+            <h1>宝可梦收集放置 <span class="version-tag">v2.71</span></h1>
             <span class="author-tag">by: jinwind</span>
         </header>
 
@@ -471,9 +473,11 @@
 
 
     <script src="js/lzstring.min.js"></script>
+    <script src="js/util.js"></script>
     <script src="js/pokemon-data.js"></script>
     <script src="js/route-data.js"></script>
     <script src="js/game-config.js"></script>
+    <script src="js/save-manager.js"></script>
     <script src="js/game-core.js"></script>
     <script src="js/ui.js"></script>
     <script src="js/main.js"></script>

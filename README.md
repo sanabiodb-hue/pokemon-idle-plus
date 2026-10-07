@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-v1.83-blue" alt="version">
+  <img src="https://img.shields.io/badge/version-v2.71-blue" alt="version">
   <img src="https://img.shields.io/badge/license-AGPL--3.0-green" alt="license">
   <img src="https://img.shields.io/badge/platform-Web-orange" alt="platform">
   <img src="https://img.shields.io/badge/made_with-HTML%2FCSS%2FJS-yellow" alt="tech">
@@ -20,7 +20,7 @@
 ## ✨ 游戏特色
 
 - 🏆 **纯放置挂机** — 自动战斗、自动升级，离线也能持续成长
-- 🗺️ **9 大地区探索** — 关都、城都、丰缘、神奥、合众、卡洛斯、阿罗拉、伽勒尔、帕底亚，共计 180+ 条道路
+- 🗺️ **10 大地区探索** — 关都、城都、丰缘、神奥、合众、卡洛斯、阿罗拉、伽勒尔、帕底亚、Mega 进化，共计 190+ 条道路
 - 📖 **完整图鉴收集** — 收集来自九个世代的宝可梦，追求 ✨闪光 和满 6V 个体
 - ⚔️ **属性克制战斗** — 还原宝可梦的 18 种属性克制关系，自动选择最优出战
 - 🏅 **徽章系统** — 完成各地区图鉴解锁徽章，获得强力加成效果
@@ -57,21 +57,29 @@ https://jinwind1.github.io/pokemon-idle/
 ## 📁 项目结构
 
 ```
-pokemon-idle/
-├── index.html          # 游戏主页面
-├── css/
-│   └── style.css       # 全局样式与主题
+pokemon-idle-plus/
+├── index.html              # 游戏主页面
+├── css/style.css           # 全局样式与主题
 ├── js/
-│   ├── main.js         # 游戏入口，初始化与存档加载
-│   ├── game-core.js    # 游戏核心逻辑（战斗、升级、捕获等）
-│   ├── game-config.js  # 游戏配置数据（徽章、宝石、树果等）
-│   ├── pokemon-data.js # 宝可梦数据（属性、种族值等）
-│   ├── route-data.js   # 地区与道路数据（9大地区、180+道路）
-│   └── ui.js           # UI 渲染与交互逻辑
-├── sprites/
-│   └── pokemon/        # 宝可梦精灵图（含普通与闪光版本）
-├── LICENSE             # AGPL-3.0 开源协议
-└── README.md           # 项目说明
+│   ├── lzstring.min.js     # 存档压缩库
+│   ├── util.js             # escapeHtml / safeCssColor 等通用工具
+│   ├── pokemon-data.js     # 宝可梦数据（1073 只）、经验曲线、属性克制表
+│   ├── route-data.js       # 地区与道路数据（10 地区 / 192 条道路）
+│   ├── game-config.js      # 配置与常量：徽章/宝石/树果/技能/天赋/挑战塔/存档/战斗公共常量
+│   ├── save-manager.js     # 存档：编解码、schemaVersion、迁移、校验清洗、备份轮转、防抖写入
+│   ├── game-core.js        # 游戏核心逻辑（战斗、升级、捕获、离线结算等）
+│   ├── ui.js               # UI 渲染与交互
+│   └── main.js             # 入口：加载存档、离线结算、启动
+├── tools/
+│   ├── load-context.js     # 把浏览器全局脚本加载进 Node vm（测试/校验共用）
+│   ├── data-validator.js   # 宝可梦/路线/配置数据校验器
+│   ├── validate-data.js    # 命令行入口：npm run validate
+│   └── make-legacy-fixture.js  # 用旧版代码生成兼容性夹具（仅需重生成时运行）
+├── tests/                  # 自动化测试（node:test，零依赖）+ 浏览器冒烟测试
+├── sprites/pokemon/        # 宝可梦精灵图（含 shiny/）
+├── package.json            # 只有脚本，没有运行时依赖
+├── LICENSE                 # AGPL-3.0 开源协议
+└── README.md
 ```
 
 ## 🎯 玩法简介
@@ -88,7 +96,7 @@ pokemon-idle/
 ## ⚙️ 技术栈
 
 - **前端三件套**：HTML5 + CSS3 + 原生 JavaScript（ES6+）
-- **无框架依赖**：零依赖，无需 npm / webpack / 构建工具
+- **无框架依赖**：游戏本身零依赖，无需 npm / webpack / 构建工具（`npm` 仅用于运行测试脚本）
 - **数据持久化**：LocalStorage 本地存储
 - **响应式设计**：适配移动端与桌面端
 
@@ -106,10 +114,101 @@ pokemon-idle/
 - [x] 挑战岛
 - [x] 6 种主题配色切换
 - [x] 存档管理（自动保存 / 手动保存 / 导入导出）
-- [x] 离线收益计算
+- [x] 离线收益计算（含离线结算报告）
+- [x] 存档版本迁移、自动备份与损坏恢复
 - [x] 新手引导教程
 - [x] 自动切换最优出战宝可梦
 - [x] 自动切换地图
+
+## 🛠️ 开发者说明：第 1 阶段「地基稳定」（v2.71）
+
+> 本节面向开发者，使用葡萄牙语撰写（与项目协作者的工作语言一致）；游戏内文案保持中文。
+
+### Como rodar as verificações
+
+Requer apenas Node.js ≥ 20 (nenhuma dependência para instalar).
+
+```bash
+npm run validate   # valida Pokémon, rotas, regiões e configs (exit 1 se houver erro)
+npm test           # 109 testes automatizados (node:test)
+npm run smoke      # teste de "build": abre o jogo num Chromium headless (precisa do pacote playwright;
+                   #   se não estiver instalado, o teste é ignorado)
+npm run check      # os três acima em sequência
+```
+
+### O que mudou nesta fase
+
+**Offline / progresso**
+- O evento `offlineEnd` agora carrega um `summary` (batalhas, EXP, ouro, novas capturas, evoluções, shinies,
+  insígnias, regiões desbloqueadas, maiores subidas de nível). Antes os eventos eram coletados e descartados.
+  A UI mostra um **relatório de offline** (para ausências ≥ 5 min ou quando há eventos importantes) e replica os
+  eventos no log de batalha e no desbloqueio de abas.
+- **Modo Torre × offline**: com a Torre ativa, a simulação offline da rota principal não roda mais (ela corrompia o
+  progresso da Torre); a batalha da Torre continua no timer do Worker.
+- **Lógica única online/offline**: dano (`_computeDamage`), críticos (`_getCritParams`), chance de shiny
+  (`getShinyRate`), geração de inimigos (`generateWildPokemon`), escolha do melhor membro
+  (`getBestTeamMemberForEnemy`), recompensas (`_processVictoryRewards`) e atraso entre batalhas
+  (`_getNextBattleDelay`) são as mesmas funções nos dois caminhos. As cópias duplicadas foram removidas.
+- Corrigidos: callbacks de UI perdidos para sempre em saídas antecipadas da simulação offline; HP pós-offline
+  ignorado ao retomar a batalha; loop infinito quando a rota não tem Pokémon; cura pós-derrota agora usa o timer
+  do Worker (não é limitada em aba em segundo plano); `upgradeAllSkills` nunca atualizava os stats da equipe
+  (comparava `"25"` com `25`); `main.js` não usa mais `requestAnimationFrame` (não dispara em aba oculta).
+
+**Save**
+- `schemaVersion` (atual: **2**; saves antigos sem o campo são tratados como v1) + cadeia de migrações em
+  `SAVE_MIGRATIONS` (`js/save-manager.js`). Ao ler um save v1 é guardada uma cópia `pokemon_idle_save_premigration_v1`.
+- Todo save (local, backup ou importado) passa pelo mesmo pipeline: decodificação → checagem estrutural → migração →
+  **sanitização por lista branca** (reconstrói o objeto inteiro: só campos conhecidos, tipos e limites forçados).
+- **Backup rotativo**: `pokemon_idle_save_bak1..3` (no máx. 1 a cada 10 min, e sempre antes de importar). Se o save
+  principal estiver corrompido o jogo recupera do backup mais recente e guarda o texto corrompido em
+  `pokemon_idle_save_corrupt`. Saves de uma versão mais nova do que o jogo são recusados (nunca rebaixados).
+- **Debounce**: `save()` agora só *pede* a gravação (2 s após a última requisição, no máximo 10 s); `saveNow()`
+  grava imediatamente (botão salvar, exportar, importar, `pagehide`/aba oculta, `beforeunload`). Antes havia uma
+  gravação completa (JSON + compressão) a cada vitória.
+- **Erros visíveis**: falha de gravação (cota cheia, armazenamento bloqueado) mostra um banner vermelho com
+  “Exportar arquivo” / “Tentar de novo”; em cota cheia o jogo libera backups antes de desistir. Banner amarelo ao
+  recuperar de backup. Se outra aba gravar o save, esta aba pausa a gravação (evita sobrescrita) e oferece “Assumir”.
+- Formato compatível: continua `LZ:` + LZString no `localStorage`; o texto de exportação continua Base64 e saves
+  exportados por versões antigas importam normalmente (há testes com saves reais gerados pelo código antigo).
+
+**Import/Export e segurança**
+- `importSave` retorna `{ success, message, warnings }`, valida tudo **antes** de tocar no estado atual, faz backup
+  do save atual e reinicia batalha/caches. Aceita Base64, `LZ:` bruto e JSON puro; limite de tamanho.
+- Nenhum texto do save chega ao HTML: nome/cor/ícone/unidade das gemas, nomes de inimigos etc. são reconstruídos a
+  partir das tabelas do jogo; `uid`s são restritos a `[A-Za-z0-9_-]`; chaves `__proto__`/`constructor` são ignoradas.
+  Além disso a UI escapa os campos das gemas (`escapeHtml`/`safeCssColor`) e o log de batalha usa `textContent`.
+- `lastSave` no futuro é corrigido (impede ganhar offline mexendo no relógio do sistema).
+
+**Performance**
+- `calculateBattleStats` não reconstrói mais todo o Pokédex a cada chamada: stats por espécie e o bônus de 1% do
+  Pokédex são cacheados e invalidados por `_touchSpecies(id)` (chamado em todo ponto que altera nível/IV/shiny/frutas).
+  Um teste de fuzz compara o resultado com o algoritmo antigo.
+- `battleTick` usa dados da batalha pré-calculados (`battle.derived`: nível, tipos, golpe, crítico, esquiva) e
+  `getGemBonuses` é cacheado; não há mais `createPokemon` por ataque.
+- UI: log de batalha incremental (antes reescrevia 100 linhas por mensagem), cache de elementos DOM e escrita só
+  quando o valor muda no `tick`, painel de equipe atualizado no máximo a cada 500 ms e só com a aba de batalha visível.
+
+**Dados**
+- `REGION_POKEDEX_RANGES` (em `game-config.js`) é a única fonte dos intervalos por região (antes havia cópias
+  espalhadas). `npm run validate` checa: IDs sem buracos, tipos/stats/grupos de EXP, evoluções (alvo existe, sem
+  ciclos), sprites normal+shiny, rotas/regiões/pesos/níveis, condições de desbloqueio, **alcançabilidade** (simula a
+  progressão real até a última região) e tabelas de golpes/gemas/frutas/talentos.
+
+### Como adicionar uma migração de save
+1. Aumente `SAVE_SCHEMA_VERSION` em `js/game-config.js`.
+2. Em `js/save-manager.js` adicione `SAVE_MIGRATIONS[versaoAntiga] = (data) => { …; return data; }`.
+3. Declare os campos novos em `sanitizeSave` (a sanitização descarta o que não conhece).
+4. Adicione um teste em `tests/save.test.js`.
+
+### Problemas conhecidos / ainda não tratados
+- A UI continua sendo `innerHTML` em muitos lugares (os dados vindos do save já são sanitizados, mas a camada de
+  renderização ainda não foi componentizada); `ui.js` e `game-core.js` seguem grandes (~3,5 mil e ~4,3 mil linhas).
+- Dados com 9 avisos históricos (não bloqueiam): 7 Pokémon com faixa de nível fora da faixa da rota, um salto de
+  nível em `paldea_route12` (13001–14000) e `#706` repetido em `kalos_victory_road`. Há baseline nos testes para que
+  esses avisos só possam diminuir.
+- Os testes do jogo são de lógica (Node) + um smoke test de navegador; ainda não há testes visuais da UI.
+- A proteção multi-aba é por evento `storage` (aviso + pausa), não um lock exclusivo.
+- Mudar o relógio do sistema para trás/frente ainda afeta frutas e offline dentro do limite de 24/48 h.
 
 ## 📄 许可证
 

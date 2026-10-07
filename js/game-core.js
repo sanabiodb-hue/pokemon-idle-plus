@@ -16,9 +16,102 @@ class GameCore {
         this._nextBattleScheduledAt = null; // 下一场战斗计划开始的时间戳
         // 实际经验/金币速率跟踪器
         this.rateTracker = { startTime: null, totalExp: 0, totalGold: 0 };
+        // 随机数来源（测试时可替换为确定性序列）
+        this.rng = Math.random;
+        this.debug = false;
+        // 性能缓存（见 _touchSpecies / _invalidateAllCaches）
+        this._speciesStats = new Map();   // 宝可梦ID → calculateStats 结果
+        this._dexBonus = null;            // 图鉴1%加成缓存 { key, value }
+        this._gemBonusCache = null;
+        // 存档相关回调（UI 注册）
+        this.onSaveError = null;
+        this.onSaveRecover = null;
+        this.onSaveConflict = null;
+        this.loadReport = null;           // 最近一次 load() 的诊断信息
+        this.lastOfflineSummary = null;
+        this._isOfflineSimulating = false;
+        this._offlineSimState = null;
+        this._offlineSummary = null;
+        this._towerMode = false;
+        this.saver = new SaveManager({
+            getState: () => this._prepareStateForSave(),
+            onError: (e) => { if (this.onSaveError) this.onSaveError(e); },
+            onRecover: () => { if (this.onSaveRecover) this.onSaveRecover(); },
+            onConflict: () => { if (this.onSaveConflict) this.onSaveConflict(); },
+            win: typeof window !== 'undefined' ? window : null,
+        });
         this._initWorkerTimer();
         this._initVisibilityHandler();
         this._buildEvolutionCache();
+    }
+
+    _log(...args) {
+        if (this.debug) console.log(...args);
+    }
+
+    // ===================== 缓存失效 =====================
+    // 任何会改变某只宝可梦等级/个体值/闪光/树果的写操作都必须调用它。
+    _touchSpecies(id) {
+        this._speciesStats.delete(id);
+        this._dexBonus = null;
+    }
+
+    _invalidateAllCaches() {
+        this._speciesStats.clear();
+        this._dexBonus = null;
+        this._gemBonusCache = null;
+    }
+
+    // ===================== 在线/离线共用的进度公式 =====================
+    // 闪光概率（徽章/天赋/挑战塔加成）
+    getShinyRate() {
+        let rate = BASE_SHINY_RATE;
+        const badge = this.getBadgeEffectValue('shiny_bonus');
+        if (badge !== null) rate *= (1 + badge);
+        const talent = this.getTalentValue('shiny_bonus');
+        if (talent > 0) rate *= (1 + talent / 100);
+        const tower = this.getTowerBonus();
+        if (tower > 0) rate *= (1 + tower / 100);
+        return rate;
+    }
+
+    // 会心率/倍率。玩家享受宝石与天赋加成，野怪只有基础值
+    _getCritParams(isPlayer) {
+        let rate = BASE_CRIT_RATE;
+        let multiplier = BASE_CRIT_MULTIPLIER;
+        if (isPlayer) {
+            rate += this.getGemBonuses().crit_rate / 100;
+            const talent = this.getTalentValue('crit_damage_bonus');
+            if (talent > 0) multiplier += talent / 100;
+        }
+        return { rate, multiplier };
+    }
+
+    // 胜利结算所需的全部加成（在线每场计算一次，离线整批缓存复用）
+    getProgressBonuses() {
+        const badgePokedex = this.getBadgeEffectValue('pokedex_exp_bonus') || 0;
+        const talentPokedex = this.getTalentValue('pokedex_exp_bonus');
+        return {
+            badgeExp: this.getBadgeEffectValue('exp_bonus'),
+            talentExp: this.getTalentValue('exp_bonus'),
+            towerBonus: this.getTowerBonus(),
+            teamExpRate: TEAM_EXP_RATE,
+            reserveExpRate: RESERVE_EXP_RATE * (1 + talentPokedex / 100 + badgePokedex),
+            healPercent: VICTORY_HEAL_PERCENT,
+        };
+    }
+
+    _applyExpBonuses(exp, b) {
+        let e = exp;
+        if (b.badgeExp !== null) e = Math.floor(e * (1 + b.badgeExp));
+        if (b.talentExp > 0) e = Math.floor(e * (1 + b.talentExp / 100));
+        if (b.towerBonus > 0) e = Math.floor(e * (1 + b.towerBonus / 100));
+        return e;
+    }
+
+    // 两场战斗之间的间隔：攻击间隔 < 800ms 时等于攻击间隔
+    _getNextBattleDelay(attackInterval) {
+        return attackInterval < NEXT_BATTLE_MAX_DELAY_MS ? attackInterval : NEXT_BATTLE_MAX_DELAY_MS;
     }
 
     // 重置速率跟踪器（切换地图时调用）
@@ -80,7 +173,7 @@ class GameCore {
                 if (cb) cb();
             };
             this._useWorkerTimer = true;
-            console.log('✅ Worker定时器已启用，后台战斗不受影响');
+            this._log('✅ Worker定时器已启用，后台战斗不受影响');
         } catch (e) {
             this._useWorkerTimer = false;
             console.warn('⚠️ Worker定时器创建失败，回退到普通定时器:', e);
@@ -113,33 +206,48 @@ class GameCore {
 
     // ===================== 页面可见性处理 =====================
     _initVisibilityHandler() {
-        document.addEventListener('visibilitychange', () => {
-            if (document.visibilityState === 'visible') {
-                this._onPageVisible();
-            } else {
-                this._onPageHidden();
-            }
-        });
+        if (typeof document !== 'undefined') {
+            document.addEventListener('visibilitychange', () => {
+                if (document.visibilityState === 'visible') {
+                    this._onPageVisible();
+                } else {
+                    this._onPageHidden();
+                }
+            });
+        }
+        if (typeof window !== 'undefined') {
+            // 关闭/切走页面前把防抖中的存档立即写入
+            window.addEventListener('pagehide', () => this.saveNow());
+        }
     }
 
     _onPageHidden() {
-        // 记录进入后台的时间
+        // 记录进入后台的时间，并立即落盘（防抖中的请求不能丢）
         this._hiddenAt = Date.now();
+        this.saveNow();
+    }
+
+    // 离线时间上限：拥有离线时间徽章时 48 小时，否则 24 小时
+    getMaxOfflineTime() {
+        const bonus = this.getBadgeEffectValue('offline_time_bonus');
+        return bonus !== null ? bonus : MAX_OFFLINE_TIME;
     }
 
     _onPageVisible() {
         if (!this._hiddenAt) return;
         const now = Date.now();
-        let elapsed = now - this._hiddenAt;
+        const elapsed = now - this._hiddenAt;
         this._hiddenAt = null;
+
+        // 挑战塔战斗由 Worker 定时器持续推进，不需要（也不能）做主线离线结算，
+        // 否则会用主线敌人污染挑战塔进度。
+        if (this._towerMode) return;
+        // 已经在做离线结算时不重入
+        if (this._isOfflineSimulating) return;
 
         // 如果后台时间超过2秒，进行离线战斗结算
         if (elapsed > 2000) {
-            // 离线时间上限：拥有离线时间徽章时48小时，否则24小时
-            const offlineBonusValue = this.getBadgeEffectValue('offline_time_bonus');
-            const maxOffline = offlineBonusValue !== null ? offlineBonusValue : MAX_OFFLINE_TIME;
-            elapsed = Math.min(elapsed, maxOffline);
-            this._processOfflineBattles(elapsed);
+            this._processOfflineBattles(Math.min(elapsed, this.getMaxOfflineTime()));
             return; // 异步模拟，不在这里重启战斗
         }
 
@@ -154,55 +262,112 @@ class GameCore {
         }
     }
 
-    // 离线战斗结算：模拟后台期间的战斗（异步）
-    _processOfflineBattles(elapsedMs) {
-        if (!this.currentBattle || !this.gameState) return;
-
-        // 停止当前战斗循环，防止模拟期间干扰
-        this.stopBattle();
-
-        // 离线模拟期间静默 UI 回调，避免大量 DOM 操作导致卡顿
+    // ----- 离线静默模式：模拟期间不触发 UI 回调，只收集结算摘要 -----
+    _beginOfflineSilence(totalMs) {
+        const stats = this.gameState.stats;
         this._isOfflineSimulating = true;
-        this._offlineEvents = []; // 收集离线期间的重要事件
+        this._offlineSummary = {
+            totalMs,
+            battles: 0,
+            startExp: stats.totalExp,
+            startGold: stats.totalGold,
+            events: [],
+            eventsOverflow: 0,
+            newCatches: [],
+            ivUpgrades: 0,
+            levelUps: {},
+        };
         this._savedOnBattleEvent = this.onBattleEvent;
         this._savedOnCatch = this.onCatch;
         this._savedOnLevelUp = this.onLevelUp;
-        // 离线期间完全静默，不接收任何 onBattleEvent，只收集重要事件用于结束后汇总
+        const summary = this._offlineSummary;
+        const KEEP = ['evolved', 'shinyEvolved', 'shinySpread', 'shinyDefeated',
+                      'badgeUnlocked', 'regionUnlocked', 'autoRouteSwitch'];
         this.onBattleEvent = (event, data) => {
-            if (['evolved', 'shinyEvolved', 'shinySpread', 'shinyDefeated',
-                 'badgeUnlocked', 'regionUnlocked', 'autoRouteSwitch'].includes(event)) {
-                this._offlineEvents.push({ event, data });
-            }
-            // 其他所有事件（包括 offlineStart/offlineProgress/offlineEnd）全部丢弃
+            if (!KEEP.includes(event)) return;
+            if (summary.events.length < 200) summary.events.push({ event, data });
+            else summary.eventsOverflow++;
         };
-        this.onCatch = null;
-        this.onLevelUp = null;
+        this.onCatch = (info) => {
+            if (info.isFirstCatch) summary.newCatches.push({ id: info.id, name: info.name });
+            else if (info.updatedStats && info.updatedStats.length) summary.ivUpgrades++;
+        };
+        this.onLevelUp = (info) => {
+            const prev = summary.levelUps[info.id];
+            summary.levelUps[info.id] = {
+                id: info.id,
+                name: info.name,
+                from: prev ? prev.from : info.startLevel,
+                to: info.level,
+            };
+        };
+    }
+
+    // 恢复 UI 回调并生成最终摘要
+    _endOfflineSilence(battles) {
+        const s = this._offlineSummary;
+        if (this._savedOnBattleEvent !== undefined) this.onBattleEvent = this._savedOnBattleEvent;
+        if (this._savedOnCatch !== undefined) this.onCatch = this._savedOnCatch;
+        if (this._savedOnLevelUp !== undefined) this.onLevelUp = this._savedOnLevelUp;
+        this._savedOnBattleEvent = this._savedOnCatch = this._savedOnLevelUp = undefined;
+        this._isOfflineSimulating = false;
+        this._offlineSummary = null;
+        if (!s) return null;
+        const stats = this.gameState.stats;
+        const levelUps = Object.values(s.levelUps)
+            .sort((a, b) => (b.to - b.from) - (a.to - a.from))
+            .slice(0, 10);
+        const summary = {
+            totalMs: s.totalMs,
+            battles,
+            expGained: stats.totalExp - s.startExp,
+            goldGained: stats.totalGold - s.startGold,
+            newCatches: s.newCatches,
+            ivUpgrades: s.ivUpgrades,
+            levelUps,
+            levelUpCount: Object.keys(s.levelUps).length,
+            events: s.events,
+            eventsOverflow: s.eventsOverflow,
+        };
+        this.lastOfflineSummary = summary;
+        return summary;
+    }
+
+    // 离线战斗结算：模拟后台期间的战斗（异步）
+    _processOfflineBattles(elapsedMs) {
+        if (!this.gameState || this._isOfflineSimulating || this._towerMode) return;
+        if (!(elapsedMs > 0)) return;
+
+        // 必须在 stopBattle 之前判断（stopBattle 会清掉治疗计时器）
+        const battle = this.currentBattle;
+        const wasHealing = !!this.healTimer || !!(battle && battle.playerCurrentHp <= 0);
+
+        // 停止当前战斗循环，防止模拟期间干扰
+        this.stopBattle();
+        this._beginOfflineSilence(elapsedMs);
 
         let simulateMs = elapsedMs;
 
         // 如果正在治疗中（玩家被击败），先模拟治疗
-        if (this.healTimer || (this.currentBattle && this.currentBattle.playerCurrentHp <= 0)) {
-            const maxHp = this.currentBattle.playerMaxHp;
-            const healPerSecond = Math.floor(maxHp * 0.2);
-            const healSeconds = Math.ceil(elapsedMs / 1000);
-            this.currentBattle.playerCurrentHp = Math.min(maxHp, this.currentBattle.playerCurrentHp + healPerSecond * healSeconds);
-            
-            if (this.currentBattle.playerCurrentHp >= maxHp) {
-                this.currentBattle.playerCurrentHp = maxHp;
-                this.gameState.currentEnemy = null;
-                const healTime = Math.ceil((maxHp / healPerSecond) * 1000); 
-                simulateMs = Math.max(0, elapsedMs - healTime);
-            } else {
-                // 还没治疗完，不需要模拟
-                this.save();
-                this.startBattle();
+        if (wasHealing && battle) {
+            const maxHp = battle.playerMaxHp;
+            const healPerSecond = Math.max(1, Math.floor(maxHp * DEFEAT_HEAL_PERCENT_PER_SEC));
+            const missing = Math.max(0, maxHp - battle.playerCurrentHp);
+            const healMs = Math.ceil(missing / healPerSecond) * 1000;
+            if (elapsedMs < healMs) {
+                // 离线期间都在治疗，没有战斗可结算
+                battle.playerCurrentHp = Math.min(maxHp, battle.playerCurrentHp + healPerSecond * Math.floor(elapsedMs / 1000));
+                this._finishOfflineSimulation(0, elapsedMs, false);
+                this.startHealingAfterDefeat();
                 return;
             }
+            battle.playerCurrentHp = maxHp;
+            this.gameState.currentEnemy = null;
+            simulateMs = Math.max(0, elapsedMs - healMs);
         }
 
         if (simulateMs <= 1000) {
-            this.save();
-            this.startBattle();
+            this._finishOfflineSimulation(0, elapsedMs);
             return;
         }
 
@@ -212,119 +377,75 @@ class GameCore {
         }
 
         // 启动异步分批模拟
-        this._simulateOfflineBattlesAsync(simulateMs);
+        this._simulateOfflineBattlesAsync(simulateMs, elapsedMs);
     }
 
     // 异步分批模拟离线战斗
-    _simulateOfflineBattlesAsync(totalMs) {
-        if (!this.gameState || !this.gameState.currentRoute) {
-            this._finishOfflineSimulation(0, totalMs);
-            return;
-        }
-        if (!this.gameState.team || this.gameState.team.length === 0) {
-            this._finishOfflineSimulation(0, totalMs);
-            return;
-        }
-
-        const route = this.getRoute(this.gameState.currentRoute);
-        if (!route) {
-            this._finishOfflineSimulation(0, totalMs);
+    _simulateOfflineBattlesAsync(totalMs, reportedMs = totalMs) {
+        const state = this.gameState;
+        const route = state && state.currentRoute ? this.getRoute(state.currentRoute) : null;
+        if (!route || !state.team || state.team.length === 0) {
+            this._finishOfflineSimulation(0, reportedMs);
             return;
         }
 
-        const activePokemonId = this.gameState.team[this.gameState.activePokemonIndex];
-        const playerStats = this.calculateBattleStats(this.gameState.activePokemonIndex);
+        const activePokemonId = state.team[state.activePokemonIndex];
+        const playerStats = this.calculateBattleStats(state.activePokemonIndex);
         if (!playerStats) {
-            this._finishOfflineSimulation(0, totalMs);
+            this._finishOfflineSimulation(0, reportedMs);
             return;
         }
 
-        // ===== 优化: 预计算离线期间不变的缓存值 =====
+        // ===== 预计算离线期间不变的缓存值（与在线共用同一套公式）=====
         const gemBonuses = this.getGemBonuses();
+        const critParams = this._getCritParams(true);
+        const bonuses = this.getProgressBonuses();
 
-        // #5 缓存闪避率（离线期间宝石不变）
-        const cachedDodgeRate = Math.min(75, gemBonuses.dodge_rate) / 100;
-
-        // #6 缓存暴击率和暴击倍率（离线期间不变）
-        let cachedCritRate = 1 / 24 + gemBonuses.crit_rate / 100;
-        let cachedCritMultiplier = 1.5;
-        const talentCritBonus = this.getTalentValue('crit_damage_bonus');
-        if (talentCritBonus > 0) {
-            cachedCritMultiplier += talentCritBonus / 100;
-        }
-
-        // #7 缓存闪光概率（离线期间不变）
-        let cachedShinyRate = 1 / 4096;
-        const shinyBonusValue = this.getBadgeEffectValue('shiny_bonus');
-        if (shinyBonusValue !== null) {
-            cachedShinyRate *= (1 + shinyBonusValue);
-        }
-        if (gemBonuses.shiny_rate) {
-            cachedShinyRate *= (1 + gemBonuses.shiny_rate / 100);
-        }
-        const talentShinyBonus = this.getTalentValue('shiny_bonus');
-        if (talentShinyBonus > 0) {
-            cachedShinyRate *= (1 + talentShinyBonus / 100);
-        }
-        const towerShinyBonus = this.getTowerBonus();
-        if (towerShinyBonus > 0) {
-            cachedShinyRate *= (1 + towerShinyBonus / 100);
-        }
-
-        // #7 缓存权重降低值（离线期间徽章不变）
-        const cachedWeightReduceValue = this.getBadgeEffectValue('completed_weight_reduce');
-
-        // #3 缓存经验/金币相关加成值（离线期间不变）
-        const cachedExpBonusValue = this.getBadgeEffectValue('exp_bonus');
-        const cachedTalentExpBonus = this.getTalentValue('exp_bonus');
-        const cachedTowerExpBonus = this.getTowerBonus();
-        const cachedTeamExpRate = 0.5; // 天赋已改为怪物等级提升，不再影响经验
-        const cachedTalentPokedexExpBonus = this.getTalentValue('pokedex_exp_bonus');
-        const cachedBadgePokedexExpBonus = this.getBadgeEffectValue('pokedex_exp_bonus') || 0;
-        const cachedReserveExpRate = 0.01 * (1 + cachedTalentPokedexExpBonus / 100 + cachedBadgePokedexExpBonus);
-        const cachedHealPercent = 0.1 * (1 + (gemBonuses.victory_heal || 0) / 100);
-
-        // #2 缓存队伍战斗属性（仅升级时刷新）
+        // 队伍战斗属性/等级缓存（仅升级或队伍变化时刷新）
         const cachedTeamStats = [];
         const cachedTeamLevels = [];
-        for (let i = 0; i < this.gameState.team.length; i++) {
+        for (let i = 0; i < state.team.length; i++) {
             cachedTeamStats[i] = this.calculateBattleStats(i);
-            const storedData = this.getStoredData(this.gameState.team[i]);
+            const storedData = this.getStoredData(state.team[i]);
             cachedTeamLevels[i] = storedData ? storedData.level : 0;
         }
 
-        // #4 缓存玩家 level 和 types
         const storedData = this.getStoredData(activePokemonId);
-        const cachedPlayerLevel = storedData ? storedData.level : 5;
-        const cachedPlayerTypes = POKEMON_DATA[activePokemonId]?.types || [];
 
-        // 模拟状态
+        // 玩家起始血量：优先沿用进行中的战斗，其次存档中的血量百分比，最后满血
+        let startHp = playerStats.hp;
+        if (this.currentBattle && this.currentBattle.playerMaxHp > 0) {
+            startHp = Math.max(1, Math.floor(playerStats.hp * Math.min(1, this.currentBattle.playerCurrentHp / this.currentBattle.playerMaxHp)));
+            if (this.currentBattle.playerCurrentHp <= 0) startHp = playerStats.hp;
+        } else if (state.battleHp && state.battleHp.playerMaxHp > 0 && state.battleHp.playerHp > 0) {
+            startHp = Math.max(1, Math.floor(playerStats.hp * Math.min(1, state.battleHp.playerHp / state.battleHp.playerMaxHp)));
+        }
+
         const simState = {
-            totalMs: totalMs,
+            totalMs,
             remainingMs: totalMs,
+            reportedMs,
             battlesSimulated: 0,
-            route: route,
-            activePokemonId: activePokemonId,
-            playerStats: playerStats,
-            playerHp: this.currentBattle ? this.currentBattle.playerCurrentHp : playerStats.hp,
+            route,
+            activePokemonId,
+            playerStats,
+            playerHp: startHp,
             playerAttackInterval: this.getAttackInterval(playerStats.speed),
             // 缓存
-            cachedDodgeRate,
-            cachedCritRate,
-            cachedCritMultiplier,
-            cachedShinyRate,
-            cachedWeightReduceValue,
-            cachedExpBonusValue,
-            cachedTalentExpBonus,
-            cachedTowerExpBonus,
-            cachedTeamExpRate,
-            cachedReserveExpRate,
-            cachedHealPercent,
+            dodgeRate: Math.min(75, gemBonuses.dodge_rate) / 100,
+            critParams,
+            enemyCritParams: this._getCritParams(false),
+            bonuses,
+            spawnCache: {
+                shinyRate: this.getShinyRate(),
+                weightReduce: this.getBadgeEffectValue('completed_weight_reduce'),
+            },
             cachedTeamStats,
             cachedTeamLevels,
-            cachedPlayerLevel,
-            cachedPlayerTypes,
-            // 图鉴经验累积器（#3 批量化）
+            teamKey: state.team.join(','),
+            cachedPlayerLevel: storedData ? storedData.level : 5,
+            cachedPlayerTypes: POKEMON_DATA[activePokemonId]?.types || [],
+            // 图鉴经验累积器（批量化）
             pokedexExpAccumulator: {},
         };
 
@@ -332,39 +453,42 @@ class GameCore {
         this._runOfflineBatch();
     }
 
+    // 刷新离线模拟中“当前出战”相关缓存
+    _offlineSyncActive(s, newStats) {
+        const oldMaxHp = s.playerStats.hp;
+        const hpPercent = oldMaxHp > 0 ? s.playerHp / oldMaxHp : 1;
+        s.activePokemonId = this.gameState.team[this.gameState.activePokemonIndex];
+        s.playerStats = newStats;
+        s.playerAttackInterval = this.getAttackInterval(newStats.speed);
+        s.playerHp = Math.max(1, Math.floor(newStats.hp * Math.min(1, hpPercent)));
+        const sd = this.getStoredData(s.activePokemonId);
+        s.cachedPlayerLevel = sd ? sd.level : 5;
+        s.cachedPlayerTypes = POKEMON_DATA[s.activePokemonId]?.types || [];
+    }
+
     // 每批模拟 OFFLINE_BATCH_SIZE 场战斗，然后让出主线程更新进度
     _runOfflineBatch() {
         const s = this._offlineSimState;
         if (!s) return;
+        const state = this.gameState;
 
         let batchCount = 0;
 
         while (s.remainingMs > 0 && batchCount < OFFLINE_BATCH_SIZE) {
-            // #7 使用缓存参数生成野生宝可梦
-            const wildPokemon = this._generateWildPokemonOffline(s.route, s.cachedShinyRate, s.cachedWeightReduceValue);
-            if (!wildPokemon) break;
+            // 与在线共用的野怪生成（使用缓存的闪光率/权重参数）
+            const wildPokemon = this.generateWildPokemon(s.route, s.spawnCache);
+            if (!wildPokemon) { s.remainingMs = 0; break; } // 路线无效：终止，避免空转
 
-            // [Bug修复] 每场新敌人生成后执行自动切换最优宝可梦
-            // #2 使用缓存的队伍stats
-            if (this.gameState.settings?.autoSwitchBest && this.gameState.team.length > 1) {
-                const bestIndex = this._getBestTeamMemberForEnemyOffline(wildPokemon, s.cachedTeamStats, s.cachedTeamLevels);
-                if (bestIndex !== -1 && bestIndex !== this.gameState.activePokemonIndex) {
-                    this.gameState.activePokemonIndex = bestIndex;
-                    // 切换后使用缓存属性
-                    s.activePokemonId = this.gameState.team[bestIndex];
+            // 每场新敌人生成后执行自动切换最优宝可梦（使用缓存的队伍属性）
+            if (state.settings?.autoSwitchBest && state.team.length > 1) {
+                const bestIndex = this.getBestTeamMemberForEnemy(wildPokemon, {
+                    teamStats: s.cachedTeamStats,
+                    teamLevels: s.cachedTeamLevels,
+                });
+                if (bestIndex !== -1 && bestIndex !== state.activePokemonIndex) {
+                    state.activePokemonIndex = bestIndex;
                     const newStats = s.cachedTeamStats[bestIndex];
-                    if (newStats) {
-                        const oldMaxHp = s.playerStats.hp;
-                        s.playerStats = newStats;
-                        s.playerAttackInterval = this.getAttackInterval(newStats.speed);
-                        // 按百分比继承血量
-                        const hpPercent = oldMaxHp > 0 ? s.playerHp / oldMaxHp : 1;
-                        s.playerHp = Math.max(1, Math.floor(newStats.hp * Math.min(1, hpPercent)));
-                        // #4 刷新缓存的 level 和 types
-                        const sd = this.getStoredData(s.activePokemonId);
-                        s.cachedPlayerLevel = sd ? sd.level : 5;
-                        s.cachedPlayerTypes = POKEMON_DATA[s.activePokemonId]?.types || [];
-                    }
+                    if (newStats) this._offlineSyncActive(s, newStats);
                 }
             }
 
@@ -375,6 +499,7 @@ class GameCore {
 
             // 获取最优技能（复用公共方法）
             const bestSkill = this._getBestSkillForEnemy(s.activePokemonId, wildTypes);
+            const playerPower = bestSkill.power > 0 ? bestSkill.power : 50;
 
             // 模拟单场战斗
             let battleTime = 0;
@@ -382,9 +507,7 @@ class GameCore {
             let enemyTimer = 0;
 
             while (enemyHp > 0 && s.playerHp > 0) {
-                const playerTimeToAttack = s.playerAttackInterval - playerTimer;
-                const enemyTimeToAttack = enemyAttackInterval - enemyTimer;
-                const nextEvent = Math.min(playerTimeToAttack, enemyTimeToAttack);
+                const nextEvent = Math.min(s.playerAttackInterval - playerTimer, enemyAttackInterval - enemyTimer);
 
                 battleTime += nextEvent;
                 playerTimer += nextEvent;
@@ -392,105 +515,73 @@ class GameCore {
 
                 if (battleTime > s.remainingMs) break;
 
-                // 玩家攻击 — #4 使用缓存level/types，#6 使用缓存暴击参数
+                // 玩家攻击
                 if (playerTimer >= s.playerAttackInterval) {
                     playerTimer = 0;
-                    const result = this._calculateDamageOffline(
-                        s.cachedPlayerLevel,
-                        s.playerStats.attack,
-                        enemyStats.defense,
-                        s.cachedPlayerTypes,
-                        wildTypes,
-                        true,
-                        bestSkill.power,
-                        s.cachedCritRate,
-                        s.cachedCritMultiplier
-                    );
-                    enemyHp -= result.damage;
+                    enemyHp -= this._computeDamage(
+                        s.cachedPlayerLevel, s.playerStats.attack, enemyStats.defense,
+                        s.cachedPlayerTypes, wildTypes, playerPower,
+                        s.critParams.rate, s.critParams.multiplier
+                    ).damage;
                 }
 
-                // 敌方攻击 — #5 使用缓存闪避率
+                // 敌方攻击
                 if (enemyTimer >= enemyAttackInterval) {
                     enemyTimer = 0;
-                    if (!(s.cachedDodgeRate > 0 && Math.random() < s.cachedDodgeRate)) {
-                        const result = this._calculateDamageOffline(
-                            wildPokemon.level,
-                            enemyStats.attack,
-                            s.playerStats.defense,
-                            wildTypes,
-                            s.cachedPlayerTypes,
-                            false,
-                            0,
-                            0,
-                            0
-                        );
-                        s.playerHp -= result.damage;
+                    if (!(s.dodgeRate > 0 && this.rng() < s.dodgeRate)) {
+                        s.playerHp -= this._computeDamage(
+                            wildPokemon.level, enemyStats.attack, s.playerStats.defense,
+                            wildTypes, s.cachedPlayerTypes, 50,
+                            s.enemyCritParams.rate, s.enemyCritParams.multiplier
+                        ).damage;
                     }
                 }
             }
 
             s.remainingMs -= battleTime;
 
-            // 玩家被击败
+            // 玩家被击败：等待回满血后继续（与在线 20%/秒 一致）
             if (s.playerHp <= 0) {
-                s.playerHp = 0;
-                const healTime = 5000;
-                s.remainingMs -= healTime;
+                s.remainingMs -= DEFEAT_HEAL_MS;
                 s.playerHp = s.playerStats.hp;
-                this.gameState.currentEnemy = null;
+                state.currentEnemy = null;
                 batchCount++;
                 continue;
             }
 
-            // 敌方被击败 - 使用离线优化版结算
+            // 敌方被击败 - 与在线共用的胜利结算
             if (enemyHp <= 0) {
                 s.battlesSimulated++;
                 batchCount++;
 
-                // 调用离线优化版胜利结算
-                const rewards = this._processVictoryRewardsOffline(
-                    wildPokemon, s.activePokemonId,
-                    s.playerStats.hp, s.playerHp, s
+                const rewards = this._processVictoryRewards(
+                    wildPokemon, s.activePokemonId, s.playerStats.hp, s.playerHp, s
                 );
                 s.playerHp = rewards.newPlayerHp;
 
-                // [Bug修复] 自动切换地图后刷新路线和战斗属性
+                // 自动切换地图后刷新路线
                 if (rewards.autoSwitchResult) {
-                    const newRoute = this.getRoute(this.gameState.currentRoute);
-                    if (newRoute) {
-                        s.route = newRoute;
-                    }
+                    const newRoute = this.getRoute(state.currentRoute);
+                    if (newRoute) s.route = newRoute;
                 }
 
-                // #1 仅在升级时才刷新 playerStats（避免每场都遍历全图鉴）
-                if (rewards.anyLevelUp) {
-                    // 升级了，需要刷新所有队伍缓存
-                    for (let i = 0; i < this.gameState.team.length; i++) {
-                        const newLv = this.getStoredData(this.gameState.team[i])?.level || 0;
-                        if (newLv !== s.cachedTeamLevels[i]) {
+                // 仅在升级/队伍变化时才刷新缓存（避免每场都重算）
+                const teamKey = state.team.join(',');
+                if (rewards.anyLevelUp || teamKey !== s.teamKey) {
+                    const teamChanged = teamKey !== s.teamKey;
+                    s.teamKey = teamKey;
+                    for (let i = 0; i < state.team.length; i++) {
+                        const newLv = this.getStoredData(state.team[i])?.level || 0;
+                        if (teamChanged || newLv !== s.cachedTeamLevels[i]) {
                             s.cachedTeamStats[i] = this.calculateBattleStats(i);
                             s.cachedTeamLevels[i] = newLv;
                         }
                     }
-                    const refreshedStats = s.cachedTeamStats[this.gameState.activePokemonIndex];
-                    if (refreshedStats) {
-                        const oldMaxHp = s.playerStats.hp;
-                        s.playerStats = refreshedStats;
-                        s.playerAttackInterval = this.getAttackInterval(refreshedStats.speed);
-                        s.activePokemonId = this.gameState.team[this.gameState.activePokemonIndex];
-                        // 刷新缓存的 level 和 types
-                        const sd = this.getStoredData(s.activePokemonId);
-                        s.cachedPlayerLevel = sd ? sd.level : 5;
-                        s.cachedPlayerTypes = POKEMON_DATA[s.activePokemonId]?.types || [];
-                        // 如果maxHp变了（升级），按比例调整当前血量
-                        if (refreshedStats.hp !== oldMaxHp && oldMaxHp > 0) {
-                            s.playerHp = Math.max(1, Math.floor(s.playerHp * refreshedStats.hp / oldMaxHp));
-                        }
-                    }
+                    const refreshed = s.cachedTeamStats[state.activePokemonIndex];
+                    if (refreshed) this._offlineSyncActive(s, refreshed);
                 }
 
-                const delay = s.playerAttackInterval < 800 ? s.playerAttackInterval : 800;
-                s.remainingMs -= delay;
+                s.remainingMs -= this._getNextBattleDelay(s.playerAttackInterval);
             }
         }
 
@@ -504,23 +595,27 @@ class GameCore {
             });
         }
 
-        // #3 每批结束时刷写图鉴累积经验
+        // 每批结束时刷写图鉴累积经验
         this._flushPokedexExpAccumulator(s.pokedexExpAccumulator);
 
         // 还有剩余时间，继续下一批
         if (s.remainingMs > 0) {
             setTimeout(() => this._runOfflineBatch(), 0);
         } else {
-            this._finishOfflineSimulation(s.battlesSimulated, s.totalMs);
+            this._finishOfflineSimulation(s.battlesSimulated, s.reportedMs);
         }
     }
 
-    // 离线模拟完成，保存并重启战斗
-    _finishOfflineSimulation(battlesSimulated, totalMs) {
+    // 离线模拟完成：保存、恢复回调、汇报摘要并重启战斗
+    _finishOfflineSimulation(battlesSimulated, totalMs, restartBattle = true) {
         const s = this._offlineSimState;
         if (s) {
-            // 更新当前血量到存档
             this.gameState.currentEnemy = null;
+            // 把模拟后的血量带回当前战斗，避免 startBattle 继承过期的血量
+            if (this.currentBattle) {
+                this.currentBattle.playerMaxHp = s.playerStats.hp;
+                this.currentBattle.playerCurrentHp = Math.max(1, s.playerHp);
+            }
             this.gameState.battleHp = {
                 playerHp: Math.max(0, s.playerHp),
                 playerMaxHp: s.playerStats.hp,
@@ -531,28 +626,23 @@ class GameCore {
         }
         this._offlineSimState = null;
 
-        this.save();
+        this.saveNow();
+        this._log(`⚡ 离线结算: 模拟了 ${battlesSimulated} 场战斗`);
 
-        if (battlesSimulated > 0) {
-            console.log(`⚡ 离线结算: 模拟了 ${battlesSimulated} 场战斗`);
-        }
+        const summary = this._endOfflineSilence(battlesSimulated);
 
-        // 恢复 UI 回调
-        if (this._savedOnBattleEvent) this.onBattleEvent = this._savedOnBattleEvent;
-        if (this._savedOnCatch) this.onCatch = this._savedOnCatch;
-        if (this._savedOnLevelUp) this.onLevelUp = this._savedOnLevelUp;
-        this._isOfflineSimulating = false;
-        this._savedOnBattleEvent = null;
-        this._savedOnCatch = null;
-        this._savedOnLevelUp = null;
-
-        // 通知UI模拟结束
+        // 通知UI模拟结束（带摘要，事件不再丢失）
         if (this.onBattleEvent) {
-            this.onBattleEvent('offlineEnd', { battles: battlesSimulated, totalMs: totalMs });
+            this.onBattleEvent('offlineEnd', {
+                battles: battlesSimulated,
+                totalMs,
+                summary,
+                offlineEvents: summary ? summary.events : [],
+            });
         }
 
         // 重启战斗循环
-        this.startBattle();
+        if (restartBattle) this.startBattle();
     }
 
     // 预构建进化链映射缓存：进化形态ID → 基础形态ID（O(1)查找）
@@ -579,7 +669,9 @@ class GameCore {
         // 生成初始皮卡丘的个体值（存储在 caughtPokemon 中）
         const initialIvs = this.generateIVs();
 
+        this._invalidateAllCaches();
         this.gameState = {
+            schemaVersion: SAVE_SCHEMA_VERSION,
             team: [],               // 队伍（最多6只）- 只存储 pokemonId
             activePokemonIndex: 0,  // 出战宝可梦在队伍中的索引
             currentRegion: 'kanto',
@@ -621,19 +713,19 @@ class GameCore {
         // 将皮卡丘加入队伍
         this.gameState.team.push(25);
 
-        this.save();
+        this.saveNow();
         return this.gameState;
     }
 
     // 生成随机个体值
     generateIVs() {
         return {
-            hp: Math.floor(Math.random() * 32),
-            atk: Math.floor(Math.random() * 32),
-            def: Math.floor(Math.random() * 32),
-            spAtk: Math.floor(Math.random() * 32),
-            spDef: Math.floor(Math.random() * 32),
-            speed: Math.floor(Math.random() * 32),
+            hp: Math.floor(this.rng() * 32),
+            atk: Math.floor(this.rng() * 32),
+            def: Math.floor(this.rng() * 32),
+            spAtk: Math.floor(this.rng() * 32),
+            spDef: Math.floor(this.rng() * 32),
+            speed: Math.floor(this.rng() * 32),
         };
     }
 
@@ -693,6 +785,7 @@ class GameCore {
             const stored = this.gameState.caughtPokemon[id];
             if (stored) {
                 stored.ivs = { ...bestIvs };
+                this._touchSpecies(id);
             }
         }
 
@@ -711,9 +804,11 @@ class GameCore {
             this.gameState.caughtPokemon[pokemonId] = {
                 ivs: { ...ivs },
                 level: level,
-                exp: 0,
+                // 经验从该等级的起点开始（初始皮卡丘 Lv5 之前是 0，会让经验条显示为负数）
+                exp: getExpForLevel(POKEMON_DATA[pokemonId].expGroup, level),
                 skillLevel: 0,
             };
+            this._touchSpecies(pokemonId);
         }
 
         // 捕获时检查进化
@@ -767,34 +862,14 @@ class GameCore {
     }
 
     // 创建野生宝可梦（用于战斗）
-    createWildPokemon(pokemonId, level) {
+    createWildPokemon(pokemonId, level, shinyRate = this.getShinyRate()) {
         const baseData = POKEMON_DATA[pokemonId];
         if (!baseData) return null;
 
         const ivs = this.generateIVs();
 
-        // 闪光判定：基础 1/4096 概率，闪光徽章加成后翻倍
-        let shinyRate = 1 / 4096;
-        const shinyBonusValue = this.getBadgeEffectValue('shiny_bonus');
-        if (shinyBonusValue !== null) {
-            shinyRate *= (1 + shinyBonusValue); // +100% = 概率翻倍
-        }
-        // 宝石闪光加成
-        const gemBonuses = this.getGemBonuses();
-        if (gemBonuses.shiny_rate) {
-            shinyRate *= (1 + gemBonuses.shiny_rate / 100);
-        }
-        // 天赋：闪光概率额外增加
-        const talentShinyBonus = this.getTalentValue('shiny_bonus');
-        if (talentShinyBonus > 0) {
-            shinyRate *= (1 + talentShinyBonus / 100);
-        }
-        // 挑战塔加成：通关层数%
-        const towerShinyBonus = this.getTowerBonus();
-        if (towerShinyBonus > 0) {
-            shinyRate *= (1 + towerShinyBonus / 100);
-        }
-        const isShiny = Math.random() < shinyRate;
+        // 闪光判定：基础 1/4096，叠加徽章/天赋/挑战塔加成（公式见 getShinyRate）
+        const isShiny = this.rng() < shinyRate;
 
         const pokemon = {
             uid: this.generateUID(),
@@ -819,22 +894,6 @@ class GameCore {
         // 时间戳 + 自增计数器，兼顾速度与唯一性
         // 时间戳前缀保证不同会话不碰撞，自增后缀保证同批次不重复
         return Date.now().toString(36) + '_' + (++this._uidCounter).toString(36);
-    }
-
-    // 迁移修复：旧版 generateUID 批量购买时产生重复uid，导致合成失败
-    _migrateFixGemUids() {
-        if (!this.gameState?.gems?.length) return;
-        const uidMap = new Map(); // oldUid -> newUid
-        let fixed = 0;
-        for (const gem of this.gameState.gems) {
-            if (uidMap.has(gem.uid)) {
-                gem.uid = this.generateUID();
-                fixed++;
-            } else {
-                uidMap.set(gem.uid, true);
-            }
-        }
-        if (fixed > 0) console.log(`[迁移] 修复了 ${fixed} 个重复宝石UID`);
     }
 
     // ===================== 属性计算（简化公式） =====================
@@ -983,26 +1042,60 @@ class GameCore {
         return Math.max(0, potential);
     }
 
+    // 单个物种的基础属性（缓存）。输入：已存储的等级/个体值、闪光、树果。
+    // 任何改动这些数据的代码都必须调用 _touchSpecies(id)。
+    _getSpeciesStats(id) {
+        const cached = this._speciesStats.get(id);
+        if (cached) return cached;
+        const stored = this.gameState.caughtPokemon[id];
+        if (!stored || !POKEMON_DATA[id]) return null;
+        const stats = this.calculateStats({
+            id,
+            level: stored.level,
+            ivs: stored.ivs,
+            isShiny: !!this.gameState.shinyDex[id],
+        });
+        this._speciesStats.set(id, stats);
+        return stats;
+    }
+
+    // 图鉴中已捕获但不在队伍中的宝可梦 1% 加成（缓存；队伍或任一物种变化时失效）
+    _getPokedexBonus(team) {
+        const key = team.join(',');
+        if (this._dexBonus && this._dexBonus.key === key) return this._dexBonus.value;
+        const value = { hp: 0, attack: 0, defense: 0, speed: 0 };
+        const teamSet = new Set(team.map(id => String(id)));
+        for (const dexId in this.gameState.pokedex) {
+            if (this.gameState.pokedex[dexId] === 'caught' && !teamSet.has(dexId)) {
+                const s = this._getSpeciesStats(parseInt(dexId));
+                if (s) {
+                    value.hp += s.hp * 0.01;
+                    value.attack += s.attack * 0.01;
+                    value.defense += s.defense * 0.01;
+                    value.speed += s.speed * 0.01;
+                }
+            }
+        }
+        this._dexBonus = { key, value };
+        return value;
+    }
+
     // 出战宝可梦的实际属性 = 自己 + 队伍其他5只的20% + 图鉴其余所有宝可梦的1%
     calculateBattleStats(pokemonIndex) {
         if (!this.gameState || !this.gameState.team) return null;
 
         const team = this.gameState.team;
         if (pokemonIndex < 0 || pokemonIndex >= team.length) return null;
-        
-        const pokemonId = team[pokemonIndex];
-        const activePokemon = this.createPokemon(pokemonId, true);
-        if (!activePokemon) return null;
 
-        const baseStats = this.calculateStats(activePokemon);
+        const baseStats = this._getSpeciesStats(team[pokemonIndex]);
+        if (!baseStats) return null;
 
         // 队伍内其他宝可梦的加成 (20%)
-        let teamBonus = { hp: 0, attack: 0, defense: 0, speed: 0 };
+        const teamBonus = { hp: 0, attack: 0, defense: 0, speed: 0 };
         for (let i = 0; i < team.length; i++) {
             if (i !== pokemonIndex) {
-                const otherPokemon = this.createPokemon(team[i], true);
-                if (otherPokemon) {
-                    const s = this.calculateStats(otherPokemon);
+                const s = this._getSpeciesStats(team[i]);
+                if (s) {
                     teamBonus.hp += s.hp * 0.2;
                     teamBonus.attack += s.attack * 0.2;
                     teamBonus.defense += s.defense * 0.2;
@@ -1012,20 +1105,7 @@ class GameCore {
         }
 
         // 图鉴中已捕获但不在队伍中的宝可梦加成 (1%)
-        let pokedexBonus = { hp: 0, attack: 0, defense: 0, speed: 0 };
-        const teamSet = new Set(team.map(id => String(id)));
-        for (const dexId in this.gameState.pokedex) {
-            if (this.gameState.pokedex[dexId] === 'caught' && !teamSet.has(dexId)) {
-                const dexPokemon = this.createPokemon(parseInt(dexId), true);
-                if (dexPokemon) {
-                    const s = this.calculateStats(dexPokemon);
-                    pokedexBonus.hp += s.hp * 0.01;
-                    pokedexBonus.attack += s.attack * 0.01;
-                    pokedexBonus.defense += s.defense * 0.01;
-                    pokedexBonus.speed += s.speed * 0.01;
-                }
-            }
-        }
+        const pokedexBonus = this._getPokedexBonus(team);
 
         let finalHp = Math.floor(baseStats.hp + teamBonus.hp + pokedexBonus.hp);
         let finalAttack = Math.floor(baseStats.attack + teamBonus.attack + pokedexBonus.attack);
@@ -1175,6 +1255,7 @@ class GameCore {
 
             if (!this.gameState.shinyDex[id]) {
                 this.gameState.shinyDex[id] = true;
+                this._touchSpecies(id);
 
                 if (this.onBattleEvent) {
                     const name = POKEMON_DATA[id]?.name || `#${id}`;
@@ -1190,56 +1271,44 @@ class GameCore {
         }
     }
 
-    // 胜利结算公共方法：经验/金币/回血/捕获/闪光/自动切地图
-    // 返回 { expGained, goldGained, healAmount, autoSwitchResult }
-    _processVictoryRewards(wildPokemon, activePokemonId, playerMaxHp, playerCurrentHp) {
-        this.gameState.stats.totalBattles++;
+    // 胜利结算（在线/离线共用）：经验/金币/回血/捕获/闪光/自动切地图
+    // sim 为离线模拟状态：提供缓存加成，并把图鉴经验累积起来批量写入。
+    // 返回 { expGained, goldGained, healAmount, newPlayerHp, autoSwitchResult, anyLevelUp }
+    _processVictoryRewards(wildPokemon, activePokemonId, playerMaxHp, playerCurrentHp, sim = null) {
+        const state = this.gameState;
+        const b = sim ? sim.bonuses : this.getProgressBonuses();
+        state.stats.totalBattles++;
 
         // 图鉴标记
-        if (!this.gameState.pokedex[wildPokemon.id]) {
-            this.gameState.pokedex[wildPokemon.id] = 'seen';
+        if (!state.pokedex[wildPokemon.id]) {
+            state.pokedex[wildPokemon.id] = 'seen';
         }
 
         // 计算经验值
         const baseExp = this.getBaseExpYield(wildPokemon.id, wildPokemon.level);
-        let expGained = Math.floor(baseExp * wildPokemon.level / 7);
-        const expBonusValue = this.getBadgeEffectValue('exp_bonus');
-        if (expBonusValue !== null) {
-            expGained = Math.floor(expGained * (1 + expBonusValue));
-        }
-        const talentExpBonus = this.getTalentValue('exp_bonus');
-        if (talentExpBonus > 0) {
-            expGained = Math.floor(expGained * (1 + talentExpBonus / 100));
-        }
-        // 挑战塔加成：通关层数%
-        const towerExpBonus = this.getTowerBonus();
-        if (towerExpBonus > 0) {
-            expGained = Math.floor(expGained * (1 + towerExpBonus / 100));
-        }
+        const expGained = this._applyExpBonuses(Math.floor(baseExp * wildPokemon.level / 7), b);
 
         // 出战精灵获得100%经验
-        this.addExpToPokemon(activePokemonId, expGained);
+        let anyLevelUp = !!this.addExpToPokemon(activePokemonId, expGained);
 
         // 队伍内其他精灵获得50%经验
-        const teamExpRate = 0.5;
-        for (let i = 0; i < this.gameState.team.length; i++) {
-            if (i !== this.gameState.activePokemonIndex) {
-                this.addExpToPokemon(this.gameState.team[i], Math.floor(expGained * teamExpRate));
+        const teamExp = Math.floor(expGained * b.teamExpRate);
+        for (let i = 0; i < state.team.length; i++) {
+            if (i !== state.activePokemonIndex) {
+                if (this.addExpToPokemon(state.team[i], teamExp)) anyLevelUp = true;
             }
         }
 
-        // 图鉴宝可梦获得1%经验
-        const talentPokedexExpBonus = this.getTalentValue('pokedex_exp_bonus');
-        const badgePokedexExpBonus = this.getBadgeEffectValue('pokedex_exp_bonus') || 0;
-        const reserveExpRate = 0.01 * (1 + talentPokedexExpBonus / 100 + badgePokedexExpBonus);
-        const reserveExp = Math.ceil(expGained * reserveExpRate);
-        for (const pokemonId in this.gameState.caughtPokemon) {
+        // 图鉴宝可梦获得1%经验（离线：先累积，批量写入）
+        const reserveExp = Math.ceil(expGained * b.reserveExpRate);
+        for (const pokemonId in state.caughtPokemon) {
             const id = parseInt(pokemonId);
-            if (!this.gameState.team.includes(id)) {
-                this.addExpToPokemon(id, reserveExp);
+            if (!state.team.includes(id)) {
+                if (sim) sim.pokedexExpAccumulator[id] = (sim.pokedexExpAccumulator[id] || 0) + reserveExp;
+                else this.addExpToPokemon(id, reserveExp);
             }
         }
-        this.gameState.stats.totalExp += expGained;
+        state.stats.totalExp += expGained;
 
         // 金币掉落
         let goldGained = 0;
@@ -1252,91 +1321,16 @@ class GameCore {
         this._updateRateTracker(expGained, goldGained);
 
         // 胜利回血
-        const gemBonuses = this.getGemBonuses();
-        const healPercent = 0.1 * (1 + (gemBonuses.victory_heal || 0) / 100);
-        const healAmount = Math.floor(playerMaxHp * healPercent);
+        const healAmount = Math.floor(playerMaxHp * b.healPercent);
         const newPlayerHp = Math.min(playerMaxHp, playerCurrentHp + healAmount);
 
         // 击败处理（捕获/IV更新/地区解锁/徽章）
         this.processDefeat(wildPokemon);
 
         // 闪光记录：击败闪光宝可梦后，双向传播闪光给整条进化链
-        if (wildPokemon.isShiny && !this.gameState.shinyDex[wildPokemon.id]) {
-            this.gameState.shinyDex[wildPokemon.id] = true;
-            this._syncShinyInFamily(wildPokemon.id);
-        }
-
-        // 自动切换地图
-        const autoSwitchResult = this.tryAutoRouteSwitch();
-
-        return { expGained, goldGained, healAmount, newPlayerHp, autoSwitchResult };
-    }
-
-    // ===================== 离线优化版：胜利结算 =====================
-    // #3 图鉴经验累积到 accumulator 而非每场调用 addExpToPokemon
-    // 返回额外字段 anyLevelUp 用于 #1 判断是否需要刷新缓存
-    _processVictoryRewardsOffline(wildPokemon, activePokemonId, playerMaxHp, playerCurrentHp, simState) {
-        this.gameState.stats.totalBattles++;
-
-        // 图鉴标记
-        if (!this.gameState.pokedex[wildPokemon.id]) {
-            this.gameState.pokedex[wildPokemon.id] = 'seen';
-        }
-
-        // 计算经验值（使用缓存的加成值）
-        const baseExp = this.getBaseExpYield(wildPokemon.id, wildPokemon.level);
-        let expGained = Math.floor(baseExp * wildPokemon.level / 7);
-        if (simState.cachedExpBonusValue !== null) {
-            expGained = Math.floor(expGained * (1 + simState.cachedExpBonusValue));
-        }
-        if (simState.cachedTalentExpBonus > 0) {
-            expGained = Math.floor(expGained * (1 + simState.cachedTalentExpBonus / 100));
-        }
-        if (simState.cachedTowerExpBonus > 0) {
-            expGained = Math.floor(expGained * (1 + simState.cachedTowerExpBonus / 100));
-        }
-
-        // 出战精灵获得100%经验
-        let anyLevelUp = !!this.addExpToPokemon(activePokemonId, expGained);
-
-        // 队伍内其他精灵获得50%经验
-        for (let i = 0; i < this.gameState.team.length; i++) {
-            if (i !== this.gameState.activePokemonIndex) {
-                const leveled = this.addExpToPokemon(this.gameState.team[i], Math.floor(expGained * simState.cachedTeamExpRate));
-                if (leveled) anyLevelUp = true;
-            }
-        }
-
-        // #3 图鉴宝可梦经验：累积到 accumulator 中，不立即写入
-        const reserveExp = Math.ceil(expGained * simState.cachedReserveExpRate);
-        for (const pokemonId in this.gameState.caughtPokemon) {
-            const id = parseInt(pokemonId);
-            if (!this.gameState.team.includes(id)) {
-                simState.pokedexExpAccumulator[id] = (simState.pokedexExpAccumulator[id] || 0) + reserveExp;
-            }
-        }
-        this.gameState.stats.totalExp += expGained;
-
-        // 金币掉落
-        let goldGained = 0;
-        if (this.isGoldUnlocked()) {
-            goldGained = this.calculateGoldDrop(wildPokemon);
-            this.addGold(goldGained);
-        }
-
-        // 更新实际速率跟踪器
-        this._updateRateTracker(expGained, goldGained);
-
-        // 胜利回血（使用缓存的回血百分比）
-        const healAmount = Math.floor(playerMaxHp * simState.cachedHealPercent);
-        const newPlayerHp = Math.min(playerMaxHp, playerCurrentHp + healAmount);
-
-        // 击败处理（捕获/IV更新/地区解锁/徽章）
-        this.processDefeat(wildPokemon);
-
-        // 闪光记录
-        if (wildPokemon.isShiny && !this.gameState.shinyDex[wildPokemon.id]) {
-            this.gameState.shinyDex[wildPokemon.id] = true;
+        if (wildPokemon.isShiny && !state.shinyDex[wildPokemon.id]) {
+            state.shinyDex[wildPokemon.id] = true;
+            this._touchSpecies(wildPokemon.id);
             this._syncShinyInFamily(wildPokemon.id);
         }
 
@@ -1344,186 +1338,6 @@ class GameCore {
         const autoSwitchResult = this.tryAutoRouteSwitch();
 
         return { expGained, goldGained, healAmount, newPlayerHp, autoSwitchResult, anyLevelUp };
-    }
-
-    // ===================== 离线优化版：伤害计算 =====================
-    // #6 接受预计算的暴击率和暴击倍率，避免每次调用 getGemBonuses/getTalentValue
-    _calculateDamageOffline(attackerLevel, attackStat, defenseStat, attackerTypes, defenderTypes, isPlayer, skillPower, cachedCritRate, cachedCritMultiplier) {
-        const power = skillPower > 0 ? skillPower : 50;
-
-        // 基础伤害
-        let damage = Math.floor(((2 * attackerLevel / 5 + 2) * power * attackStat / defenseStat) / 50) + 2;
-
-        // 属性相克倍率
-        if (attackerTypes && defenderTypes && attackerTypes.length > 0) {
-            const result = getBestTypeEffectiveness(attackerTypes, defenderTypes);
-            damage = Math.floor(damage * result.multiplier);
-        }
-
-        // 会心一击判定
-        let criticalHit = false;
-        const critRate = isPlayer ? cachedCritRate : (1 / 24);
-        if (Math.random() < critRate) {
-            const critMult = isPlayer ? cachedCritMultiplier : 1.5;
-            damage = Math.floor(damage * critMult);
-            criticalHit = true;
-        }
-
-        // 随机数 (85%~100%)
-        const random = (Math.floor(Math.random() * 16) + 85) / 100;
-        damage = Math.floor(damage * random);
-
-        // 最低1点伤害
-        damage = Math.max(1, damage);
-
-        return { damage, criticalHit };
-    }
-
-    // ===================== 离线优化版：野生宝可梦生成 =====================
-    // #7 接受预计算的闪光率和权重降低值，避免每次调用 getBadgeEffectValue/getGemBonuses/getTalentValue/getTowerBonus
-    _generateWildPokemonOffline(route, cachedShinyRate, cachedWeightReduceValue) {
-        if (!route || !route.pokemon || route.pokemon.length === 0) return null;
-
-        // 已完成宝可梦出现权重降低
-        const weights = route.pokemon.map(p => {
-            let w = p.weight;
-            if (cachedWeightReduceValue !== null) {
-                const caught = this.gameState.pokedex[p.id] === 'caught';
-                if (caught) {
-                    const storedData = this.getStoredData(p.id);
-                    const is6V = storedData && storedData.ivs &&
-                        storedData.ivs.hp === 31 && storedData.ivs.atk === 31 &&
-                        storedData.ivs.def === 31 && storedData.ivs.spAtk === 31 &&
-                        storedData.ivs.spDef === 31 && storedData.ivs.speed === 31;
-                    const hasShiny = !!this.gameState.shinyDex[p.id];
-                    if (is6V && hasShiny) {
-                        w *= (1 - cachedWeightReduceValue);
-                    }
-                }
-            }
-            return w;
-        });
-
-        // 按权重随机选择
-        const totalWeight = weights.reduce((sum, w) => sum + w, 0);
-        let rand = Math.random() * totalWeight;
-
-        let selected = route.pokemon[0];
-        for (let i = 0; i < route.pokemon.length; i++) {
-            rand -= weights[i];
-            if (rand <= 0) {
-                selected = route.pokemon[i];
-                break;
-            }
-        }
-
-        // 按照地图/宝可梦配置的等级范围生成等级
-        const minLevel = selected.levelRange[0];
-        const maxLevel = selected.levelRange[1];
-        let level = Math.floor(Math.random() * (maxLevel - minLevel + 1)) + minLevel;
-
-        // 天赋：野生怪物等级提升（离线模式不含挑战塔，直接应用）
-        level = this.getMonsterLevelBoost(level);
-
-        // 内联创建野生宝可梦，使用缓存的闪光率
-        const baseData = POKEMON_DATA[selected.id];
-        if (!baseData) return null;
-
-        const ivs = this.generateIVs();
-        const isShiny = Math.random() < cachedShinyRate;
-
-        const pokemon = {
-            uid: this.generateUID(),
-            id: selected.id,
-            name: baseData.name,
-            level: level,
-            exp: getExpForLevel(baseData.expGroup, level),
-            ivs: ivs,
-            isShiny: isShiny,
-            isWild: true,
-        };
-
-        const stats = this.calculateStats(pokemon);
-        pokemon.currentHp = stats.hp;
-
-        return pokemon;
-    }
-
-    // ===================== 离线优化版：最优宝可梦选择 =====================
-    // #2 使用缓存的队伍战斗属性，避免每场都调用 calculateBattleStats
-    _getBestTeamMemberForEnemyOffline(wildPokemon, cachedTeamStats, cachedTeamLevels) {
-        if (!this.gameState.team || this.gameState.team.length <= 1) return -1;
-
-        const wildTypes = POKEMON_DATA[wildPokemon.id]?.types || [];
-        const enemyStats = this.calculateStats(wildPokemon);
-        const enemyHp = enemyStats.hp;
-        const oneShotStrategy = this.gameState.settings?.oneShotStrategy || 'fastest';
-
-        const candidates = [];
-
-        for (let i = 0; i < this.gameState.team.length; i++) {
-            const pokemonId = this.gameState.team[i];
-            const stats = cachedTeamStats[i];
-            if (!stats) continue;
-
-            const playerTypes = POKEMON_DATA[pokemonId]?.types || [];
-            const level = cachedTeamLevels[i];
-
-            // 获取最优技能威力
-            let skillPower = 0;
-            const skillInfo = this.getSkillForPokemon(pokemonId);
-            if (skillInfo && skillInfo.skills.length > 0) {
-                let bestSkill = skillInfo.skills[0];
-                if (skillInfo.skills.length > 1) {
-                    let bestMult = 0;
-                    for (const sk of skillInfo.skills) {
-                        const eff = getBestTypeEffectiveness([sk.type], wildTypes);
-                        if (eff.multiplier > bestMult || bestMult === 0) {
-                            bestMult = eff.multiplier;
-                            bestSkill = sk;
-                        }
-                    }
-                }
-                skillPower = bestSkill.power;
-            }
-
-            const power = skillPower > 0 ? skillPower : 50;
-
-            const baseDmg = Math.floor(((2 * level / 5 + 2) * power * stats.attack / enemyStats.defense) / 50) + 2;
-            const typeResult = getBestTypeEffectiveness(playerTypes, wildTypes);
-            const typeMult = typeResult.multiplier;
-            const estimatedDmg = Math.floor(baseDmg * typeMult);
-            const minDmg = Math.floor(estimatedDmg * 0.85);
-
-            const atkInterval = this.getAttackInterval(stats.speed);
-            const canOneShot = minDmg >= enemyHp;
-            const dps = estimatedDmg / atkInterval;
-
-            candidates.push({ index: i, estimatedDmg, atkInterval, canOneShot, dps, level });
-        }
-
-        if (candidates.length === 0) return -1;
-
-        if (oneShotStrategy === 'no_change') {
-            const currentCandidate = candidates.find(c => c.index === this.gameState.activePokemonIndex);
-            if (currentCandidate && currentCandidate.canOneShot) {
-                return this.gameState.activePokemonIndex;
-            }
-        }
-
-        candidates.sort((a, b) => {
-            if (a.canOneShot && !b.canOneShot) return -1;
-            if (!a.canOneShot && b.canOneShot) return 1;
-            if (a.canOneShot && b.canOneShot) {
-                if (oneShotStrategy === 'lowest_level') {
-                    return a.level - b.level;
-                }
-                return a.atkInterval - b.atkInterval;
-            }
-            return b.dps - a.dps;
-        });
-
-        return candidates[0].index;
     }
 
     // #3 刷写图鉴经验累积器
@@ -1541,56 +1355,46 @@ class GameCore {
 
     // ===================== 伤害计算（官方公式简化版） =====================
     // Damage = ((2*Level/5+2) * Power * A/D / 50 + 2) * Type * CriticalHit * Random
-    // 招式威力固定50，无STAB
-    calculateDamage(attackerLevel, attackStat, defenseStat, attackerTypes, defenderTypes, isPlayer = false, skillPower = 0) {
-        const power = skillPower > 0 ? skillPower : 50; // 有技能时使用技能威力，否则固定50
-        
+    // 在线(battleTick)与离线模拟共用 _computeDamage，保证两边公式与随机数消耗顺序一致。
+    _computeDamage(attackerLevel, attackStat, defenseStat, attackerTypes, defenderTypes, power, critRate, critMultiplier) {
         // 基础伤害
         let damage = Math.floor(((2 * attackerLevel / 5 + 2) * power * attackStat / defenseStat) / 50) + 2;
-        
+
         // 属性相克倍率（双属性攻击方取最优属性，倍率×0.75）
         let typeEffectiveness = 1;
         let effectivenessText = '';
         if (attackerTypes && defenderTypes && attackerTypes.length > 0) {
-            const result = getBestTypeEffectiveness(attackerTypes, defenderTypes);
-            typeEffectiveness = result.multiplier;
+            typeEffectiveness = getBestTypeEffectiveness(attackerTypes, defenderTypes).multiplier;
             damage = Math.floor(damage * typeEffectiveness);
-            
-            // 属性效果文字
+
             if (typeEffectiveness <= 0.25) effectivenessText = '微弱伤害...';
             else if (typeEffectiveness > 1) effectivenessText = '效果拔群！';
             else if (typeEffectiveness < 1) effectivenessText = '效果不佳...';
         }
 
-
         // 会心一击判定
-        let critRate = 0.05; // 默认 ~5%
-        if (isPlayer) {
-            const bonuses = this.getGemBonuses();
-            critRate += bonuses.crit_rate / 100;
-        }
         let criticalHit = false;
-        if (Math.random() < critRate) {
-            // 天赋：会心一击伤害增加（基础1.5倍 + 天赋加成）
-            let critMultiplier = 1.5;
-            if (isPlayer) {
-                const talentCritBonus = this.getTalentValue('crit_damage_bonus');
-                if (talentCritBonus > 0) {
-                    critMultiplier += talentCritBonus / 100;
-                }
-            }
+        if (this.rng() < critRate) {
             damage = Math.floor(damage * critMultiplier);
             criticalHit = true;
         }
-        
+
         // 随机数 (85%~100%)
-        const random = (Math.floor(Math.random() * 16) + 85) / 100;
-        damage = Math.floor(damage * random);
-        
+        damage = Math.floor(damage * ((Math.floor(this.rng() * 16) + 85) / 100));
+
         // 最低1点伤害
         damage = Math.max(1, damage);
-        
+
         return { damage, criticalHit, typeEffectiveness, effectivenessText };
+    }
+
+    // 公开接口：skillPower<=0 时使用固定威力 50
+    calculateDamage(attackerLevel, attackStat, defenseStat, attackerTypes, defenderTypes, isPlayer = false, skillPower = 0) {
+        const crit = this._getCritParams(isPlayer);
+        return this._computeDamage(
+            attackerLevel, attackStat, defenseStat, attackerTypes, defenderTypes,
+            skillPower > 0 ? skillPower : 50, crit.rate, crit.multiplier
+        );
     }
 
     // ===================== 攻击间隔计算 =====================
@@ -1699,6 +1503,7 @@ class GameCore {
             enemyTimer: restoredEnemyTimer,
             lastTick: Date.now(),
         };
+        this._cacheBattleDerived();
 
         // 清除已使用的存档状态（避免下一场战斗重复恢复）
         if (savedBattleHp) {
@@ -1743,23 +1548,49 @@ class GameCore {
             this._nextBattleTimeout = null;
             this._nextBattleScheduledAt = null;
         }
+        this._clearHealTimer();
+    }
+
+    _clearHealTimer() {
         if (this.healTimer) {
-            clearInterval(this.healTimer);
+            this._workerClearInterval(this.healTimer);
             this.healTimer = null;
         }
     }
 
-    // 失败后逐步回复生命值：每秒回复20%，直到100%
+    // 战斗内每次攻击都要用到、但在一场战斗中不会变化的数据，开战/换人/换宝石时计算一次
+    _cacheBattleDerived() {
+        const battle = this.currentBattle;
+        if (!battle) return;
+        const state = this.gameState;
+        const activeId = state.team[state.activePokemonIndex];
+        const stored = this.getStoredData(activeId);
+        const wildTypes = POKEMON_DATA[battle.wild.id]?.types || [];
+        const skill = this._getBestSkillForEnemy(activeId, wildTypes);
+        battle.derived = {
+            playerLevel: stored ? stored.level : 5,
+            playerTypes: POKEMON_DATA[activeId]?.types || [],
+            wildTypes,
+            playerPower: skill.power > 0 ? skill.power : 50,
+            skillName: skill.name,
+            skillType: skill.type,
+            playerCrit: this._getCritParams(true),
+            enemyCrit: this._getCritParams(false),
+            dodgeRate: Math.min(75, this.getGemBonuses().dodge_rate) / 100,
+        };
+    }
+
+    // 失败后逐步回复生命值：每秒回复20%，直到100%（使用 Worker 定时器，后台不被节流）
     startHealingAfterDefeat() {
         if (!this.currentBattle) return;
+        this._clearHealTimer();
 
         const maxHp = this.currentBattle.playerMaxHp;
-        const healPerSecond = Math.floor(maxHp * 0.2); // 每秒回复20%
+        const healPerSecond = Math.max(1, Math.floor(maxHp * DEFEAT_HEAL_PERCENT_PER_SEC));
 
-        this.healTimer = setInterval(() => {
+        this.healTimer = this._workerSetInterval(() => {
             if (!this.currentBattle) {
-                clearInterval(this.healTimer);
-                this.healTimer = null;
+                this._clearHealTimer();
                 return;
             }
 
@@ -1777,8 +1608,7 @@ class GameCore {
             // 回复满后重新开始战斗
             if (this.currentBattle.playerCurrentHp >= maxHp) {
                 this.currentBattle.playerCurrentHp = maxHp;
-                clearInterval(this.healTimer);
-                this.healTimer = null;
+                this._clearHealTimer();
                 // 战斗失败后更换敌人
                 this.gameState.currentEnemy = null;
                 this.save();
@@ -1788,39 +1618,27 @@ class GameCore {
     }
 
     battleTick() {
-        if (!this.currentBattle) return;
+        const battle = this.currentBattle;
+        if (!battle) return;
+        if (!battle.derived) this._cacheBattleDerived();
+        const d = battle.derived;
 
         const now = Date.now();
-        const delta = now - this.currentBattle.lastTick;
-        this.currentBattle.lastTick = now;
+        const delta = now - battle.lastTick;
+        battle.lastTick = now;
 
-        this.currentBattle.playerTimer += delta;
-        this.currentBattle.enemyTimer += delta;
+        battle.playerTimer += delta;
+        battle.enemyTimer += delta;
 
         // 玩家攻击
-        if (this.currentBattle.playerTimer >= this.currentBattle.playerNextAttack) {
-            this.currentBattle.playerTimer = 0;
-            const activePokemonId = this.gameState.team[this.gameState.activePokemonIndex];
-            const activePokemon = this.createPokemon(activePokemonId, true);
-            const playerTypes = POKEMON_DATA[activePokemonId]?.types || [];
-            const wildTypes = POKEMON_DATA[this.currentBattle.wild.id]?.types || [];
-
-            // 获取最优技能
-            const bestSkill = this._getBestSkillForEnemy(activePokemonId, wildTypes);
-            const skillPower = bestSkill.power;
-            const skillName = bestSkill.name;
-            const skillType = bestSkill.type;
-
-            const result = this.calculateDamage(
-                activePokemon.level,
-                this.currentBattle.playerStats.attack,
-                this.currentBattle.wildStats.defense,
-                playerTypes,
-                wildTypes,
-                true, // isPlayer
-                skillPower
+        if (battle.playerTimer >= battle.playerNextAttack) {
+            battle.playerTimer = 0;
+            const result = this._computeDamage(
+                d.playerLevel, battle.playerStats.attack, battle.wildStats.defense,
+                d.playerTypes, d.wildTypes, d.playerPower,
+                d.playerCrit.rate, d.playerCrit.multiplier
             );
-            this.currentBattle.wildCurrentHp -= result.damage;
+            battle.wildCurrentHp -= result.damage;
 
             if (this.onBattleEvent) {
                 this.onBattleEvent('playerAttack', {
@@ -1828,16 +1646,16 @@ class GameCore {
                     critical: result.criticalHit,
                     typeEffectiveness: result.typeEffectiveness,
                     effectivenessText: result.effectivenessText,
-                    hp: this.currentBattle.wildCurrentHp,
-                    maxHp: this.currentBattle.wildMaxHp,
-                    skillName: skillName,
-                    skillType: skillType,
+                    hp: battle.wildCurrentHp,
+                    maxHp: battle.wildMaxHp,
+                    skillName: d.skillName,
+                    skillType: d.skillType,
                 });
             }
 
             // 野生宝可梦被击败
-            if (this.currentBattle.wildCurrentHp <= 0) {
-                this.currentBattle.wildCurrentHp = 0;
+            if (battle.wildCurrentHp <= 0) {
+                battle.wildCurrentHp = 0;
                 if (this._towerMode) {
                     this.onTowerEnemyDefeated();
                 } else {
@@ -1848,30 +1666,22 @@ class GameCore {
         }
 
         // 敌方攻击
-        if (this.currentBattle.enemyTimer >= this.currentBattle.enemyNextAttack) {
-            this.currentBattle.enemyTimer = 0;
+        if (battle.enemyTimer >= battle.enemyNextAttack) {
+            battle.enemyTimer = 0;
 
             // 闪避判定（宝石加成，上限75%）
-            const gemBonuses = this.getGemBonuses();
-            const dodgeRate = Math.min(75, gemBonuses.dodge_rate) / 100;
-            if (dodgeRate > 0 && Math.random() < dodgeRate) {
+            if (d.dodgeRate > 0 && this.rng() < d.dodgeRate) {
                 if (this.onBattleEvent) {
                     this.onBattleEvent('playerDodge', {});
                 }
                 // 闪避成功，不受伤害
             } else {
-                const wildTypes = POKEMON_DATA[this.currentBattle.wild.id]?.types || [];
-                const activePokemonId = this.gameState.team[this.gameState.activePokemonIndex];
-                const playerTypes = POKEMON_DATA[activePokemonId]?.types || [];
-                const result = this.calculateDamage(
-                    this.currentBattle.wild.level,
-                    this.currentBattle.wildStats.attack,
-                    this.currentBattle.playerStats.defense,
-                    wildTypes,
-                    playerTypes,
-                    false // not player
+                const result = this._computeDamage(
+                    battle.wild.level, battle.wildStats.attack, battle.playerStats.defense,
+                    d.wildTypes, d.playerTypes, 50,
+                    d.enemyCrit.rate, d.enemyCrit.multiplier
                 );
-                this.currentBattle.playerCurrentHp -= result.damage;
+                battle.playerCurrentHp -= result.damage;
 
                 if (this.onBattleEvent) {
                     this.onBattleEvent('enemyAttack', {
@@ -1879,23 +1689,20 @@ class GameCore {
                         critical: result.criticalHit,
                         typeEffectiveness: result.typeEffectiveness,
                         effectivenessText: result.effectivenessText,
-                        hp: this.currentBattle.playerCurrentHp,
-                        maxHp: this.currentBattle.playerMaxHp,
+                        hp: battle.playerCurrentHp,
+                        maxHp: battle.playerMaxHp,
                     });
                 }
 
-                // 玩家宝可梦被击败 -> 逐步回复生命值
-                if (this.currentBattle.playerCurrentHp <= 0) {
-                    this.currentBattle.playerCurrentHp = 0;
+                // 玩家宝可梦被击败
+                if (battle.playerCurrentHp <= 0) {
+                    battle.playerCurrentHp = 0;
+                    if (this.onBattleEvent) {
+                        this.onBattleEvent('playerFainted', {});
+                    }
                     if (this._towerMode) {
-                        if (this.onBattleEvent) {
-                            this.onBattleEvent('playerFainted', {});
-                        }
                         this.onTowerPlayerFainted();
                     } else {
-                        if (this.onBattleEvent) {
-                            this.onBattleEvent('playerFainted', {});
-                        }
                         this.stopBattle();
                         // 开始逐步回复生命值
                         this.startHealingAfterDefeat();
@@ -1908,12 +1715,12 @@ class GameCore {
         // 更新HP条（UI）
         if (this.onBattleEvent) {
             this.onBattleEvent('tick', {
-                playerHp: this.currentBattle.playerCurrentHp,
-                playerMaxHp: this.currentBattle.playerMaxHp,
-                enemyHp: this.currentBattle.wildCurrentHp,
-                enemyMaxHp: this.currentBattle.wildMaxHp,
-                playerAttackProgress: this.currentBattle.playerTimer / this.currentBattle.playerNextAttack,
-                enemyAttackProgress: this.currentBattle.enemyTimer / this.currentBattle.enemyNextAttack,
+                playerHp: battle.playerCurrentHp,
+                playerMaxHp: battle.playerMaxHp,
+                enemyHp: battle.wildCurrentHp,
+                enemyMaxHp: battle.wildMaxHp,
+                playerAttackProgress: battle.playerTimer / battle.playerNextAttack,
+                enemyAttackProgress: battle.enemyTimer / battle.enemyNextAttack,
             });
         }
     }
@@ -1964,8 +1771,7 @@ class GameCore {
         this.save();
 
         // 计算下一场战斗的延迟：当攻击速度<800ms时，延迟=攻击速度
-        const attackInterval = this.getAttackInterval(battle.playerStats.speed);
-        const delay = attackInterval < 800 ? attackInterval : 800;
+        const delay = this._getNextBattleDelay(this.getAttackInterval(battle.playerStats.speed));
 
         // 短暂延迟后开始下一场战斗（记录计划时间，页面切回时可补偿）
         this._nextBattleScheduledAt = Date.now() + delay;
@@ -1997,10 +1803,10 @@ class GameCore {
     // 给指定宝可梦增加经验（每个形态独立存储）
     addExpToPokemon(pokemonId, amount) {
         const storedData = this.gameState.caughtPokemon[pokemonId];
-        if (!storedData) return;
+        if (!storedData) return false;
 
         const baseData = POKEMON_DATA[pokemonId];
-        if (!baseData) return;
+        if (!baseData) return false;
 
         // 等级上限检查
         if (storedData.level >= MAX_POKEMON_LEVEL) {
@@ -2025,6 +1831,8 @@ class GameCore {
             }
         }
 
+        if (leveledUp) this._touchSpecies(pokemonId);
+
         // 闪光双向传播：升级后，如果该宝可梦是闪光的，同步给整条进化链
         if (leveledUp && this.gameState.shinyDex[pokemonId]) {
             this._syncShinyInFamily(pokemonId);
@@ -2040,43 +1848,13 @@ class GameCore {
 
     // 检查进化目标所在地区是否已解锁（跨代进化限制）
     _isEvolutionRegionUnlocked(evoId) {
-        // 二代精灵（ID 152-251）需要城都地区解锁
-        if (evoId >= 152 && evoId <= 251) {
-            return this.isRegionUnlocked('johto');
+        // 目标物种所在世代的地区必须已解锁；一代（关都）默认解锁
+        for (const regionId in REGION_POKEDEX_RANGES) {
+            const [start, end] = REGION_POKEDEX_RANGES[regionId];
+            if (evoId >= start && evoId <= end) {
+                return regionId === 'kanto' ? true : this.isRegionUnlocked(regionId);
+            }
         }
-        // 三代精灵（ID 252-386）需要丰缘地区解锁
-        if (evoId >= 252 && evoId <= 386) {
-            return this.isRegionUnlocked('hoenn');
-        }
-        // 四代精灵（ID 387-493）需要神奥地区解锁
-        if (evoId >= 387 && evoId <= 493) {
-            return this.isRegionUnlocked('sinnoh');
-        }
-        // 五代精灵（ID 494-649）需要合众地区解锁
-        if (evoId >= 494 && evoId <= 649) {
-            return this.isRegionUnlocked('unova');
-        }
-        // 六代精灵（ID 650-721）需要卡洛斯地区解锁
-        if (evoId >= 650 && evoId <= 721) {
-            return this.isRegionUnlocked('kalos');
-        }
-        // 七代精灵（ID 722-809）需要阿罗拉地区解锁
-        if (evoId >= 722 && evoId <= 809) {
-            return this.isRegionUnlocked('alola');
-        }
-        // 八代精灵（ID 810-905）需要伽勒尔地区解锁（含洗翠地区 899-905）
-        if (evoId >= 810 && evoId <= 905) {
-            return this.isRegionUnlocked('galar');
-        }
-        // 九代精灵（ID 906-1025）需要帕底亚地区解锁
-        if (evoId >= 906 && evoId <= 1025) {
-            return this.isRegionUnlocked('paldea');
-        }
-        // Mega进化精灵（ID 1026-1073）需要Mega地区解锁
-        if (evoId >= 1026 && evoId <= 1073) {
-            return this.isRegionUnlocked('mega');
-        }
-        // 一代精灵默认解锁
         return true;
     }
 
@@ -2106,6 +1884,7 @@ class GameCore {
                 // 闪光传递：如果基础形态是闪光，进化型也应该是闪光
                 if (isBaseShiny && !this.gameState.shinyDex[evo.id]) {
                     this.gameState.shinyDex[evo.id] = true;
+                    this._touchSpecies(evo.id);
                     // 双向传播闪光给整条进化链
                     this._syncShinyInFamily(evo.id);
 
@@ -2137,6 +1916,7 @@ class GameCore {
                     exp: 0,
                     skillLevel: 0,
                 };
+                this._touchSpecies(evo.id);
 
                 // 升级触发的进化需要替换队伍成员
                 if (replaceTeam) {
@@ -2280,6 +2060,7 @@ class GameCore {
 
             // 如果个体值有更新，同进化链按每项最大值同步（不会降档）
             if (updated) {
+                this._touchSpecies(wildPokemon.id);
                 const baseId = this.getBasePokemonId(wildPokemon.id);
                 this.syncBestIvsInFamily(baseId, stored.ivs);
             }
@@ -2299,23 +2080,20 @@ class GameCore {
 
     // ===================== 野生宝可梦生成 =====================
     // 按照地图设定的等级范围生成野生宝可梦
-    generateWildPokemon(route) {
+    // cache（可选，离线模拟用）：{ shinyRate, weightReduce }，避免每场重复计算
+    generateWildPokemon(route, cache = null) {
         if (!route || !route.pokemon || route.pokemon.length === 0) return null;
 
         // 已完成宝可梦出现权重降低（completed_weight_reduce 效果）
-        const weightReduceValue = this.getBadgeEffectValue('completed_weight_reduce');
+        const weightReduceValue = cache ? cache.weightReduce : this.getBadgeEffectValue('completed_weight_reduce');
         const weights = route.pokemon.map(p => {
             let w = p.weight;
             if (weightReduceValue !== null) {
                 const caught = this.gameState.pokedex[p.id] === 'caught';
                 if (caught) {
                     const storedData = this.getStoredData(p.id);
-                    const is6V = storedData && storedData.ivs &&
-                        storedData.ivs.hp === 31 && storedData.ivs.atk === 31 &&
-                        storedData.ivs.def === 31 && storedData.ivs.spAtk === 31 &&
-                        storedData.ivs.spDef === 31 && storedData.ivs.speed === 31;
                     const hasShiny = !!this.gameState.shinyDex[p.id];
-                    if (is6V && hasShiny) {
+                    if (storedData && this._isPerfectIvs(storedData.ivs) && hasShiny) {
                         w *= (1 - weightReduceValue); // 权重减少
                     }
                 }
@@ -2325,7 +2103,7 @@ class GameCore {
 
         // 按权重随机选择
         const totalWeight = weights.reduce((sum, w) => sum + w, 0);
-        let rand = Math.random() * totalWeight;
+        let rand = this.rng() * totalWeight;
 
         let selected = route.pokemon[0];
         for (let i = 0; i < route.pokemon.length; i++) {
@@ -2339,14 +2117,19 @@ class GameCore {
         // 按照地图/宝可梦配置的等级范围生成等级
         const minLevel = selected.levelRange[0];
         const maxLevel = selected.levelRange[1];
-        let level = Math.floor(Math.random() * (maxLevel - minLevel + 1)) + minLevel;
+        let level = Math.floor(this.rng() * (maxLevel - minLevel + 1)) + minLevel;
 
         // 天赋：野生怪物等级提升（挑战塔除外）
         if (!this._towerMode) {
             level = this.getMonsterLevelBoost(level);
         }
 
-        return this.createWildPokemon(selected.id, level);
+        return this.createWildPokemon(selected.id, level, cache ? cache.shinyRate : undefined);
+    }
+
+    _isPerfectIvs(ivs) {
+        return !!ivs && ivs.hp === 31 && ivs.atk === 31 && ivs.def === 31 &&
+            ivs.spAtk === 31 && ivs.spDef === 31 && ivs.speed === 31;
     }
 
     // ===================== 队伍管理 =====================
@@ -2375,6 +2158,7 @@ class GameCore {
                     // 继承攻击进度：按百分比映射到新的攻击间隔上
                     this.currentBattle.playerTimer = Math.floor(this.currentBattle.playerNextAttack * oldAttackProgress);
                     // 保留 enemyTimer 不变
+                    this._cacheBattleDerived();
 
                     // 挑战塔模式下同步更新 HP 百分比
                     if (this._towerMode) {
@@ -2393,21 +2177,21 @@ class GameCore {
 
     addToTeamFromPokedex(pokemonId) {
         if (this.gameState.team.length >= 6) {
-            console.log('addToTeamFromPokedex: 队伍已满');
+            this._log('addToTeamFromPokedex: 队伍已满');
             return false;
         }
         if (this.gameState.pokedex[pokemonId] !== 'caught') {
-            console.log('addToTeamFromPokedex: 该宝可梦未捕获', pokemonId);
+            this._log('addToTeamFromPokedex: 该宝可梦未捕获', pokemonId);
             return false;
         }
         // 检查是否已在队伍中
         if (this.gameState.team.includes(pokemonId)) {
-            console.log('addToTeamFromPokedex: 该宝可梦已在队伍中', pokemonId);
+            this._log('addToTeamFromPokedex: 该宝可梦已在队伍中', pokemonId);
             return false;
         }
 
         this.gameState.team.push(pokemonId);
-        console.log('addToTeamFromPokedex: 成功添加', pokemonId);
+        this._log('addToTeamFromPokedex: 成功添加', pokemonId);
         return true;
     }
 
@@ -2417,15 +2201,15 @@ class GameCore {
             id === pokemonId && idx !== this.gameState.activePokemonIndex
         );
         if (teamIndex === -1) {
-            console.log('removeFromTeamByPokemonId: 未找到可移除的宝可梦', pokemonId, 'activeIndex:', this.gameState.activePokemonIndex);
+            this._log('removeFromTeamByPokemonId: 未找到可移除的宝可梦', pokemonId, 'activeIndex:', this.gameState.activePokemonIndex);
             return false;
         }
         if (this.gameState.team.length <= 1) {
-            console.log('removeFromTeamByPokemonId: 队伍至少需要保留一只');
+            this._log('removeFromTeamByPokemonId: 队伍至少需要保留一只');
             return false;
         }
 
-        console.log('removeFromTeamByPokemonId: 移除索引', teamIndex, 'pokemonId:', pokemonId);
+        this._log('removeFromTeamByPokemonId: 移除索引', teamIndex, 'pokemonId:', pokemonId);
         this.gameState.team.splice(teamIndex, 1);
 
         // 调整出战索引
@@ -2618,19 +2402,7 @@ class GameCore {
 
     // 按地区获取图鉴统计
     getPokedexStatsByRegion(regionId) {
-        const regionRanges = {
-            kanto: [1, 151],
-            johto: [152, 251],
-            hoenn: [252, 386],
-            sinnoh: [387, 493],
-            unova: [494, 649],
-            kalos: [650, 721],
-            alola: [722, 809],
-            galar: [810, 905],
-            paldea: [906, 1025],
-            mega: [1026, 1073],
-        };
-        const range = regionRanges[regionId];
+        const range = REGION_POKEDEX_RANGES[regionId];
         if (!range) return this.getPokedexStats();
 
         let seen = 0, caught = 0;
@@ -2673,174 +2445,106 @@ class GameCore {
     }
 
     // ===================== 存档 =====================
+    // 写入状态前的整理：时间戳、战斗血量（刷新页面后恢复）
+    _prepareStateForSave() {
+        const gs = this.gameState;
+        if (!gs) return null;
+        gs.schemaVersion = SAVE_SCHEMA_VERSION;
+        gs.lastSave = Date.now();
+
+        if (this.currentBattle) {
+            if (this.currentBattle.playerCurrentHp > 0) {
+                gs.battleHp = {
+                    playerHp: this.currentBattle.playerCurrentHp,
+                    playerMaxHp: this.currentBattle.playerMaxHp,
+                    enemyHp: this.currentBattle.wildCurrentHp,
+                    playerTimer: this.currentBattle.playerTimer,
+                    enemyTimer: this.currentBattle.enemyTimer,
+                };
+            } else {
+                delete gs.battleHp;
+            }
+        }
+        return gs;
+    }
+
+    // 请求保存（防抖）：战斗、升级等高频路径使用，约 2 秒后合并写入，最迟 10 秒
     save() {
         if (!this.gameState) return;
-        this.gameState.lastSave = Date.now();
-
-        // 保存当前战斗状态（刷新页面后恢复）
-        if (this.currentBattle && this.currentBattle.playerCurrentHp > 0) {
-            this.gameState.battleHp = {
-                playerHp: this.currentBattle.playerCurrentHp,
-                playerMaxHp: this.currentBattle.playerMaxHp,
-                enemyHp: this.currentBattle.wildCurrentHp,
-                playerTimer: this.currentBattle.playerTimer,
-                enemyTimer: this.currentBattle.enemyTimer,
-            };
-        } else {
-            delete this.gameState.battleHp;
-        }
-
-        try {
-            const json = JSON.stringify(this.gameState);
-            let dataToSave = json;
-            // 使用 LZString 压缩（兼容老存档：压缩后以特定前缀标记）
-            if (typeof LZString !== 'undefined') {
-                const compressed = LZString.compressToUTF16(json);
-                if (compressed.length < json.length) {
-                    dataToSave = 'LZ:' + compressed;
-                    console.log(`[存档] 压缩 ${json.length} → ${dataToSave.length} 字符（${(1 - dataToSave.length/json.length * 100).toFixed(1)}%）`);
-                } else {
-                    console.log(`[存档] 压缩未获益，保持原样 (${json.length})`);
-                }
-            }
-            localStorage.setItem('pokemon_idle_save', dataToSave);
-        } catch (e) {
-            console.error('保存失败:', e);
-        }
+        this.saver.request();
     }
 
+    // 立即保存：手动保存、导出、离开页面、导入/删除后使用
+    saveNow() {
+        if (!this.gameState) return { ok: false, code: 'no_state' };
+        return this.saver.flush(true);
+    }
+
+    // 用户确认接管（另一个标签页写过存档后，本页恢复保存）
+    takeOverSave() {
+        return this.saver.takeOver();
+    }
+
+    // 读取存档：主存档 → 备份轮转；返回是否成功。诊断信息见 this.loadReport
     load() {
-        try {
-            const raw = localStorage.getItem('pokemon_idle_save');
-            if (!raw) return false;
-
-            let data = raw;
-            // 兼容：新存档以 "LZ:" 开头表示已压缩，老存档直接是JSON
-            if (raw.startsWith('LZ:')) {
-                if (typeof LZString !== 'undefined') {
-                    data = LZString.decompressFromUTF16(raw.slice(3));
-                    if (!data) {
-                        console.error('存档解压失败，数据可能损坏');
-                        return false;
-                    }
-                } else {
-                    console.error('LZString 库未加载，无法读取压缩存档');
-                    return false;
-                }
-            }
-
-            const parsed = JSON.parse(data);
-            // 验证数据完整性
-            if (!parsed || !parsed.team || !Array.isArray(parsed.team) || parsed.team.length === 0) {
-                console.warn('存档数据不完整，将重新开始');
-                return false;
-            }
-
-            // 确保所有必要字段存在
-            if (typeof parsed.activePokemonIndex !== 'number') parsed.activePokemonIndex = 0;
-            if (!parsed.pokedex) parsed.pokedex = {};
-            if (!parsed.caughtPokemon) parsed.caughtPokemon = {};
-            if (!parsed.currentRegion) parsed.currentRegion = 'kanto';
-            if (!parsed.currentRoute) parsed.currentRoute = 'kanto_route1';
-            if (!parsed.stats) parsed.stats = { totalBattles: 0, totalCatches: 0, totalExp: 0, totalGold: 0, playTime: 0 };
-            if (!parsed.settings) parsed.settings = {};
-            if (!parsed.shinyDex) parsed.shinyDex = {};
-            if (!parsed.pokedexDisplay) parsed.pokedexDisplay = {};
-            if (typeof parsed.gold !== 'number') parsed.gold = 0;
-            if (!parsed.badges) parsed.badges = {};
-            if (!Array.isArray(parsed.gems)) parsed.gems = [];
-            if (!parsed.stats.totalGold) parsed.stats.totalGold = 0;
-            // 树果系统兼容
-            if (!Array.isArray(parsed.berryPlots)) parsed.berryPlots = [];
-            if (!parsed.berryBag) parsed.berryBag = {};
-            if (!parsed.berryFed) parsed.berryFed = {};
-            // 技能系统兼容：为旧存档的宝可梦补充skillLevel字段
-            if (parsed.caughtPokemon) {
-                for (const id in parsed.caughtPokemon) {
-                    if (typeof parsed.caughtPokemon[id].skillLevel !== 'number') {
-                        parsed.caughtPokemon[id].skillLevel = 0;
-                    }
-                }
-            }
-            // 天赋系统兼容
-            if (!parsed.talents) parsed.talents = {};
-            // 挑战塔系统兼容
-            if (!parsed.tower) parsed.tower = { currentFloor: 1, highestFloor: 0, enemies: null, currentEnemyIndex: 0, inBattle: false };
-            if (parsed.tower.inBattle) {
-                // 刷新页面时如果正在挑战中，重置为未挑战状态（不丢失层数进度）
-                parsed.tower.inBattle = false;
-            }
-            // 确保activePokemonIndex在范围内
-            if (parsed.activePokemonIndex >= parsed.team.length) parsed.activePokemonIndex = 0;
-
-            this.gameState = parsed;
-            // 迁移修复：旧版 generateUID 批量购买时产生重复uid
-            this._migrateFixGemUids();
-            return true;
-        } catch (e) {
-            console.error('加载失败:', e);
-        }
-        return false;
+        const r = this.saver.load();
+        this.loadReport = {
+            ok: r.ok,
+            empty: !!r.empty,
+            source: r.source || null,
+            recovered: !!r.recovered,
+            fromVersion: r.fromVersion || null,
+            warnings: r.warnings || [],
+            failures: r.failures || [],
+            error: r.error || null,
+        };
+        if (!r.ok) return false;
+        this.gameState = r.state;
+        this.currentBattle = null;
+        this._invalidateAllCaches();
+        return true;
     }
 
-    // 导出存档（用于复制粘贴）：压缩 + Base64
+    // 导出存档文本（Base64，兼容旧格式）
     exportSave() {
         if (!this.gameState) return '';
-        this.save();
-        const json = JSON.stringify(this.gameState);
-        const payload = (typeof LZString !== 'undefined')
-            ? 'LZ:' + LZString.compressToUTF16(json)
-            : json;
-        return btoa(unescape(encodeURIComponent(payload)));
+        this.saveNow();
+        return this.saver.exportText(this.gameState);
     }
 
+    // 导入存档：先完整校验/清洗，成功后才替换当前状态；并先备份当前存档
+    // 返回 { success, message?, warnings? }
     importSave(dataStr) {
-        try {
-            const raw = atob(dataStr.trim());
-            let decoded;
-            try {
-                decoded = decodeURIComponent(escape(raw));
-            } catch (_) {
-                decoded = raw;
-            }
-            // 兼容压缩存档
-            let dataStr2 = decoded;
-            if (decoded.startsWith('LZ:')) {
-                if (!LZString) throw new Error('LZString 库未加载');
-                dataStr2 = LZString.decompressFromUTF16(decoded.slice(3));
-                if (!dataStr2) throw new Error('存档解压失败');
-            }
-            const data = JSON.parse(dataStr2);
+        const r = this.saver.parseImport(dataStr);
+        if (!r.ok) return { success: false, message: r.error, code: r.code };
 
-            // 基本验证
-            if (!data.team || !Array.isArray(data.team) || data.team.length === 0) {
-                throw new Error('无效的存档数据');
-            }
-
-            this.gameState = data;
-            // 迁移修复：宝石重复uid（旧generateUID方案批量购买时碰撞）
-            this._migrateFixGemUids();
-            // 记录导入前的lastSave，用于离线结算
-            this._importedLastSave = this.gameState.lastSave || null;
-            this.save();
-            return true;
-        } catch (e) {
-            console.error('导入失败:', e);
-            return false;
-        }
+        this.saver.backupNow(true);
+        this.stopBattle();
+        this._towerMode = false;
+        this._towerBattle = null;
+        this.currentBattle = null;
+        this._offlineSimState = null;
+        this.gameState = r.state;
+        this._invalidateAllCaches();
+        // 记录导入存档的 lastSave，用于离线结算
+        this._importedLastSave = this.gameState.lastSave || null;
+        this.saveNow();
+        return { success: true, warnings: r.warnings, fromVersion: r.fromVersion };
     }
 
     deleteSave() {
-        localStorage.removeItem('pokemon_idle_save');
+        this.saver.deleteAll();
         this.gameState = null;
         this.currentBattle = null;
+        this._invalidateAllCaches();
     }
 
     startAutoSave() {
         if (this.autoSaveTimer) clearInterval(this.autoSaveTimer);
+        // 兜底：每 30 秒把仍未写入的变更落盘（没有变更则跳过）
         this.autoSaveTimer = setInterval(() => {
-            this.save();
-        }, 30000); // 每30秒自动保存
+            this.saver.flush(false);
+        }, 30000);
     }
 
     // ===================== 经验条信息 =====================
@@ -2853,9 +2557,10 @@ class GameCore {
 
         const currentLevelExp = getExpForLevel(baseData.expGroup, storedData.level);
         const nextLevelExp = getExpForLevel(baseData.expGroup, storedData.level + 1);
-        const expInLevel = storedData.exp - currentLevelExp;
+        // 旧存档里的初始皮卡丘经验可能低于 Lv5 起点，显示时按 0 处理
+        const expInLevel = Math.max(0, storedData.exp - currentLevelExp);
         const expNeeded = nextLevelExp - currentLevelExp;
-        const percent = Math.min(100, Math.floor(expInLevel / expNeeded * 100));
+        const percent = Math.max(0, Math.min(100, Math.floor(expInLevel / expNeeded * 100)));
 
         return { current: expInLevel, needed: expNeeded, percent };
     }
@@ -2863,8 +2568,7 @@ class GameCore {
     // ===================== 徽章系统 =====================
     // 检查某地区是否通关（所有宝可梦已捕获）
     isRegionCompleted(regionId) {
-        const regionRanges = { kanto: [1, 151], johto: [152, 251], hoenn: [252, 386], sinnoh: [387, 493], unova: [494, 649], kalos: [650, 721], alola: [722, 809], galar: [810, 905], paldea: [906, 1025], mega: [1026, 1073] };
-        const range = regionRanges[regionId];
+        const range = REGION_POKEDEX_RANGES[regionId];
         if (!range) return false;
         const [start, end] = range;
         for (let id = start; id <= end; id++) {
@@ -2973,7 +2677,7 @@ class GameCore {
                 const baseWeight = 100; // 每个属性基础权重100
                 const bonusWeight = talentGemAttrLevel; // 每级+1%的额外权重
                 const totalWeight = GEM_ATTRIBUTES.length * baseWeight + bonusWeight;
-                let roll = Math.random() * totalWeight;
+                let roll = this.rng() * totalWeight;
                 attrTemplate = null;
                 for (const attr of GEM_ATTRIBUTES) {
                     const w = baseWeight + (attr.id === talentGemAttrChoice ? bonusWeight : 0);
@@ -2982,17 +2686,17 @@ class GameCore {
                 }
                 if (!attrTemplate) attrTemplate = GEM_ATTRIBUTES[GEM_ATTRIBUTES.length - 1];
             } else {
-                attrTemplate = GEM_ATTRIBUTES[Math.floor(Math.random() * GEM_ATTRIBUTES.length)];
+                attrTemplate = GEM_ATTRIBUTES[Math.floor(this.rng() * GEM_ATTRIBUTES.length)];
             }
             let value;
             if (kalosBias > 0) {
                 // 生成两次随机值取较大值（biased random），概率偏向高值
-                const roll1 = Math.random();
-                const roll2 = Math.random();
+                const roll1 = this.rng();
+                const roll2 = this.rng();
                 const biasedRoll = Math.max(roll1, roll2);
                 value = Math.floor(biasedRoll * (attrTemplate.max - attrTemplate.min + 1)) + attrTemplate.min;
             } else {
-                value = Math.floor(Math.random() * (attrTemplate.max - attrTemplate.min + 1)) + attrTemplate.min;
+                value = Math.floor(this.rng() * (attrTemplate.max - attrTemplate.min + 1)) + attrTemplate.min;
             }
             attrs.push({ id: attrTemplate.id, name: attrTemplate.name, value, unit: attrTemplate.unit, icon: attrTemplate.icon });
         }
@@ -3019,7 +2723,7 @@ class GameCore {
             }
         }
         const totalWeight = qualities.reduce((s, q) => s + q.weight, 0);
-        let rand = Math.random() * totalWeight;
+        let rand = this.rng() * totalWeight;
         let quality = qualities[0];
         for (const q of qualities) {
             rand -= q.weight;
@@ -3097,6 +2801,8 @@ class GameCore {
         // 从背包移除并装到徽章
         const gem = this.gameState.gems.splice(gemIndex, 1)[0];
         badge.gem = gem;
+        this._gemBonusCache = null;
+        this._cacheBattleDerived();
         this.save();
         return { success: true };
     }
@@ -3109,6 +2815,8 @@ class GameCore {
 
         this.gameState.gems.push(badge.gem);
         badge.gem = null;
+        this._gemBonusCache = null;
+        this._cacheBattleDerived();
         this.save();
         return { success: true };
     }
@@ -3132,13 +2840,13 @@ class GameCore {
         return { success: true };
     }
 
-    // 宝石合成：10个同品质宝石 => 1个高品质宝石（神话不可继续）
+    // 宝石合成：10个同品质宝石 => 1个高品质宝石（永恒为最高品质，无法继续合成）
     synthesizeGems(sourceQuality, gemUids) {
         const sourceInfo = this.getGemQualityById(sourceQuality);
         if (!sourceInfo) return { success: false, message: '宝石品质不存在' };
 
         const targetQuality = this.getNextGemQualityId(sourceQuality);
-        if (!targetQuality) return { success: false, message: '神话宝石无法继续合成' };
+        if (!targetQuality) return { success: false, message: '永恒宝石无法继续合成' };
 
         if (!Array.isArray(gemUids)) return { success: false, message: '请选择要合成的宝石' };
 
@@ -3405,7 +3113,9 @@ class GameCore {
             reason,
         };
     }
+    // 宝石加成（缓存）。镶嵌/卸下/读档时失效；返回对象视为只读。
     getGemBonuses() {
+        if (this._gemBonusCache) return this._gemBonusCache;
         const bonuses = {};
         for (const attr of GEM_ATTRIBUTES) {
             bonuses[attr.id] = 0;
@@ -3418,6 +3128,7 @@ class GameCore {
                 }
             }
         }
+        this._gemBonusCache = bonuses;
         return bonuses;
     }
 
@@ -3429,8 +3140,10 @@ class GameCore {
 
     // 自动更换最优宝可梦：计算队伍中对指定敌人预估伤害最高的成员索引
     // 支持一击必杀策略：fastest(速度最快) / lowest_level(等级最低) / no_change(不改变)
-    getBestTeamMemberForEnemy(wildPokemon) {
-        if (!this.gameState.team || this.gameState.team.length <= 1) return -1;
+    // cache（可选，离线模拟用）：{ teamStats[], teamLevels[] }，避免每场重算队伍属性
+    getBestTeamMemberForEnemy(wildPokemon, cache = null) {
+        const team = this.gameState.team;
+        if (!team || team.length <= 1) return -1;
 
         const wildTypes = POKEMON_DATA[wildPokemon.id]?.types || [];
         const enemyStats = this.calculateStats(wildPokemon);
@@ -3440,40 +3153,22 @@ class GameCore {
         // 收集每只队友的预估数据
         const candidates = [];
 
-        for (let i = 0; i < this.gameState.team.length; i++) {
-            const pokemonId = this.gameState.team[i];
-            const pokemon = this.createPokemon(pokemonId, true);
-            if (!pokemon) continue;
-
-            const stats = this.calculateBattleStats(i);
+        for (let i = 0; i < team.length; i++) {
+            const pokemonId = team[i];
+            const stats = cache ? cache.teamStats[i] : this.calculateBattleStats(i);
             if (!stats) continue;
+            const level = cache ? cache.teamLevels[i] : this.getStoredData(pokemonId)?.level;
+            if (!level) continue;
 
             const playerTypes = POKEMON_DATA[pokemonId]?.types || [];
 
-            // 获取最优技能威力（选对敌人克制最强的技能）
-            let skillPower = 0;
-            const skillInfo = this.getSkillForPokemon(pokemonId);
-            if (skillInfo && skillInfo.skills.length > 0) {
-                let bestSkill = skillInfo.skills[0];
-                if (skillInfo.skills.length > 1) {
-                    let bestMult = 0;
-                    for (const sk of skillInfo.skills) {
-                        const eff = getBestTypeEffectiveness([sk.type], wildTypes);
-                        if (eff.multiplier > bestMult || bestMult === 0) {
-                            bestMult = eff.multiplier;
-                            bestSkill = sk;
-                        }
-                    }
-                }
-                skillPower = bestSkill.power;
-            }
+            // 最优技能威力（选对敌人克制最强的技能），无技能时固定 50
+            const skill = this._getBestSkillForEnemy(pokemonId, wildTypes);
+            const power = skill.power > 0 ? skill.power : 50;
 
-            const power = skillPower > 0 ? skillPower : 50;
-
-            // 使用与 calculateDamage 一致的公式预估单次伤害
-            const baseDmg = Math.floor(((2 * pokemon.level / 5 + 2) * power * stats.attack / enemyStats.defense) / 50) + 2;
-            const typeResult = getBestTypeEffectiveness(playerTypes, wildTypes);
-            const typeMult = typeResult.multiplier;
+            // 使用与 _computeDamage 一致的公式预估单次伤害
+            const baseDmg = Math.floor(((2 * level / 5 + 2) * power * stats.attack / enemyStats.defense) / 50) + 2;
+            const typeMult = getBestTypeEffectiveness(playerTypes, wildTypes).multiplier;
             const estimatedDmg = Math.floor(baseDmg * typeMult);
             // 考虑伤害波动最低值(85%)来判定一击必杀，避免因波动导致需要两次攻击
             const minDmg = Math.floor(estimatedDmg * 0.85);
@@ -3483,7 +3178,7 @@ class GameCore {
             // DPS 分数 = 单次伤害 / 攻击间隔
             const dps = estimatedDmg / atkInterval;
 
-            candidates.push({ index: i, estimatedDmg, atkInterval, canOneShot, dps, level: pokemon.level });
+            candidates.push({ index: i, estimatedDmg, atkInterval, canOneShot, dps, level });
         }
 
         if (candidates.length === 0) return -1;
@@ -3571,6 +3266,7 @@ class GameCore {
         storedData.level = 1;
         storedData.exp = returnExp;
         storedData.skillLevel = currentSkillLevel + 1;
+        this._touchSpecies(pokemonId);
 
         // 根据返还经验重新计算等级
         while (storedData.level < MAX_POKEMON_LEVEL) {
@@ -3582,6 +3278,7 @@ class GameCore {
             }
         }
 
+        this._touchSpecies(pokemonId);
         // 检查进化（因为等级变化可能触发）
         this.checkEvolution(pokemonId);
 
@@ -3596,6 +3293,7 @@ class GameCore {
                 this.currentBattle.playerCurrentHp = newPlayerStats.hp;
                 this.currentBattle.playerNextAttack = this.getAttackInterval(newPlayerStats.speed);
             }
+            this._cacheBattleDerived();
         }
 
         this.save();
@@ -3637,6 +3335,7 @@ class GameCore {
             storedData.level = 1;
             storedData.exp = returnExp;
             storedData.skillLevel = currentSkillLevel + 1;
+            this._touchSpecies(Number(pokemonId));
 
             // 根据返还经验重新计算等级
             while (storedData.level < MAX_POKEMON_LEVEL) {
@@ -3648,11 +3347,12 @@ class GameCore {
                 }
             }
 
+            this._touchSpecies(Number(pokemonId));
             // 检查进化
             this.checkEvolution(pokemonId);
 
             // 如果在队伍中，刷新战斗状态
-            const teamIndex = this.gameState.team.indexOf(pokemonId);
+            const teamIndex = this.gameState.team.indexOf(Number(pokemonId));
             if (teamIndex !== -1 && this.currentBattle) {
                 const newPlayerStats = this.calculateBattleStats(this.gameState.activePokemonIndex);
                 if (newPlayerStats && teamIndex === this.gameState.activePokemonIndex) {
@@ -3661,6 +3361,7 @@ class GameCore {
                     this.currentBattle.playerCurrentHp = newPlayerStats.hp;
                     this.currentBattle.playerNextAttack = this.getAttackInterval(newPlayerStats.speed);
                 }
+                this._cacheBattleDerived();
             }
 
             results.push({
@@ -3888,7 +3589,7 @@ class GameCore {
         const berryId = plot.berryId;
         const berryInfo = BERRY_DATA[berryId];
         // 收获：每次采摘获得1~2个
-        let yield_count = 1 + Math.floor(Math.random() * 2); // 1, 2
+        let yield_count = 1 + Math.floor(this.rng() * 2); // 1, 2
         // 树果收获翻倍（berry_yield_bonus 效果）
         const berryYieldValue = this.getBadgeEffectValue('berry_yield_bonus');
         if (berryYieldValue !== null) {
@@ -3937,6 +3638,7 @@ class GameCore {
         if (this.gameState.berryBag[berryId] <= 0) delete this.gameState.berryBag[berryId];
         // 记录喂食
         this.gameState.berryFed[pokemonId][berryId] = currentFed + 1;
+        this._touchSpecies(pokemonId);
         this.save();
         return { success: true, fed: currentFed + 1, max: maxForType };
     }
@@ -4033,7 +3735,7 @@ class GameCore {
             let id;
             let attempts = 0;
             do {
-                id = pool[Math.floor(Math.random() * pool.length)];
+                id = pool[Math.floor(this.rng() * pool.length)];
                 attempts++;
             } while (usedIds.has(id) && attempts < 100);
             usedIds.add(id);
@@ -4137,6 +3839,7 @@ class GameCore {
             enemyTimer: 0,
             lastTick: Date.now(),
         };
+        this._cacheBattleDerived();
 
         if (this.onBattleEvent) {
             this.onBattleEvent('start', this.currentBattle);
