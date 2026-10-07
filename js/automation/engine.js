@@ -15,6 +15,12 @@ const AutomationMethods = {
         return !!(this.gameState && this.gameState.automation && this.gameState.automation.policy);
     },
 
+    // ---------- 会话 ----------
+    getHuntSession() {
+        const a = this.gameState && this.gameState.automation;
+        return a && a.session ? a.session : null;
+    },
+
     // 严格校验后才会保存；无效策略不改变任何状态。返回 { ok, errors, policy }
     setAutomationPolicy(raw) {
         const result = validateAutomationPolicy(raw);
