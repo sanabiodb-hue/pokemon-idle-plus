@@ -36,11 +36,11 @@ const ShopMethods = {
     },
 
     getPotionHealPercent() {
-        return POTION_HEAL_PERCENT;
+        return Math.min(1, POTION_HEAL_PERCENT * this.getModifier('potion_heal').mult);
     },
 
     getPotionCapacity() {
-        return this.getEconomyConfig().potion.capacityBase;
+        return Math.floor(this.getEconomyConfig().potion.capacityBase + this.getModifier('potion_cap').add);
     },
 
     getPotionPrice() {

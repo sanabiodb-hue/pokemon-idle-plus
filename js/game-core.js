@@ -111,6 +111,7 @@ class GameCore {
     }
 
     _invalidateAllCaches() {
+        this._mods = null;                // 升级修改器缓存（存档/导入/新游戏后等级可能变了）
         this._instanceStats.clear();
         this._dexBonus = null;
         this._gemBonusCache = null;
@@ -186,6 +187,7 @@ class GameCore {
             badgeExp: this.getBadgeEffectValue('exp_bonus'),
             talentExp: this.getTalentValue('exp_bonus'),
             towerBonus: this.getTowerBonus(),
+            upgradeExp: this.getModifier('exp').mult,
             teamExpRate: TEAM_EXP_RATE,
             reserveExpRate: RESERVE_EXP_RATE * (1 + talentPokedex / 100 + badgePokedex),
             healPercent: VICTORY_HEAL_PERCENT,
@@ -197,12 +199,14 @@ class GameCore {
         if (b.badgeExp !== null) e = Math.floor(e * (1 + b.badgeExp));
         if (b.talentExp > 0) e = Math.floor(e * (1 + b.talentExp / 100));
         if (b.towerBonus > 0) e = Math.floor(e * (1 + b.towerBonus / 100));
+        if (b.upgradeExp !== undefined && b.upgradeExp !== 1) e = Math.floor(e * b.upgradeExp);
         return e;
     }
 
     // 两场战斗之间的间隔：攻击间隔 < 800ms 时等于攻击间隔
     _getNextBattleDelay(attackInterval) {
-        return attackInterval < NEXT_BATTLE_MAX_DELAY_MS ? attackInterval : NEXT_BATTLE_MAX_DELAY_MS;
+        const base = attackInterval < NEXT_BATTLE_MAX_DELAY_MS ? attackInterval : NEXT_BATTLE_MAX_DELAY_MS;
+        return base * this.getModifier('battle_delay').mult;     // 升级"狩猎速度"缩短间隔（Live 与 Fast 共用此函数）
     }
 
     // 重置速率跟踪器（切换地图时调用）
@@ -815,7 +819,7 @@ class GameCore {
             if (s.playerHp > 0 && s.playerHp >= max) return { ok: false, type: 'HEAL', code: 'full_hp' };
             const hpBefore = s.playerHp;
             const revived = hpBefore <= 0;
-            s.playerHp = Math.min(max, Math.max(0, hpBefore) + potionHealAmount(max));
+            s.playerHp = Math.min(max, Math.max(0, hpBefore) + potionHealAmount(max, this.getPotionHealPercent()));
             inv.potions--;
             s.lowHpNotified = false;
             this._emit('heal', { potion: true, reason: 'automation', amount: s.playerHp - Math.max(0, hpBefore), hpBefore, hpAfter: s.playerHp, maxHp: max, revived, potionsLeft: inv.potions });
@@ -2021,7 +2025,7 @@ class GameCore {
         const fainted = b.playerCurrentHp <= 0;
         if (!fainted && b.playerCurrentHp >= b.playerMaxHp) return { ok: false, code: 'full_hp' };
         const hpBefore = b.playerCurrentHp;
-        const amount = potionHealAmount(b.playerMaxHp);
+        const amount = potionHealAmount(b.playerMaxHp, this.getPotionHealPercent());
         b.playerCurrentHp = Math.min(b.playerMaxHp, b.playerCurrentHp + amount);
         b._lowHpNotified = false;
         inv.potions--;
@@ -3425,6 +3429,8 @@ class GameCore {
         if (towerGoldBonus > 0) {
             gold = Math.floor(gold * (1 + towerGoldBonus / 100));
         }
+        const upgradeGold = this.getModifier('gold').mult;
+        if (upgradeGold !== 1) gold = Math.floor(gold * upgradeGold);
         return Math.max(1, gold);
     }
 
