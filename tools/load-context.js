@@ -12,7 +12,7 @@ const ROOT = path.resolve(__dirname, '..');
 const DATA_FILES = ['js/pokemon-data.js', 'js/route-data.js', 'js/game-config.js'];
 const GAME_FILES = [
     'js/lzstring.min.js', 'js/util.js', 'js/pokemon-data.js', 'js/route-data.js',
-    'js/game-config.js', 'js/automation/clock.js', 'js/automation/events.js', 'js/analytics.js', 'js/pokemon-instance.js', 'js/species-traits.js', 'js/party.js', 'js/pc.js',
+    'js/game-config.js', 'js/automation/clock.js', 'js/automation/events.js', 'js/analytics.js', 'js/pokemon-instance.js', 'js/automation/quality.js', 'js/species-traits.js', 'js/party.js', 'js/pc.js',
     'js/pokemon-validation.js', 'js/pokemon-migration.js', 'js/pokemon-roster.js',
     'js/save-manager.js', 'js/game-core.js', 'js/guidance.js',
 ];
@@ -112,7 +112,7 @@ function loadGameContext(opts = {}) {
   SAVE_DEBOUNCE_MS, SAVE_MAX_WAIT_MS, SAVE_BACKUP_INTERVAL_MS, SAVE_BACKUP_COUNT, SAVE_IMPORT_MAX_CHARS,
   BASE_CRIT_RATE, BASE_CRIT_MULTIPLIER, BASE_SHINY_RATE, DEFEAT_HEAL_MS, MAX_OFFLINE_TIME,
   GUIDE_ONBOARDING_STEPS, GUIDE_GOALS, guideDefaultState, sanitizeGuideState,
-  SystemClock, ManualClock, EventBus, AUTOMATION_EVENT_TYPES,
+  SystemClock, ManualClock, EventBus, AUTOMATION_EVENT_TYPES, calculatePokemonQuality, QUALITY_GRADES,
   Analytics, ANALYTICS_STORAGE_KEY, ANALYTICS_QUEUE_MAX, ANALYTICS_EVENT_NAMES, ANALYTICS_SESSION_GAP_MS,
   CAPTURE_DUPLICATE_POLICIES, DEFAULT_CAPTURE_DUPLICATE_POLICY, DUPLICATE_CAPTURE_RATE, DUPLICATE_SPECIES_CAP,
   MAX_POKEMON_LEVEL, MAX_SKILL_LEVEL, TOWER_MAX_FLOOR, GEM_BAG_MAX, BERRY_STAT_CAP
