@@ -2248,10 +2248,45 @@ class GameCore {
     }
 
     // 击败后处理：首次捕获或更新个体值
+    // 捕获入口：先问"要不要收"（默认永远收，与旧版一致；自动化狩猎进行时由策略决定），再走原有捕获规则
     processDefeat(wildPokemon) {
+        const decision = this.decideCapture(wildPokemon);
+        const q = decision.quality;
+        this._emit('capture_attempted', {
+            id: wildPokemon.id, level: wildPokemon.level, shiny: !!wildPokemon.isShiny,
+            grade: q ? q.grade : null, percentage: q ? q.percentage : null,
+            decision: decision.capture, reason: decision.reason, priority: decision.priority,
+        });
+        if (!decision.capture) {
+            this._emit('capture_skipped', { id: wildPokemon.id, reason: decision.reason, grade: q ? q.grade : null });
+            return null;
+        }
+        const outcome = this._applyCapture(wildPokemon);
+        this._emit('pokemon_captured', {
+            id: wildPokemon.id, uid: outcome.uid, firstCatch: outcome.firstCatch, newIndividual: !!outcome.uid,
+            shiny: !!(outcome.shiny), grade: q ? q.grade : null, reason: decision.reason,
+        });
+        return outcome;
+    }
+
+    // 捕获决策。没有进行中的自动化狩猎时返回 legacy（永远收），不读策略、不消耗随机数
+    decideCapture(wildPokemon) {
+        const hunt = this.getHuntSession();
+        const quality = calculatePokemonQuality({ ivs: wildPokemon.ivs, shiny: !!wildPokemon.isShiny });
+        if (!hunt || hunt.state !== 'running') return { capture: true, reason: 'legacy', priority: 'normal', quality };
+        return shouldCapture({
+            policy: this.getAutomationPolicy(),
+            wild: { id: wildPokemon.id, ivs: wildPokemon.ivs, shiny: !!wildPokemon.isShiny },
+            isNewSpecies: !this.gameState.caughtPokemon[wildPokemon.id],
+        });
+    }
+
+    _applyCapture(wildPokemon) {
         // 只检查当前形态ID是否是首次捕获（不追溯到基础形态）
         const stored = this.gameState.caughtPokemon[wildPokemon.id];
         const isFirstCatch = !stored;
+        let firstCatchUid = null;
+        let dupInst = null;
 
         if (isFirstCatch) {
             // 记录捕获前的地区解锁状态
@@ -2271,6 +2306,7 @@ class GameCore {
                 traits: rollTraits(wildPokemon.id, this.rng),
             });
             this._count('captures');
+            firstCatchUid = (this.roster.primaryOf(wildPokemon.id) || {}).uid || null;
             this._track('capture', { id: wildPokemon.id, species_count: this.getPokedexStats().caught, shiny: !!wildPokemon.isShiny });
             this._trackOnce('first_capture', { id: wildPokemon.id });
             
@@ -2385,6 +2421,7 @@ class GameCore {
             }
 
             const captured = wantsNew ? this._captureDuplicate(wildPokemon) : null;
+            dupInst = captured;
             if (captured) this._count('duplicates');
 
             if ((updated || captured) && this.onCatch) {
@@ -2400,6 +2437,9 @@ class GameCore {
                 });
             }
         }
+
+        const inst = isFirstCatch ? this.roster.get(firstCatchUid) : dupInst;
+        return { firstCatch: isFirstCatch, uid: inst ? inst.uid : null, shiny: !!(inst && inst.shiny) };
     }
 
     // ===================== 野生宝可梦生成 =====================

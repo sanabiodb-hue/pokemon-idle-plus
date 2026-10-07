@@ -143,7 +143,9 @@ test('核心发出内部事件：battle_started → pokemon_defeated → xp_gain
     game.startBattle(); game.stopBattle();
     win(game, 19);
     const types = seen.map(e => e.type);
-    assert.deepEqual(plain(types.slice(0, 4)), ['battle_started', 'xp_gained', 'pokemon_defeated', 'battle_completed']);
+    const core = types.filter(t => ['battle_started', 'xp_gained', 'pokemon_defeated', 'battle_completed'].includes(t));
+    assert.deepEqual(plain(core), ['battle_started', 'xp_gained', 'pokemon_defeated', 'battle_completed']);
+    assert.ok(types.indexOf('capture_attempted') > types.indexOf('pokemon_defeated'), '捕获决定发生在击败之后');
     const started = seen[0];
     assert.equal(started.route, 'kanto_route1');
     assert.ok(started.enemyId && started.enemyLevel);

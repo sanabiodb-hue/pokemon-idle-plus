@@ -17,7 +17,7 @@ function defaultAutomationPolicy() {
     return {
         version: AUTOMATION_POLICY_VERSION,
         target: { type: 'any', speciesIds: [] },
-        capture: { enabled: true, minQualityPercent: 0, alwaysShiny: true },
+        capture: { enabled: true, minQualityPercent: 0, alwaysShiny: true, alwaysNewSpecies: true },
         heal: { enabled: true, belowPercent: 40, onNoPotions: 'stop' },
         route: { mode: 'stay' },
         switchPolicy: { mode: 'bestMatchup' },
@@ -82,6 +82,7 @@ function _normalizePolicy(raw) {
     const cap = section('capture');
     if (cap) {
         if (_has(cap, 'enabled')) { if (typeof cap.enabled === 'boolean') out.capture.enabled = cap.enabled; else err('capture.enabled', 'not_boolean', 'Valor inválido.'); }
+        if (_has(cap, 'alwaysNewSpecies')) { if (typeof cap.alwaysNewSpecies === 'boolean') out.capture.alwaysNewSpecies = cap.alwaysNewSpecies; else err('capture.alwaysNewSpecies', 'not_boolean', 'Valor inválido.'); }
         if (_has(cap, 'alwaysShiny')) { if (typeof cap.alwaysShiny === 'boolean') out.capture.alwaysShiny = cap.alwaysShiny; else err('capture.alwaysShiny', 'not_boolean', 'Valor inválido.'); }
         if (_has(cap, 'minQualityPercent')) {
             const v = _strictNumber(cap.minQualityPercent, 0, 100);
