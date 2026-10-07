@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-v2.71-blue" alt="version">
+  <img src="https://img.shields.io/badge/version-v2.72-blue" alt="version">
   <img src="https://img.shields.io/badge/license-AGPL--3.0-green" alt="license">
   <img src="https://img.shields.io/badge/platform-Web-orange" alt="platform">
   <img src="https://img.shields.io/badge/made_with-HTML%2FCSS%2FJS-yellow" alt="tech">
@@ -66,6 +66,12 @@ pokemon-idle-plus/
 │   ├── pokemon-data.js     # 宝可梦数据（1073 只）、经验曲线、属性克制表
 │   ├── route-data.js       # 地区与道路数据（10 地区 / 192 条道路）
 │   ├── game-config.js      # 配置与常量：徽章/宝石/树果/技能/天赋/挑战塔/存档/战斗公共常量
+│   ├── pokemon-instance.js # 个体（instance）：规范形状、性格表、昵称净化（纯函数）
+│   ├── party.js            # 队伍（PartyManager）：≤6 只个体，team 视图原地同步
+│   ├── pc.js               # PC / 箱子（PCStorage）：多箱子、按格子存放个体
+│   ├── pokemon-validation.js  # 个体名册的清洗（读档/导入）与不变量检查
+│   ├── pokemon-migration.js   # 旧存档（每物种一条）→ 个体 的迁移
+│   ├── pokemon-roster.js   # 名册（PokemonRoster）：个体/队伍/PC/放生 + 旧结构兼容视图
 │   ├── save-manager.js     # 存档：编解码、schemaVersion、迁移、校验清洗、备份轮转、防抖写入
 │   ├── game-core.js        # 游戏核心逻辑（战斗、升级、捕获、离线结算等）
 │   ├── ui.js               # UI 渲染与交互
@@ -130,7 +136,7 @@ Requer apenas Node.js ≥ 20 (nenhuma dependência para instalar).
 
 ```bash
 npm run validate   # valida Pokémon, rotas, regiões e configs (exit 1 se houver erro)
-npm test           # 109 testes automatizados (node:test)
+npm test           # 199 testes automatizados (node:test)
 npm run smoke      # teste de "build": abre o jogo num Chromium headless (precisa do pacote playwright;
                    #   se não estiver instalado, o teste é ignorado)
 npm run check      # os três acima em sequência
@@ -155,7 +161,7 @@ npm run check      # os três acima em sequência
   (comparava `"25"` com `25`); `main.js` não usa mais `requestAnimationFrame` (não dispara em aba oculta).
 
 **Save**
-- `schemaVersion` (atual: **2**; saves antigos sem o campo são tratados como v1) + cadeia de migrações em
+- `schemaVersion` (atual: **3**, ver a Fase 2; v2 = Fase 1; saves antigos sem o campo são tratados como v1) + cadeia de migrações em
   `SAVE_MIGRATIONS` (`js/save-manager.js`). Ao ler um save v1 é guardada uma cópia `pokemon_idle_save_premigration_v1`.
 - Todo save (local, backup ou importado) passa pelo mesmo pipeline: decodificação → checagem estrutural → migração →
   **sanitização por lista branca** (reconstrói o objeto inteiro: só campos conhecidos, tipos e limites forçados).
@@ -200,7 +206,80 @@ npm run check      # os três acima em sequência
 3. Declare os campos novos em `sanitizeSave` (a sanitização descarta o que não conhece).
 4. Adicione um teste em `tests/save.test.js`.
 
-### Problemas conhecidos / ainda não tratados
+## 🧬 Fase 2: indivíduos reais de cada espécie (v2.72, schema v3)
+
+> Antes: `caughtPokemon[espécie]` — uma única entrada por espécie. Agora: o jogador possui **vários indivíduos** da
+> mesma espécie (Pikachu #A, #B, #C), cada um com o próprio estado. O sistema antigo continua funcionando como
+> **camada de compatibilidade**; nada foi removido.
+
+### Estruturas novas (persistidas no save)
+
+| Campo | Conteúdo |
+|---|---|
+| `ownedPokemon` | `{ uid: indivíduo }` — todos os indivíduos |
+| `party` | `[uid, …]` (≤ 6) — equipe ativa; `activePokemonIndex` continua sendo o índice na equipe |
+| `pc` | `{ boxes: [{ id, name, capacity, slots: [uid\|null, …] }] }` — caixas (30 por caixa, até 200 caixas) |
+| `released` | histórico de liberados/transferidos (últimos 500) |
+| `speciesPrimary` | `{ espécie: uid }` — o indivíduo que representa a espécie nos sistemas antigos |
+| `nextPokemonSeq` | contador dos `uid` (`p1`, `p2`, …: determinístico, único por save) |
+
+Um indivíduo tem: `uid`, `speciesId`, `level`, `exp`, `ivs` (6 IVs próprios), `nature` (25 naturezas, **sem efeito ainda**),
+`ability` (reservado), `gender` (reservado; não há tabela de proporção de sexo nos dados), `shiny`, `nickname` (opcional,
+sanitizado, ≤ 12 caracteres), `origin` (`starter`/`wild`/`evolution`/`legacy_migration`/`egg`/`gift`/`debug`),
+`originRoute`, `caughtAt` (data do dia, UTC), `battles`, `stats` (`victories`, `faints`, `expGained`, `damageDealt`,
+`damageTaken`, `criticalHits`) e `skillLevel`.
+
+### Módulos (nada disso está em `GameUI`)
+
+- `pokemon-instance.js` — forma canônica (`buildInstance`/`createPokemonInstance`), naturezas, `sanitizeNickname`.
+- `party.js` (`PartyManager`) — adicionar/remover/trocar/substituir; mantém `team` (espécies) sincronizado **in place**.
+- `pc.js` (`PCStorage`) — depositar/retirar/mover (com troca), várias caixas, renomear com nome sanitizado.
+- `pokemon-roster.js` (`PokemonRoster`) — fachada: `create`, `release`, `moveToParty`, `moveToPc`, `swapPartyWithPc`,
+  `setPrimary`, `setNickname`, `reconcile`. Não depende do `GameCore` (recebe `getState`), por isso é testável sozinha.
+- `pokemon-migration.js` e `pokemon-validation.js` — migração v2→v3 e sanitização/invariantes (`validateRosterIntegrity`).
+- `GameCore.roster` expõe tudo isso; a UI só chama `getPartyInstance(i)`/`getPartyMemberView(i)`.
+
+### Camada de compatibilidade (como o jogo antigo continua funcionando)
+
+1. **`caughtPokemon[espécie]` é o *mesmo objeto* do indivíduo primário da espécie.** Código antigo que altera
+   `level/exp/ivs/skillLevel` está alterando o indivíduo — sem cópia e sem sincronização manual.
+2. **`team` é a visão em espécies de `party`** (mesmo índice). Se código/teste antigo escreve `gameState.team = […]`
+   diretamente, `roster.reconcile()` (chamado antes de qualquer cálculo) reconstrói `party` a partir dele; quem sai da
+   equipe vai para o PC — **nunca se perde um indivíduo**.
+3. **Combate usa indivíduos**: stats de batalha, bônus de 20% dos colegas, XP (100% do ativo / 50% de cada colega),
+   golpes e estatísticas individuais são calculados por indivíduo. Duas Pikachus na equipe têm níveis/IVs/shiny/XP independentes.
+4. **Regras de espécie preservadas** (para não alterar o balanceamento): o bônus de 1% da Pokédex e o XP de reserva
+   valem para o *primário* de cada espécie que não está na equipe; indivíduos extras não os multiplicam. Capturar de novo
+   uma espécie já possuída ainda só melhora os IVs do primário (captura avançada fica para a próxima fase).
+5. `shinyDex` continua sendo o registro por espécie: o primário é shiny ⇔ `shinyDex[espécie]`. Um indivíduo extra shiny
+   não altera o registro antigo.
+6. **Invariantes** (checados por `validateRosterIntegrity`): cada indivíduo está em exatamente um lugar (equipe ou uma
+   caixa); toda espécie com indivíduos tem um primário; `caughtPokemon[e] === ownedPokemon[primário]`; `team` bate com `party`.
+7. Limitação intencional: o último indivíduo de uma espécie não pode ser liberado (o jogo antigo trata "tem indivíduo"
+   como "espécie coletada"); indivíduos na equipe também não.
+
+### Migração (schema v2 → v3)
+
+`SAVE_MIGRATIONS[2]` → `migrateLegacyToInstances`: para cada espécie em `caughtPokemon` cria **um indivíduo**
+(`p1…pN`, em ordem de espécie) preservando IVs, nível, XP, `skillLevel` e shiny (`shinyDex`); natureza neutra (`hardy`,
+o cálculo atual não tem natureza), `origin: legacy_migration`, `caughtAt: null`. A equipe vira `party` na mesma
+ordem (e o mesmo `activePokemonIndex`); os demais vão para as caixas do PC em ordem de Pokédex. Os campos antigos
+são mantidos. Saves v1 passam por v1→v2→v3. O save original fica guardado em `pokemon_idle_save_premigration_v<N>`.
+A migração é determinística e idempotente, e o pipeline de sanitização (`sanitizeRosterSection`) valida tudo: uids,
+campos, posições de PC, equipe, primários, registros de liberados (strings sem HTML/aspas, chaves como `__proto__` rejeitadas).
+Enquanto o save mantiver os dois formatos, **o campo antigo vence em caso de conflito** (regra de transição, só
+relevante para saves editados por ferramentas antigas).
+
+Prova de compatibilidade: os testes carregam saves reais gerados pelo código v1 e v2 e comparam, com os números que
+o **código antigo** calcula (`tests/fixtures/legacy-battle-stats.json`), stats de batalha, poder, potencial, barra de
+XP, soma de níveis e Pokédex — idênticos.
+
+### Como adicionar uma nova informação ao indivíduo
+1. Acrescente o campo em `buildInstance` (valor padrão seguro) e em `sanitizeInstance` (validação).
+2. Se precisar migrar dados antigos, faça-o em `migrateLegacyToInstances` ou crie `SAVE_MIGRATIONS[3]` (e suba `SAVE_SCHEMA_VERSION`).
+3. Teste em `tests/pokemon-instance.test.js` e `tests/roster-save.test.js`.
+
+### Problemas conhecidos / ainda não tratados (fases 1 e 2)
 - A UI continua sendo `innerHTML` em muitos lugares (os dados vindos do save já são sanitizados, mas a camada de
   renderização ainda não foi componentizada); `ui.js` e `game-core.js` seguem grandes (~3,5 mil e ~4,3 mil linhas).
 - Dados com 9 avisos históricos (não bloqueiam): 7 Pokémon com faixa de nível fora da faixa da rota, um salto de
@@ -209,6 +288,12 @@ npm run check      # os três acima em sequência
 - Os testes do jogo são de lógica (Node) + um smoke test de navegador; ainda não há testes visuais da UI.
 - A proteção multi-aba é por evento `storage` (aviso + pausa), não um lock exclusivo.
 - Mudar o relógio do sistema para trás/frente ainda afeta frutas e offline dentro do limite de 24/48 h.
+- **Fase 2:** não há tela de PC/caixas nem de apelidos (a lógica e os dados existem em `roster`; a UI atual só mostra o
+  apelido na equipe). Naturezas/habilidades/sexo são apenas dados (sem efeito). O save mantém **os dois formatos**
+  (indivíduos + espelho `caughtPokemon`/`team`), cerca de 1,9× maior (≈ 53 mil caracteres LZ com 1073 espécies) e cada
+  gravação completa leva ≈ 0,4 s nesse extremo (o debounce mantém isso a cada ≥ 10 s); o espelho sairá quando o código
+  antigo for aposentado. Bônus de Pokédex, XP de reserva, frutas, talentos e a UI da Pokédex continuam por espécie
+  (primário). `release` ainda não é exposto na UI.
 
 ## 📄 许可证
 

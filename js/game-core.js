@@ -20,7 +20,7 @@ class GameCore {
         this.rng = Math.random;
         this.debug = false;
         // 性能缓存（见 _touchSpecies / _invalidateAllCaches）
-        this._speciesStats = new Map();   // 宝可梦ID → calculateStats 结果
+        this._instanceStats = new Map();  // 个体 uid → calculateStats 结果（旧的“物种级缓存”现在按个体缓存）
         this._dexBonus = null;            // 图鉴1%加成缓存 { key, value }
         this._gemBonusCache = null;
         // 存档相关回调（UI 注册）
@@ -33,6 +33,13 @@ class GameCore {
         this._offlineSimState = null;
         this._offlineSummary = null;
         this._towerMode = false;
+        // 个体名册：个体 / 队伍 / PC / 放生记录，并维护 caughtPokemon、team 这两个旧兼容视图
+        this.roster = new PokemonRoster(() => this.gameState);
+        // 名册里的变化（创建/放生/换主个体）要让属性缓存失效
+        this.roster.onChange = (speciesId) => {
+            if (speciesId === null) this._invalidateAllCaches();
+            else this._touchSpecies(speciesId);
+        };
         this.saver = new SaveManager({
             getState: () => this._prepareStateForSave(),
             onError: (e) => { if (this.onSaveError) this.onSaveError(e); },
@@ -50,16 +57,66 @@ class GameCore {
     }
 
     // ===================== 缓存失效 =====================
-    // 任何会改变某只宝可梦等级/个体值/闪光/树果的写操作都必须调用它。
+    // 任何会改变某只个体等级/个体值/闪光/树果的写操作都必须调用它们。
+    // 旧代码按“物种”思考，所以 _touchSpecies 会让该物种的全部个体缓存失效，
+    // 并把 shinyDex（旧的物种级闪光标记）同步到主个体上。
     _touchSpecies(id) {
-        this._speciesStats.delete(id);
+        const gs = this.gameState;
+        if (gs && gs.ownedPokemon) {
+            const primary = this.roster.primaryOf(id);
+            if (primary && gs.shinyDex[id] && !primary.shiny) primary.shiny = true;
+            for (const inst of this.roster.ofSpecies(id)) this._instanceStats.delete(inst.uid);
+        }
+        this._dexBonus = null;
+    }
+
+    // 只有这一只个体变化（例如它自己升级）
+    _touchInstance(inst) {
+        this._instanceStats.delete(inst.uid);
         this._dexBonus = null;
     }
 
     _invalidateAllCaches() {
-        this._speciesStats.clear();
+        this._instanceStats.clear();
         this._dexBonus = null;
         this._gemBonusCache = null;
+    }
+
+    // ===================== 队伍个体访问（旧的 team 数组 ↔ 新的 party 个体）=====================
+    // 旧代码和旧测试会直接改 gameState.team；每次需要队伍个体前先对齐。一致时几乎零开销。
+    _partyInstance(index) {
+        this.roster.reconcile();
+        const gs = this.gameState;
+        const uid = gs.party[index];
+        return uid === undefined ? null : gs.ownedPokemon[uid] || null;
+    }
+
+    // 公开：队伍里第 index 位的个体对象（界面/外部模块使用）
+    getPartyInstance(index) {
+        return this._partyInstance(index);
+    }
+
+    // 给界面用的队伍成员快照（界面不需要知道个体/PC 的内部结构）
+    getPartyMemberView(index) {
+        const inst = this._partyInstance(index);
+        if (!inst) return null;
+        const data = POKEMON_DATA[inst.speciesId];
+        return {
+            uid: inst.uid,
+            speciesId: inst.speciesId,
+            name: data.name,
+            displayName: getInstanceDisplayName(inst),
+            nickname: inst.nickname,
+            level: inst.level,
+            ivs: inst.ivs,
+            shiny: inst.shiny,
+            nature: inst.nature,
+            gender: inst.gender,
+            skillLevel: inst.skillLevel,
+            types: data.types,
+            battles: inst.battles,
+            isPrimary: this.roster.isPrimary(inst),
+        };
     }
 
     // ===================== 在线/离线共用的进度公式 =====================
@@ -389,8 +446,10 @@ class GameCore {
             return;
         }
 
-        const activePokemonId = state.team[state.activePokemonIndex];
-        const playerStats = this.calculateBattleStats(state.activePokemonIndex);
+        this.roster.reconcile();
+        const activeInst = this._partyInstance(state.activePokemonIndex);
+        const activePokemonId = activeInst ? activeInst.speciesId : null;
+        const playerStats = activeInst ? this.calculateBattleStats(state.activePokemonIndex) : null;
         if (!playerStats) {
             this._finishOfflineSimulation(0, reportedMs);
             return;
@@ -406,11 +465,9 @@ class GameCore {
         const cachedTeamLevels = [];
         for (let i = 0; i < state.team.length; i++) {
             cachedTeamStats[i] = this.calculateBattleStats(i);
-            const storedData = this.getStoredData(state.team[i]);
-            cachedTeamLevels[i] = storedData ? storedData.level : 0;
+            const member = this._partyInstance(i);
+            cachedTeamLevels[i] = member ? member.level : 0;
         }
-
-        const storedData = this.getStoredData(activePokemonId);
 
         // 玩家起始血量：优先沿用进行中的战斗，其次存档中的血量百分比，最后满血
         let startHp = playerStats.hp;
@@ -428,6 +485,7 @@ class GameCore {
             battlesSimulated: 0,
             route,
             activePokemonId,
+            activeInst,
             playerStats,
             playerHp: startHp,
             playerAttackInterval: this.getAttackInterval(playerStats.speed),
@@ -442,8 +500,8 @@ class GameCore {
             },
             cachedTeamStats,
             cachedTeamLevels,
-            teamKey: state.team.join(','),
-            cachedPlayerLevel: storedData ? storedData.level : 5,
+            teamKey: state.party.join(','),
+            cachedPlayerLevel: activeInst.level,
             cachedPlayerTypes: POKEMON_DATA[activePokemonId]?.types || [],
             // 图鉴经验累积器（批量化）
             pokedexExpAccumulator: {},
@@ -457,12 +515,12 @@ class GameCore {
     _offlineSyncActive(s, newStats) {
         const oldMaxHp = s.playerStats.hp;
         const hpPercent = oldMaxHp > 0 ? s.playerHp / oldMaxHp : 1;
-        s.activePokemonId = this.gameState.team[this.gameState.activePokemonIndex];
+        s.activeInst = this._partyInstance(this.gameState.activePokemonIndex) || s.activeInst;
+        s.activePokemonId = s.activeInst.speciesId;
         s.playerStats = newStats;
         s.playerAttackInterval = this.getAttackInterval(newStats.speed);
         s.playerHp = Math.max(1, Math.floor(newStats.hp * Math.min(1, hpPercent)));
-        const sd = this.getStoredData(s.activePokemonId);
-        s.cachedPlayerLevel = sd ? sd.level : 5;
+        s.cachedPlayerLevel = s.activeInst.level;
         s.cachedPlayerTypes = POKEMON_DATA[s.activePokemonId]?.types || [];
     }
 
@@ -498,7 +556,7 @@ class GameCore {
             const wildTypes = POKEMON_DATA[wildPokemon.id]?.types || [];
 
             // 获取最优技能（复用公共方法）
-            const bestSkill = this._getBestSkillForEnemy(s.activePokemonId, wildTypes);
+            const bestSkill = this._getBestSkillForInstance(s.activeInst, wildTypes);
             const playerPower = bestSkill.power > 0 ? bestSkill.power : 50;
 
             // 模拟单场战斗
@@ -518,22 +576,27 @@ class GameCore {
                 // 玩家攻击
                 if (playerTimer >= s.playerAttackInterval) {
                     playerTimer = 0;
-                    enemyHp -= this._computeDamage(
+                    const hit = this._computeDamage(
                         s.cachedPlayerLevel, s.playerStats.attack, enemyStats.defense,
                         s.cachedPlayerTypes, wildTypes, playerPower,
                         s.critParams.rate, s.critParams.multiplier
-                    ).damage;
+                    );
+                    enemyHp -= hit.damage;
+                    s.activeInst.stats.damageDealt += hit.damage;
+                    if (hit.criticalHit) s.activeInst.stats.criticalHits++;
                 }
 
                 // 敌方攻击
                 if (enemyTimer >= enemyAttackInterval) {
                     enemyTimer = 0;
                     if (!(s.dodgeRate > 0 && this.rng() < s.dodgeRate)) {
-                        s.playerHp -= this._computeDamage(
+                        const taken = this._computeDamage(
                             wildPokemon.level, enemyStats.attack, s.playerStats.defense,
                             wildTypes, s.cachedPlayerTypes, 50,
                             s.enemyCritParams.rate, s.enemyCritParams.multiplier
                         ).damage;
+                        s.playerHp -= taken;
+                        s.activeInst.stats.damageTaken += taken;
                     }
                 }
             }
@@ -542,6 +605,7 @@ class GameCore {
 
             // 玩家被击败：等待回满血后继续（与在线 20%/秒 一致）
             if (s.playerHp <= 0) {
+                s.activeInst.stats.faints++;
                 s.remainingMs -= DEFEAT_HEAL_MS;
                 s.playerHp = s.playerStats.hp;
                 state.currentEnemy = null;
@@ -566,12 +630,12 @@ class GameCore {
                 }
 
                 // 仅在升级/队伍变化时才刷新缓存（避免每场都重算）
-                const teamKey = state.team.join(',');
+                const teamKey = state.party.join(',');
                 if (rewards.anyLevelUp || teamKey !== s.teamKey) {
                     const teamChanged = teamKey !== s.teamKey;
                     s.teamKey = teamKey;
                     for (let i = 0; i < state.team.length; i++) {
-                        const newLv = this.getStoredData(state.team[i])?.level || 0;
+                        const newLv = this._partyInstance(i)?.level || 0;
                         if (teamChanged || newLv !== s.cachedTeamLevels[i]) {
                             s.cachedTeamStats[i] = this.calculateBattleStats(i);
                             s.cachedTeamLevels[i] = newLv;
@@ -707,11 +771,11 @@ class GameCore {
             },
             lastSave: Date.now(),
         };
+        // 个体名册：ownedPokemon / party / pc / released / speciesPrimary
+        PokemonRoster.initState(this.gameState);
 
-        // 捕获初始皮卡丘（进化链基础ID是25）
-        this.catchPokemonWithIvs(25, 5, initialIvs);
-        // 将皮卡丘加入队伍
-        this.gameState.team.push(25);
+        // 捕获初始皮卡丘（进化链基础ID是25），直接放进队伍
+        this.catchPokemonWithIvs(25, 5, initialIvs, { origin: 'starter', originRoute: null, place: 'party' });
 
         this.saveNow();
         return this.gameState;
@@ -794,20 +858,27 @@ class GameCore {
 
 
     // 捕获宝可梦（带指定个体值）
-    catchPokemonWithIvs(pokemonId, level, ivs) {
+    // opts（可选）：{ origin, originRoute, place }，默认来历为野外捕获，放进 PC。
+    // 旧规则保持不变：每个物种只在“首次捕获”时创建个体；之后再捕获只会提升个体值。
+    catchPokemonWithIvs(pokemonId, level, ivs, opts = {}) {
         // 标记为已捕获
         this.gameState.pokedex[pokemonId] = 'caught';
         this.gameState.stats.totalCatches++;
 
-        // 直接存储在捕获形态自身ID下
-        if (!this.gameState.caughtPokemon[pokemonId]) {
-            this.gameState.caughtPokemon[pokemonId] = {
-                ivs: { ...ivs },
-                level: level,
+        // 该物种还没有任何个体：创建第一只个体（它同时是旧结构 caughtPokemon[物种] 的数据本体）
+        if (!this.roster.primaryOf(pokemonId)) {
+            this.roster.create({
+                speciesId: pokemonId,
+                level,
                 // 经验从该等级的起点开始（初始皮卡丘 Lv5 之前是 0，会让经验条显示为负数）
                 exp: getExpForLevel(POKEMON_DATA[pokemonId].expGroup, level),
-                skillLevel: 0,
-            };
+                ivs: { ...ivs },
+                shiny: !!this.gameState.shinyDex[pokemonId],   // 家族传播来的“待定闪光”
+                nature: DEFAULT_NATURE,                         // 中性性格：与旧版数值完全一致，且不消耗随机数
+                origin: opts.origin || 'wild',
+                originRoute: opts.originRoute !== undefined ? opts.originRoute : this.gameState.currentRoute,
+                place: opts.place || 'pc',
+            });
             this._touchSpecies(pokemonId);
         }
 
@@ -819,8 +890,10 @@ class GameCore {
         this.syncBestIvsInFamily(baseId, ivs);
 
         if (this.onCatch) {
+            const inst = this.roster.primaryOf(pokemonId);
             this.onCatch({ 
                 id: pokemonId, 
+                uid: inst ? inst.uid : null,
                 name: POKEMON_DATA[pokemonId].name, 
                 level: 1,
                 isFirstCatch: true
@@ -835,11 +908,12 @@ class GameCore {
 
     // ===================== 宝可梦创建 =====================
     // 从 caughtPokemon 中获取数据创建宝可梦实例
-    createPokemon(pokemonId, useStoredLevel = false) {
+    // instance（可选）：指定某一只个体；不传则使用该物种的主个体（旧行为）
+    createPokemon(pokemonId, useStoredLevel = false, instance = null) {
         const baseData = POKEMON_DATA[pokemonId];
         if (!baseData) return null;
 
-        const storedData = this.getStoredData(pokemonId);
+        const storedData = instance || this.getStoredData(pokemonId);
         if (!storedData) return null;
 
         const level = useStoredLevel ? storedData.level : 5;
@@ -851,7 +925,8 @@ class GameCore {
             level: level,
             exp: getExpForLevel(baseData.expGroup, level),
             ivs: { ...storedData.ivs },
-            isShiny: !!this.gameState.shinyDex[pokemonId], // 闪光图鉴中有记录则为闪光宝可梦
+            // 指定个体：用它自己的闪光；否则沿用物种级的闪光图鉴记录（旧行为）
+            isShiny: instance ? instance.shiny : !!this.gameState.shinyDex[pokemonId],
         };
 
         // 计算当前属性
@@ -967,15 +1042,15 @@ class GameCore {
 
     // 计算战力 = (HP + 攻击×技能威力系数 + 防御 + 速度) / 10
     // 技能等级通过技能威力影响攻击力评估：技能威力/50 作为攻击力系数
-    calculatePower(pokemonId, useStoredLevel = true) {
-        const pokemon = this.createPokemon(pokemonId, useStoredLevel);
+    calculatePower(pokemonId, useStoredLevel = true, instance = null) {
+        const pokemon = this.createPokemon(pokemonId, useStoredLevel, instance);
         if (!pokemon) return 0;
 
         const stats = this.calculateStats(pokemon);
 
         // 技能等级对攻击力的加成：取所有技能中最高威力
         let skillMultiplier = 1;
-        const skillInfo = this.getSkillForPokemon(pokemonId);
+        const skillInfo = this.getSkillForPokemon(pokemonId, instance);
         if (skillInfo && skillInfo.skills.length > 0) {
             const maxSkillPower = Math.max(...skillInfo.skills.map(s => s.power));
             skillMultiplier = maxSkillPower / 50; // 基础威力为50
@@ -988,12 +1063,12 @@ class GameCore {
 
     // 计算潜力值 (0-100%) - 用于评估养成价值
     // 基于: 经验组评分 + 100级属性评分
-    calculatePotential(pokemonId) {
+    calculatePotential(pokemonId, instance = null) {
         const baseData = POKEMON_DATA[pokemonId];
         if (!baseData) return 0;
 
-        // 获取存储的数据
-        const storedData = this.getStoredData(pokemonId);
+        // 获取存储的数据（指定个体 或 物种主个体）
+        const storedData = instance || this.getStoredData(pokemonId);
         if (!storedData) return 0;
 
         // 1. 经验组评分 (0-9分) - 固定阶梯评分
@@ -1010,7 +1085,7 @@ class GameCore {
         const ivs = storedData.ivs;
 
         // 闪光宝可梦种族值增加20%
-        const isShiny = !!this.gameState.shinyDex[pokemonId];
+        const isShiny = instance ? instance.shiny : !!this.gameState.shinyDex[pokemonId];
         const shinyBonus = isShiny ? 1.2 : 1;
 
         // 树果加成（与 calculateBaseStats 保持一致）
@@ -1042,21 +1117,27 @@ class GameCore {
         return Math.max(0, potential);
     }
 
-    // 单个物种的基础属性（缓存）。输入：已存储的等级/个体值、闪光、树果。
-    // 任何改动这些数据的代码都必须调用 _touchSpecies(id)。
-    _getSpeciesStats(id) {
-        const cached = this._speciesStats.get(id);
+    // 单只个体的基础属性（按 uid 缓存）。输入：该个体的等级/个体值/闪光，以及物种级的树果。
+    // 任何改动这些数据的代码都必须调用 _touchSpecies / _touchInstance。
+    _getInstanceStats(inst) {
+        const cached = this._instanceStats.get(inst.uid);
         if (cached) return cached;
-        const stored = this.gameState.caughtPokemon[id];
-        if (!stored || !POKEMON_DATA[id]) return null;
+        // 旧代码只会写 shinyDex（物种级标记）：主个体在这里与它对齐
+        if (!inst.shiny && this.gameState.shinyDex[inst.speciesId] && this.roster.isPrimary(inst)) inst.shiny = true;
         const stats = this.calculateStats({
-            id,
-            level: stored.level,
-            ivs: stored.ivs,
-            isShiny: !!this.gameState.shinyDex[id],
+            id: inst.speciesId,
+            level: inst.level,
+            ivs: inst.ivs,
+            isShiny: inst.shiny,
         });
-        this._speciesStats.set(id, stats);
+        this._instanceStats.set(inst.uid, stats);
         return stats;
+    }
+
+    // 旧接口：某个物种的属性 = 它的主个体
+    _getSpeciesStats(id) {
+        const primary = this.roster.primaryOf(id);
+        return primary ? this._getInstanceStats(primary) : null;
     }
 
     // 图鉴中已捕获但不在队伍中的宝可梦 1% 加成（缓存；队伍或任一物种变化时失效）
@@ -1084,17 +1165,23 @@ class GameCore {
     calculateBattleStats(pokemonIndex) {
         if (!this.gameState || !this.gameState.team) return null;
 
+        this.roster.reconcile();
         const team = this.gameState.team;
-        if (pokemonIndex < 0 || pokemonIndex >= team.length) return null;
+        const party = this.gameState.party;
+        const owned = this.gameState.ownedPokemon;
+        if (pokemonIndex < 0 || pokemonIndex >= party.length) return null;
 
-        const baseStats = this._getSpeciesStats(team[pokemonIndex]);
-        if (!baseStats) return null;
+        // 出战者与队友都按“个体”计算：同一物种的两只个体可以有不同的等级/个体值/闪光
+        const self = owned[party[pokemonIndex]];
+        if (!self) return null;
+        const baseStats = this._getInstanceStats(self);
 
         // 队伍内其他宝可梦的加成 (20%)
         const teamBonus = { hp: 0, attack: 0, defense: 0, speed: 0 };
-        for (let i = 0; i < team.length; i++) {
+        for (let i = 0; i < party.length; i++) {
             if (i !== pokemonIndex) {
-                const s = this._getSpeciesStats(team[i]);
+                const mate = owned[party[i]];
+                const s = mate ? this._getInstanceStats(mate) : null;
                 if (s) {
                     teamBonus.hp += s.hp * 0.2;
                     teamBonus.attack += s.attack * 0.2;
@@ -1148,10 +1235,11 @@ class GameCore {
     getStatSources(teamIndex) {
         if (!this.gameState.team || this.gameState.team.length === 0) return null;
         const idx = teamIndex ?? this.gameState.activePokemonIndex;
-        const pokemonId = this.gameState.team[idx];
+        const selfInst = this._partyInstance(idx);
+        const pokemonId = selfInst ? selfInst.speciesId : null;
         if (!pokemonId) return null;
 
-        const pokemon = this.createPokemon(pokemonId, true);
+        const pokemon = this.createPokemon(pokemonId, true, selfInst);
         if (!pokemon) return null;
 
         const baseStats = this.calculateStats(pokemon);
@@ -1159,7 +1247,8 @@ class GameCore {
         const teamBonus = { hp: 0, attack: 0, defense: 0, speed: 0 };
         for (let i = 0; i < this.gameState.team.length; i++) {
             if (i === idx) continue;
-            const mate = this.createPokemon(this.gameState.team[i], true);
+            const mateInst = this._partyInstance(i);
+            const mate = mateInst ? this.createPokemon(mateInst.speciesId, true, mateInst) : null;
             if (mate) {
                 const ms = this.calculateStats(mate);
                 teamBonus.hp += ms.hp * 0.2;
@@ -1223,8 +1312,13 @@ class GameCore {
 
     // 获取对敌方最优技能：返回 { power, name, type } 或 { power: 0, name: '', type: '' }
     _getBestSkillForEnemy(pokemonId, wildTypes) {
+        return this._getBestSkillForInstance(this.roster.primaryOf(pokemonId), wildTypes);
+    }
+
+    // 指定个体对敌人最优的技能（个体自己的技能等级）
+    _getBestSkillForInstance(inst, wildTypes) {
         const result = { power: 0, name: '', type: '' };
-        const skillInfo = this.getSkillForPokemon(pokemonId);
+        const skillInfo = inst ? this.getSkillForInstance(inst) : null;
         if (!skillInfo || skillInfo.skills.length === 0) return result;
 
         let bestSkill = skillInfo.skills[0];
@@ -1288,14 +1382,23 @@ class GameCore {
         const baseExp = this.getBaseExpYield(wildPokemon.id, wildPokemon.level);
         const expGained = this._applyExpBonuses(Math.floor(baseExp * wildPokemon.level / 7), b);
 
-        // 出战精灵获得100%经验
-        let anyLevelUp = !!this.addExpToPokemon(activePokemonId, expGained);
+        // 出战精灵获得100%经验（经验记在“出战的那一只个体”身上）
+        this.roster.reconcile();
+        let activeInst = this._partyInstance(state.activePokemonIndex);
+        if (!activeInst || activeInst.speciesId !== activePokemonId) activeInst = this.roster.primaryOf(activePokemonId);
+        let anyLevelUp = false;
+        if (activeInst) {
+            anyLevelUp = !!this.addExpToInstance(activeInst, expGained);
+            activeInst.battles++;
+            activeInst.stats.victories++;
+        }
 
-        // 队伍内其他精灵获得50%经验
+        // 队伍内其他精灵获得50%经验（各自独立）
         const teamExp = Math.floor(expGained * b.teamExpRate);
-        for (let i = 0; i < state.team.length; i++) {
+        for (let i = 0; i < state.party.length; i++) {
             if (i !== state.activePokemonIndex) {
-                if (this.addExpToPokemon(state.team[i], teamExp)) anyLevelUp = true;
+                const mate = this._partyInstance(i);
+                if (mate && this.addExpToInstance(mate, teamExp)) anyLevelUp = true;
             }
         }
 
@@ -1411,6 +1514,7 @@ class GameCore {
     startBattle() {
         if (!this.gameState || !this.gameState.currentRoute) return;
         if (!this.gameState.team || this.gameState.team.length === 0) return;
+        this.roster.reconcile();
         if (this.gameState.activePokemonIndex >= this.gameState.team.length) {
             this.gameState.activePokemonIndex = 0;
         }
@@ -1563,13 +1667,13 @@ class GameCore {
         const battle = this.currentBattle;
         if (!battle) return;
         const state = this.gameState;
-        const activeId = state.team[state.activePokemonIndex];
-        const stored = this.getStoredData(activeId);
+        const inst = this._partyInstance(state.activePokemonIndex);
         const wildTypes = POKEMON_DATA[battle.wild.id]?.types || [];
-        const skill = this._getBestSkillForEnemy(activeId, wildTypes);
+        const skill = this._getBestSkillForInstance(inst, wildTypes);
         battle.derived = {
-            playerLevel: stored ? stored.level : 5,
-            playerTypes: POKEMON_DATA[activeId]?.types || [],
+            activeInst: inst,                    // 出战个体（战斗统计直接累加到它身上）
+            playerLevel: inst ? inst.level : 5,
+            playerTypes: inst ? (POKEMON_DATA[inst.speciesId]?.types || []) : [],
             wildTypes,
             playerPower: skill.power > 0 ? skill.power : 50,
             skillName: skill.name,
@@ -1639,6 +1743,10 @@ class GameCore {
                 d.playerCrit.rate, d.playerCrit.multiplier
             );
             battle.wildCurrentHp -= result.damage;
+            if (d.activeInst) {
+                d.activeInst.stats.damageDealt += result.damage;
+                if (result.criticalHit) d.activeInst.stats.criticalHits++;
+            }
 
             if (this.onBattleEvent) {
                 this.onBattleEvent('playerAttack', {
@@ -1682,6 +1790,7 @@ class GameCore {
                     d.enemyCrit.rate, d.enemyCrit.multiplier
                 );
                 battle.playerCurrentHp -= result.damage;
+                if (d.activeInst) d.activeInst.stats.damageTaken += result.damage;
 
                 if (this.onBattleEvent) {
                     this.onBattleEvent('enemyAttack', {
@@ -1697,6 +1806,7 @@ class GameCore {
                 // 玩家宝可梦被击败
                 if (battle.playerCurrentHp <= 0) {
                     battle.playerCurrentHp = 0;
+                    if (d.activeInst) d.activeInst.stats.faints++;
                     if (this.onBattleEvent) {
                         this.onBattleEvent('playerFainted', {});
                     }
@@ -1801,46 +1911,51 @@ class GameCore {
     }
 
     // 给指定宝可梦增加经验（每个形态独立存储）
+    // 旧接口：给“物种”加经验 = 给该物种的主个体加经验
     addExpToPokemon(pokemonId, amount) {
-        const storedData = this.gameState.caughtPokemon[pokemonId];
-        if (!storedData) return false;
+        const inst = this.roster.primaryOf(pokemonId);
+        return inst ? this.addExpToInstance(inst, amount) : false;
+    }
 
-        const baseData = POKEMON_DATA[pokemonId];
+    // 给指定个体加经验（队伍成员、图鉴储备经验都走这里）
+    addExpToInstance(inst, amount) {
+        const baseData = POKEMON_DATA[inst.speciesId];
         if (!baseData) return false;
 
         // 等级上限检查
-        if (storedData.level >= MAX_POKEMON_LEVEL) {
+        if (inst.level >= MAX_POKEMON_LEVEL) {
             return false;
         }
 
-        storedData.exp += amount;
+        inst.exp += amount;
+        inst.stats.expGained += amount;
 
         // 检查升级
         let leveledUp = false;
-        const startLevel = storedData.level;
-        while (storedData.level < MAX_POKEMON_LEVEL) {
-            const nextLevelExp = getExpForLevel(baseData.expGroup, storedData.level + 1);
-            if (storedData.exp >= nextLevelExp) {
-                storedData.level++;
+        const startLevel = inst.level;
+        while (inst.level < MAX_POKEMON_LEVEL) {
+            const nextLevelExp = getExpForLevel(baseData.expGroup, inst.level + 1);
+            if (inst.exp >= nextLevelExp) {
+                inst.level++;
                 leveledUp = true;
 
                 // 检查进化
-                this.checkEvolution(pokemonId);
+                this.checkEvolutionOfInstance(inst);
             } else {
                 break;
             }
         }
 
-        if (leveledUp) this._touchSpecies(pokemonId);
+        if (leveledUp) this._touchInstance(inst);
 
         // 闪光双向传播：升级后，如果该宝可梦是闪光的，同步给整条进化链
-        if (leveledUp && this.gameState.shinyDex[pokemonId]) {
-            this._syncShinyInFamily(pokemonId);
+        if (leveledUp && this.gameState.shinyDex[inst.speciesId]) {
+            this._syncShinyInFamily(inst.speciesId);
         }
 
         // 升级通知合并为一条（显示起始等级 → 最终等级）
         if (leveledUp && this.onLevelUp) {
-            this.onLevelUp({ id: pokemonId, name: baseData.name, level: storedData.level, startLevel });
+            this.onLevelUp({ id: inst.speciesId, uid: inst.uid, name: baseData.name, nickname: inst.nickname, level: inst.level, startLevel });
         }
 
         return leveledUp;
@@ -1858,21 +1973,29 @@ class GameCore {
         return true;
     }
 
+    // 旧接口：检查“物种”的进化 = 检查它的主个体
     checkEvolution(baseId, replaceTeam = true) {
-        const storedData = this.gameState.caughtPokemon[baseId];
-        if (!storedData) return;
+        const inst = this.roster.primaryOf(baseId);
+        if (inst) this.checkEvolutionOfInstance(inst, replaceTeam);
+    }
 
+    // 检查某只个体是否该进化。
+    // 规则与旧版一致：进化目标物种“还没有任何个体”时，才会为它创建一只 Lv1 的新个体（继承个体值，
+    // 这是图鉴收集机制）；队伍里的原个体被换成新个体，原个体回到 PC。目标物种已拥有时不进化。
+    checkEvolutionOfInstance(inst, replaceTeam = true) {
+        const baseId = inst.speciesId;
         const baseData = POKEMON_DATA[baseId];
         if (!baseData || !baseData.evolvesTo) return;
+        this.roster.reconcile();
 
-        // 检查基础形态是否为闪光
-        const isBaseShiny = !!this.gameState.shinyDex[baseId];
+        // 检查基础形态是否为闪光（个体自身的闪光；主个体同时跟随旧的物种级闪光标记）
+        const isBaseShiny = inst.shiny || (this.roster.isPrimary(inst) && !!this.gameState.shinyDex[baseId]);
 
         // 统一处理进化目标列表
         const evolutions = Array.isArray(baseData.evolvesTo) ? baseData.evolvesTo : [baseData.evolvesTo];
 
         for (const evo of evolutions) {
-            if (storedData.level >= evo.level) {
+            if (inst.level >= evo.level) {
                 // 跨代进化检查：进化目标所在地区是否已解锁
                 if (!this._isEvolutionRegionUnlocked(evo.id)) {
                     continue;
@@ -1889,14 +2012,15 @@ class GameCore {
                     this._syncShinyInFamily(evo.id);
 
                     // 如果进化型已存在，跳过后面的新捕获逻辑
-                    if (this.gameState.caughtPokemon[evo.id]) {
+                    const existing = this.roster.primaryOf(evo.id);
+                    if (existing) {
                         if (this.onBattleEvent) {
                             this.onBattleEvent('shinyEvolved', {
                                 oldName: baseData.name,
                                 newName: evolvedData.name,
                                 oldId: baseId,
                                 newId: evo.id,
-                                pokemon: { id: evo.id, name: evolvedData.name, level: this.gameState.caughtPokemon[evo.id].level },
+                                pokemon: { id: evo.id, name: evolvedData.name, level: existing.level },
                             });
                         }
                         continue;
@@ -1904,25 +2028,32 @@ class GameCore {
                 }
 
                 // 检查是否已拥有该进化形态（非闪光传递情况）
-                if (this.gameState.caughtPokemon[evo.id] || this.gameState.pokedex[evo.id] === 'caught') {
+                if (this.roster.primaryOf(evo.id) || this.gameState.pokedex[evo.id] === 'caught') {
                     continue;
                 }
 
-                // 标记进化形态为已捕获，独立存储
+                // 标记进化形态为已捕获，创建它的第一只个体
                 this.gameState.pokedex[evo.id] = 'caught';
-                this.gameState.caughtPokemon[evo.id] = {
-                    ivs: { ...storedData.ivs },
+                const created = this.roster.create({
+                    speciesId: evo.id,
                     level: 1,
                     exp: 0,
-                    skillLevel: 0,
-                };
+                    ivs: { ...inst.ivs },
+                    shiny: !!this.gameState.shinyDex[evo.id],
+                    nature: inst.nature,
+                    ability: inst.ability,
+                    gender: inst.gender,
+                    origin: 'evolution',
+                    originRoute: inst.originRoute,
+                    place: 'pc',
+                });
                 this._touchSpecies(evo.id);
 
-                // 升级触发的进化需要替换队伍成员
-                if (replaceTeam) {
-                    const teamIndex = this.gameState.team.indexOf(baseId);
-                    if (teamIndex !== -1) {
-                        this.gameState.team[teamIndex] = evo.id;
+                // 升级触发的进化需要替换队伍成员（原个体换到 PC 里新个体原来的格子）
+                if (replaceTeam && created.ok) {
+                    const partyIndex = this.roster.party.indexOf(inst.uid);
+                    if (partyIndex !== -1) {
+                        this.roster.swapPartyWithPc(partyIndex, created.instance.uid);
                     }
                 }
 
@@ -1932,6 +2063,7 @@ class GameCore {
                         newName: evolvedData.name,
                         oldId: baseId,
                         newId: evo.id,
+                        uid: created.ok ? created.instance.uid : null,
                         pokemon: { id: evo.id, name: evolvedData.name, level: 1 },
                     });
                 }
@@ -2134,6 +2266,7 @@ class GameCore {
 
     // ===================== 队伍管理 =====================
     setActivePokemon(index) {
+        this.roster.reconcile();
         if (index >= 0 && index < this.gameState.team.length) {
             this.gameState.activePokemonIndex = index;
 
@@ -2175,8 +2308,10 @@ class GameCore {
         }
     }
 
+    // 旧接口：按物种加入队伍 = 把该物种的主个体从 PC 取出放进队伍
     addToTeamFromPokedex(pokemonId) {
-        if (this.gameState.team.length >= 6) {
+        this.roster.reconcile();
+        if (this.gameState.party.length >= PARTY_MAX) {
             this._log('addToTeamFromPokedex: 队伍已满');
             return false;
         }
@@ -2189,13 +2324,26 @@ class GameCore {
             this._log('addToTeamFromPokedex: 该宝可梦已在队伍中', pokemonId);
             return false;
         }
+        const inst = this.roster.primaryOf(pokemonId);
+        if (!inst) {
+            this._log('addToTeamFromPokedex: 没有该宝可梦的个体', pokemonId);
+            return false;
+        }
 
-        this.gameState.team.push(pokemonId);
-        this._log('addToTeamFromPokedex: 成功添加', pokemonId);
-        return true;
+        const r = this.roster.moveToParty(inst.uid);
+        this._log('addToTeamFromPokedex:', r.ok ? '成功添加' : '失败 ' + r.code, pokemonId);
+        return r.ok;
+    }
+
+    // 指定个体（而不是物种）加入/离开队伍：同一物种有多只时使用
+    addPartyMember(uid) {
+        this.roster.reconcile();
+        const r = this.roster.moveToParty(uid);
+        return r.ok;
     }
 
     removeFromTeamByPokemonId(pokemonId) {
+        this.roster.reconcile();
         // 找到该宝可梦在队伍中的索引（非出战）
         const teamIndex = this.gameState.team.findIndex((id, idx) => 
             id === pokemonId && idx !== this.gameState.activePokemonIndex
@@ -2210,28 +2358,18 @@ class GameCore {
         }
 
         this._log('removeFromTeamByPokemonId: 移除索引', teamIndex, 'pokemonId:', pokemonId);
-        this.gameState.team.splice(teamIndex, 1);
-
-        // 调整出战索引
-        if (this.gameState.activePokemonIndex > teamIndex) {
-            this.gameState.activePokemonIndex--;
-        }
-
-        return true;
+        // 移出队伍 = 回到 PC（出战下标由 PartyManager 一并调整）
+        return this.roster.moveToPc(this.gameState.party[teamIndex]).ok;
     }
 
     removeFromTeam(teamIndex) {
+        this.roster.reconcile();
         if (this.gameState.team.length <= 1) return false; // 至少保留一只
         if (teamIndex === this.gameState.activePokemonIndex) return false; // 不能移除出战宝可梦
 
-        this.gameState.team.splice(teamIndex, 1);
-
-        // 调整出战索引
-        if (this.gameState.activePokemonIndex > teamIndex) {
-            this.gameState.activePokemonIndex--;
-        }
-
-        return true;
+        const uid = this.gameState.party[teamIndex];
+        if (uid === undefined) return false;
+        return this.roster.moveToPc(uid).ok;
     }
 
     // ===================== 地图 =====================
@@ -2449,6 +2587,8 @@ class GameCore {
     _prepareStateForSave() {
         const gs = this.gameState;
         if (!gs) return null;
+        this.roster.reconcile();   // 旧代码直接改了 team 时，保证 party/PC 在写盘前一致
+        this._syncShinyFlags();    // 旧代码直接写 shinyDex 时，让主个体的闪光与之一致
         gs.schemaVersion = SAVE_SCHEMA_VERSION;
         gs.lastSave = Date.now();
 
@@ -2466,6 +2606,18 @@ class GameCore {
             }
         }
         return gs;
+    }
+
+    // 闪光双向对齐：shinyDex（旧的物种级记录）⇄ 主个体的 shiny。幂等、开销与闪光数量成正比
+    _syncShinyFlags() {
+        const gs = this.gameState;
+        for (const id of Object.keys(gs.shinyDex)) {
+            const primary = this.roster.primaryOf(Number(id));
+            if (primary && !primary.shiny) { primary.shiny = true; this._touchInstance(primary); }
+        }
+        for (const inst of Object.values(gs.ownedPokemon)) {
+            if (inst.shiny && this.roster.isPrimary(inst) && !gs.shinyDex[inst.speciesId]) gs.shinyDex[inst.speciesId] = true;
+        }
     }
 
     // 请求保存（防抖）：战斗、升级等高频路径使用，约 2 秒后合并写入，最迟 10 秒
@@ -2548,8 +2700,8 @@ class GameCore {
     }
 
     // ===================== 经验条信息 =====================
-    getExpProgress(pokemonId) {
-        const storedData = this.getStoredData(pokemonId);
+    getExpProgress(pokemonId, instance = null) {
+        const storedData = instance || this.getStoredData(pokemonId);
         if (!storedData) return { current: 0, needed: 1, percent: 0 };
 
         const baseData = POKEMON_DATA[pokemonId];
@@ -3142,6 +3294,7 @@ class GameCore {
     // 支持一击必杀策略：fastest(速度最快) / lowest_level(等级最低) / no_change(不改变)
     // cache（可选，离线模拟用）：{ teamStats[], teamLevels[] }，避免每场重算队伍属性
     getBestTeamMemberForEnemy(wildPokemon, cache = null) {
+        this.roster.reconcile();
         const team = this.gameState.team;
         if (!team || team.length <= 1) return -1;
 
@@ -3154,16 +3307,18 @@ class GameCore {
         const candidates = [];
 
         for (let i = 0; i < team.length; i++) {
-            const pokemonId = team[i];
+            const member = this._partyInstance(i);
+            if (!member) continue;
+            const pokemonId = member.speciesId;
             const stats = cache ? cache.teamStats[i] : this.calculateBattleStats(i);
             if (!stats) continue;
-            const level = cache ? cache.teamLevels[i] : this.getStoredData(pokemonId)?.level;
+            const level = cache ? cache.teamLevels[i] : member.level;
             if (!level) continue;
 
             const playerTypes = POKEMON_DATA[pokemonId]?.types || [];
 
-            // 最优技能威力（选对敌人克制最强的技能），无技能时固定 50
-            const skill = this._getBestSkillForEnemy(pokemonId, wildTypes);
+            // 最优技能威力（选对敌人克制最强的技能，用该个体自己的技能等级），无技能时固定 50
+            const skill = this._getBestSkillForInstance(member, wildTypes);
             const power = skill.power > 0 ? skill.power : 50;
 
             // 使用与 _computeDamage 一致的公式预估单次伤害
@@ -3214,14 +3369,20 @@ class GameCore {
 
     // 获取宝可梦当前技能信息（根据属性和技能等级）
     // 返回: { skills: [{ type, name, power }], skillLevel } 或 null
-    getSkillForPokemon(pokemonId) {
-        const storedData = this.gameState.caughtPokemon[pokemonId];
-        if (!storedData || !storedData.skillLevel || storedData.skillLevel <= 0) return null;
+    // 旧接口：某物种的技能（instance 可指定个体，不传则用主个体）
+    getSkillForPokemon(pokemonId, instance = null) {
+        const inst = instance || this.roster.primaryOf(pokemonId);
+        return inst ? this.getSkillForInstance(inst) : null;
+    }
 
-        const baseData = POKEMON_DATA[pokemonId];
+    // 个体的技能：由它自己的技能等级与物种属性决定
+    getSkillForInstance(inst) {
+        if (!inst || !inst.skillLevel || inst.skillLevel <= 0) return null;
+
+        const baseData = POKEMON_DATA[inst.speciesId];
         if (!baseData) return null;
 
-        const skillLevel = storedData.skillLevel;
+        const skillLevel = inst.skillLevel;
         const types = baseData.types || [];
         const skills = [];
 

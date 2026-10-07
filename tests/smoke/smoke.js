@@ -88,7 +88,7 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
                 const raw = localStorage.getItem('pokemon_idle_save');
                 return { raw: raw && raw.slice(0, 3), version: game.gameState.schemaVersion };
             });
-            check('存档写入为 LZ 格式并带 schemaVersion', saved.raw === 'LZ:' && saved.version === 2, JSON.stringify(saved));
+            check('存档写入为 LZ 格式并带 schemaVersion=3', saved.raw === 'LZ:' && saved.version === 3, JSON.stringify(saved));
             // 防抖：连续战斗 12 秒，写入次数应远小于“每场胜利一次”
             const w0 = await page.evaluate(() => window.__mainWrites);
             await page.evaluate(() => { for (let i = 0; i < 50; i++) game.save(); });
@@ -117,8 +117,9 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
             const loaded = await page.evaluate(() => ({
                 team: game.gameState.team.slice(), caught: Object.keys(game.gameState.caughtPokemon).length,
                 from: game.loadReport.fromVersion, ver: game.gameState.schemaVersion,
+                owned: game.roster.count(), problems: game.roster.checkIntegrity(),
             }));
-            check('旧版存档在浏览器里可加载并迁移', loaded.caught === 190 && loaded.from === 1 && loaded.ver === 2, JSON.stringify(loaded));
+            check('旧版(v1)存档在浏览器里可加载并迁移为个体', loaded.caught === 190 && loaded.from === 1 && loaded.ver === 3 && loaded.owned === 190 && loaded.problems.length === 0, JSON.stringify(loaded));
             // 把存储里的 lastSave 拨回 1 小时前，再刷新页面触发“页面加载时的离线结算”
             await page.evaluate(() => {
                 const st = JSON.parse(JSON.stringify(game.gameState));
@@ -210,6 +211,58 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
             check('损坏的主存档从备份恢复', info.rec === true && info.gold === 4242, JSON.stringify(info));
             check('损坏原文被保留', info.corrupt === 'LZ:坏掉的存档');
             check('恢复时显示警告横幅', (await page.locator('#save-banner').getAttribute('class')).includes('warn'));
+            await context.close();
+        }
+
+        // ---------- F. 第 2 阶段：v2 存档迁移为个体；同物种多只；昵称不能注入；导出/导入往返 ----------
+        {
+            const v2 = fs.readFileSync(path.join(ROOT, 'tests/fixtures/legacy-v2-localstorage.txt'), 'utf8');
+            const { page, context } = await newPage(`
+                localStorage.setItem('pokemon_idle_tutorial_done', '1');
+                if (!localStorage.getItem('pokemon_idle_save')) localStorage.setItem('pokemon_idle_save', ${JSON.stringify(v2)});
+            `);
+            await page.goto(base);
+            await page.waitForFunction(() => typeof game !== 'undefined' && game.currentBattle, null, { timeout: 15000 });
+            const mig = await page.evaluate(() => ({
+                from: game.loadReport.fromVersion, ver: game.gameState.schemaVersion, owned: game.roster.count(),
+                party: game.gameState.party.length, boxes: game.gameState.pc.boxes.length,
+                problems: game.roster.checkIntegrity(), origin: game.roster.primaryOf(25).origin,
+            }));
+            check('v2 存档迁移为个体（190 只、队伍 5、PC 箱子 7、不变量全部成立）',
+                mig.from === 2 && mig.ver === 3 && mig.owned === 190 && mig.party === 5 && mig.boxes === 7 && mig.problems.length === 0 && mig.origin === 'legacy_migration', JSON.stringify(mig));
+
+            // 第二只皮卡丘（昵称里带 HTML）进队伍：界面按个体显示，且不能注入
+            await page.evaluate(() => {
+                const r = game.roster.create({ speciesId: 25, level: 30, ivs: { hp: 31, atk: 31, def: 31, spAtk: 31, spDef: 31, speed: 31 }, shiny: true, nickname: '<img src=x onerror=window.__pwned2=1>', rng: Math.random });
+                game.roster.moveToParty(r.instance.uid);
+                gameUI.renderTeam();
+            });
+            await sleep(300);
+            const ui = await page.evaluate(() => ({
+                slots: document.querySelectorAll('#team-list .team-slot').length,
+                text: document.getElementById('team-list').innerText,
+                pwned: window.__pwned2, evilImgs: document.querySelectorAll('img[src="x"]').length,
+                party: game.gameState.team.slice(),
+            }));
+            check('队伍面板显示 6 只（含同物种的两只皮卡丘）', ui.slots === 6 && ui.party.filter(id => id === 25).length === 2, JSON.stringify({ slots: ui.slots, party: ui.party }));
+            check('个体昵称显示为纯文本，没有脚本执行', ui.pwned === undefined && ui.evilImgs === 0 && /img src=x on/.test(ui.text) && !ui.text.includes('<img'));
+
+            // 导出 → 清空 → 通过界面导入：个体完整往返
+            const text = await page.evaluate(() => game.exportSave());
+            const before = await page.evaluate(() => JSON.stringify({ owned: game.gameState.ownedPokemon, party: game.gameState.party, pc: game.gameState.pc }));
+            await page.evaluate((t) => { game.gameState.ownedPokemon = {}; document.getElementById('save-data-area').value = t; document.getElementById('btn-import').click(); }, text);
+            await sleep(800);
+            const after = await page.evaluate(() => JSON.stringify({ owned: game.gameState.ownedPokemon, party: game.gameState.party, pc: game.gameState.pc }));
+            check('通过界面导出/导入：个体、队伍、PC 完全一致', after === before && JSON.parse(after).party.length === 6);
+            const afterProblems = await page.evaluate(() => game.roster.checkIntegrity());
+            check('导入后名册不变量成立且战斗继续', afterProblems.length === 0 && await page.evaluate(() => !!game.currentBattle));
+
+            // 保存后刷新：个体仍在（含昵称）
+            await page.evaluate(() => game.saveNow());
+            await page.reload();
+            await page.waitForFunction(() => typeof game !== 'undefined' && game.currentBattle, null, { timeout: 15000 });
+            const reloaded = await page.evaluate(() => ({ owned: game.roster.count(), ver: game.loadReport.fromVersion, nick: game.roster.ofSpecies(25).map(i => i.nickname) }));
+            check('保存并刷新后个体仍在（含净化后的昵称）', reloaded.owned === 191 && reloaded.ver === 3 && reloaded.nick.includes('img src=x on'), JSON.stringify(reloaded));
             await context.close();
         }
 

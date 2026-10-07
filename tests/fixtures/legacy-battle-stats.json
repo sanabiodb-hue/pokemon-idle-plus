@@ -1,0 +1,188 @@
+{
+  "v1": {
+    "ref": "458781e",
+    "team": [
+      25,
+      1,
+      4,
+      7,
+      16
+    ],
+    "battleStats": [
+      {
+        "hp": 224,
+        "attack": 309,
+        "defense": 282,
+        "speed": 194
+      },
+      {
+        "hp": 160,
+        "attack": 201,
+        "defense": 194,
+        "speed": 105
+      },
+      {
+        "hp": 157,
+        "attack": 201,
+        "defense": 187,
+        "speed": 109
+      },
+      {
+        "hp": 160,
+        "attack": 197,
+        "defense": 196,
+        "speed": 103
+      },
+      {
+        "hp": 160,
+        "attack": 193,
+        "defense": 184,
+        "speed": 107
+      }
+    ],
+    "power": [
+      59,
+      15,
+      15,
+      15,
+      13
+    ],
+    "potential": [
+      49,
+      33,
+      29,
+      32,
+      23
+    ],
+    "expProgress": [
+      {
+        "current": 8226,
+        "needed": 8587,
+        "percent": 95
+      },
+      {
+        "current": 275,
+        "needed": 423,
+        "percent": 65
+      },
+      {
+        "current": 275,
+        "needed": 423,
+        "percent": 65
+      },
+      {
+        "current": 275,
+        "needed": 423,
+        "percent": 65
+      },
+      {
+        "current": 275,
+        "needed": 423,
+        "percent": 65
+      }
+    ],
+    "totalPokemonLevel": 2423,
+    "skillLevelSum": 0,
+    "talentPoints": 0,
+    "pokedex": {
+      "seen": 190,
+      "caught": 190,
+      "total": 1073
+    },
+    "shinyCount": 1,
+    "goldDropForLevel100": 20
+  },
+  "v2": {
+    "ref": "331011b",
+    "team": [
+      25,
+      1,
+      4,
+      7,
+      16
+    ],
+    "battleStats": [
+      {
+        "hp": 224,
+        "attack": 309,
+        "defense": 282,
+        "speed": 194
+      },
+      {
+        "hp": 160,
+        "attack": 201,
+        "defense": 194,
+        "speed": 105
+      },
+      {
+        "hp": 157,
+        "attack": 201,
+        "defense": 187,
+        "speed": 109
+      },
+      {
+        "hp": 160,
+        "attack": 197,
+        "defense": 196,
+        "speed": 103
+      },
+      {
+        "hp": 160,
+        "attack": 193,
+        "defense": 184,
+        "speed": 107
+      }
+    ],
+    "power": [
+      59,
+      15,
+      15,
+      15,
+      13
+    ],
+    "potential": [
+      49,
+      33,
+      29,
+      32,
+      23
+    ],
+    "expProgress": [
+      {
+        "current": 8351,
+        "needed": 8587,
+        "percent": 97
+      },
+      {
+        "current": 275,
+        "needed": 423,
+        "percent": 65
+      },
+      {
+        "current": 275,
+        "needed": 423,
+        "percent": 65
+      },
+      {
+        "current": 275,
+        "needed": 423,
+        "percent": 65
+      },
+      {
+        "current": 275,
+        "needed": 423,
+        "percent": 65
+      }
+    ],
+    "totalPokemonLevel": 2423,
+    "skillLevelSum": 0,
+    "talentPoints": 0,
+    "pokedex": {
+      "seen": 190,
+      "caught": 190,
+      "total": 1073
+    },
+    "shinyCount": 1,
+    "goldDropForLevel100": 20
+  }
+}

@@ -6,7 +6,9 @@
 //   tests/fixtures/legacy-export.txt         旧版“导出存档”文本（Base64）
 //   tests/fixtures/legacy-summary.json       用于断言的关键数据摘要
 // 仅在需要重新生成夹具时运行；夹具本身已提交，测试不依赖 git 历史。
-// 用法：node tools/make-legacy-fixture.js
+// 用法：node tools/make-legacy-fixture.js [v1|v2]
+//   v1（默认）：重构前（458781e，无 schemaVersion）→ legacy-*.txt / legacy-summary.json
+//   v2：第 1 阶段（331011b，schemaVersion=2，每物种一条 caughtPokemon）→ legacy-v2-*.txt / legacy-v2-summary.json
 // ============================================================
 const { execSync } = require('child_process');
 const vm = require('vm');
@@ -14,8 +16,22 @@ const fs = require('fs');
 const path = require('path');
 const { ROOT, createMemoryStorage, makeSandbox } = require('./load-context');
 
-const LEGACY_REF = '458781e';
-const files = ['js/lzstring.min.js', 'js/pokemon-data.js', 'js/route-data.js', 'js/game-config.js', 'js/game-core.js'];
+const VARIANTS = {
+    v1: {
+        ref: '458781e',
+        prefix: 'legacy',
+        files: ['js/lzstring.min.js', 'js/pokemon-data.js', 'js/route-data.js', 'js/game-config.js', 'js/game-core.js'],
+    },
+    v2: {
+        ref: '331011b',
+        prefix: 'legacy-v2',
+        files: ['js/lzstring.min.js', 'js/util.js', 'js/pokemon-data.js', 'js/route-data.js', 'js/game-config.js', 'js/save-manager.js', 'js/game-core.js'],
+    },
+};
+const variant = VARIANTS[process.argv[2] || 'v1'];
+if (!variant) { console.error('用法: node tools/make-legacy-fixture.js [v1|v2]'); process.exit(1); }
+const LEGACY_REF = variant.ref;
+const files = variant.files;
 const code = files
     .map(f => execSync(`git show ${LEGACY_REF}:${f}`, { cwd: ROOT, maxBuffer: 64 * 1024 * 1024 }).toString('utf8'))
     .join('\n;\n') + '\n;({ GameCore })';
@@ -63,7 +79,7 @@ gs.tower = { currentFloor: 3, highestFloor: 2, enemies: [150, 151, 249, 250, 384
 gs.settings = { autoSwitchBest: true, oneShotStrategy: 'lowest_level', autoRouteSwitch: true, routeSwitchCondition: '6v_only', theme: 'sakura' };
 gs.currentEnemy = game.generateWildPokemon(route);
 
-game.save();
+(game.saveNow || game.save).call(game);   // v2 起 save() 是防抖请求，需要 saveNow() 立即写入
 const raw = storage.getItem('pokemon_idle_save');
 const exported = game.exportSave();
 const state = JSON.parse(JSON.stringify(game.gameState));
@@ -93,7 +109,7 @@ const summary = {
 
 const dir = path.join(ROOT, 'tests', 'fixtures');
 fs.mkdirSync(dir, { recursive: true });
-fs.writeFileSync(path.join(dir, 'legacy-localstorage.txt'), raw);
-fs.writeFileSync(path.join(dir, 'legacy-export.txt'), exported);
-fs.writeFileSync(path.join(dir, 'legacy-summary.json'), JSON.stringify(summary, null, 2) + '\n');
-console.log(`已生成夹具：${Object.keys(state.caughtPokemon).length} 只宝可梦，localStorage ${raw.length} 字符，导出 ${exported.length} 字符`);
+fs.writeFileSync(path.join(dir, `${variant.prefix}-localstorage.txt`), raw);
+fs.writeFileSync(path.join(dir, `${variant.prefix}-export.txt`), exported);
+fs.writeFileSync(path.join(dir, `${variant.prefix}-summary.json`), JSON.stringify(summary, null, 2) + '\n');
+console.log(`[${process.argv[2] || 'v1'}] 已生成夹具：${Object.keys(state.caughtPokemon).length} 只宝可梦，localStorage ${raw.length} 字符，导出 ${exported.length} 字符`);

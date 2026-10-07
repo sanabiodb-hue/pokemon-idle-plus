@@ -1,0 +1,66 @@
+{
+  "legacyRef": "331011b",
+  "team": [
+    25,
+    1,
+    4,
+    7,
+    16
+  ],
+  "activePokemonIndex": 0,
+  "caughtCount": 190,
+  "pokedexCaught": 190,
+  "gold": 400000,
+  "stats": {
+    "totalBattles": 600,
+    "totalCatches": 191,
+    "totalExp": 157103,
+    "totalGold": 0,
+    "playTime": 0
+  },
+  "shinyDex": [
+    25
+  ],
+  "gemCount": 99,
+  "badges": [
+    "kanto"
+  ],
+  "equippedGemQuality": "common",
+  "berryPlots": 1,
+  "berryBag": {
+    "atk_berry": 3
+  },
+  "berryFed": {
+    "25": {
+      "atk_berry": 2
+    }
+  },
+  "talents": {
+    "exp_bonus": 5,
+    "gemAttrChoice": "crit_rate"
+  },
+  "tower": {
+    "currentFloor": 3,
+    "highestFloor": 2,
+    "enemies": [
+      150,
+      151,
+      249,
+      250,
+      384,
+      385
+    ],
+    "currentEnemyIndex": 1,
+    "inBattle": false
+  },
+  "settings": {
+    "autoSwitchBest": true,
+    "oneShotStrategy": "lowest_level",
+    "autoRouteSwitch": true,
+    "routeSwitchCondition": "6v_only",
+    "theme": "sakura"
+  },
+  "currentRoute": "kanto_route3",
+  "currentEnemyId": 32,
+  "totalLevels": 2423
+}

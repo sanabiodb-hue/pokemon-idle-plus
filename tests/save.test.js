@@ -101,7 +101,7 @@ test('兼容：旧版（重构前）写入 localStorage 的真实存档可无损
     // 迁移后再次保存，应写成新版本
     game.saveNow();
     const { game: g2 } = newGame({ storage, load: true });
-    assert.equal(g2.loadReport.fromVersion, 2);
+    assert.equal(g2.loadReport.fromVersion, ctx.SAVE_SCHEMA_VERSION);   // 迁移后重新保存即为当前版本
 });
 
 test('兼容：旧版“导出存档”文本可以导入', () => {

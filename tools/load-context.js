@@ -12,7 +12,9 @@ const ROOT = path.resolve(__dirname, '..');
 const DATA_FILES = ['js/pokemon-data.js', 'js/route-data.js', 'js/game-config.js'];
 const GAME_FILES = [
     'js/lzstring.min.js', 'js/util.js', 'js/pokemon-data.js', 'js/route-data.js',
-    'js/game-config.js', 'js/save-manager.js', 'js/game-core.js',
+    'js/game-config.js', 'js/pokemon-instance.js', 'js/party.js', 'js/pc.js',
+    'js/pokemon-validation.js', 'js/pokemon-migration.js', 'js/pokemon-roster.js',
+    'js/save-manager.js', 'js/game-core.js',
 ];
 
 // 内存版 localStorage，可模拟容量上限与异常
@@ -98,6 +100,11 @@ function loadGameContext(opts = {}) {
 ;({
   GameCore, SaveManager, SaveCodec, sanitizeSave, processSaveObject, migrateSave, SAVE_MIGRATIONS,
   escapeHtml, safeCssColor,
+  PokemonRoster, PartyManager, PCStorage, PARTY_MAX, PC_BOX_CAPACITY, PC_MAX_BOXES, PC_BOX_NAME_MAX, RELEASED_LOG_MAX,
+  POKEMON_NATURES, DEFAULT_NATURE, POKEMON_GENDERS, POKEMON_ORIGINS, NICKNAME_MAX_LENGTH, IV_KEYS,
+  createPokemonInstance, buildInstance, sanitizeInstance, sanitizeRosterSection, validateRosterIntegrity,
+  migrateLegacyToInstances, sanitizeNickname, sanitizeBoxName, toCaptureDate, getInstanceDisplayName,
+  uidSequence, generateIvs, ivTotal, isPerfectIvs,
   POKEMON_DATA, REGIONS, BADGE_DATA, GEM_QUALITIES, GEM_ATTRIBUTES, BERRY_DATA, TALENT_DATA, SKILL_DATA,
   EXP_GROUPS, getExpForLevel, getBestTypeEffectiveness, REGION_POKEDEX_RANGES, LZString,
   SAVE_KEY, SAVE_SCHEMA_VERSION, SAVE_BACKUP_KEYS, SAVE_CORRUPT_KEY, SAVE_META_KEY, SAVE_PREMIGRATION_PREFIX,

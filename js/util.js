@@ -18,3 +18,25 @@ function escapeHtml(value) {
 function safeCssColor(value, fallback = '#a0a0a0') {
     return typeof value === 'string' && /^#[0-9a-fA-F]{3}([0-9a-fA-F]{3})?$/.test(value) ? value : fallback;
 }
+
+// ===================== 存档/数据清洗用的小工具（save-manager.js 与 pokemon-validation.js 共用）=====================
+function _isObj(v) {
+    return v !== null && typeof v === 'object' && !Array.isArray(v);
+}
+function _has(obj, key) {
+    return Object.prototype.hasOwnProperty.call(obj, key);
+}
+function _int(v, min, max, def) {
+    const n = typeof v === 'string' && v.trim() !== '' ? Number(v) : v;
+    if (typeof n !== 'number' || !Number.isFinite(n)) return def;
+    return Math.min(max, Math.max(min, Math.floor(n)));
+}
+function _num(v, min, def) {
+    const n = typeof v === 'string' && v.trim() !== '' ? Number(v) : v;
+    if (typeof n !== 'number' || !Number.isFinite(n)) return def;
+    return Math.max(min, n);
+}
+function _validPokemonId(id) {
+    const n = typeof id === 'string' && /^\d+$/.test(id) ? Number(id) : id;
+    return Number.isInteger(n) && _has(POKEMON_DATA, n) ? n : null;
+}

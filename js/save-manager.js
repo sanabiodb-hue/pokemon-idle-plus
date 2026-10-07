@@ -100,7 +100,18 @@ const SAVE_MIGRATIONS = {
         }
         return data;
     },
+    // v2（每个物种一条 caughtPokemon）→ v3（每只个体一条 ownedPokemon，外加队伍/PC/放生记录）
+    // 详见 pokemon-migration.js。旧字段原样保留，旧代码继续可用。
+    2: (data) => {
+        migrateLegacyToInstances(data);
+        return data;
+    },
 };
+
+// 存档必须带有队伍：旧结构的 team，或新结构的 party
+function _hasTeamData(obj) {
+    return (Array.isArray(obj.team) && obj.team.length > 0) || (Array.isArray(obj.party) && obj.party.length > 0);
+}
 
 function migrateSave(data) {
     const detected = Number.isInteger(data.schemaVersion) && data.schemaVersion >= 1 ? data.schemaVersion : 1;
@@ -131,26 +142,6 @@ const SAVE_ROUTE_CONDITIONS = ['6v_shiny', '6v_only'];
 const SAVE_IV_KEYS = ['hp', 'atk', 'def', 'spAtk', 'spDef', 'speed'];
 const SAVE_MAX_ENEMY_LEVEL = 1000000;
 
-function _isObj(v) {
-    return v !== null && typeof v === 'object' && !Array.isArray(v);
-}
-function _has(obj, key) {
-    return Object.prototype.hasOwnProperty.call(obj, key);
-}
-function _int(v, min, max, def) {
-    const n = typeof v === 'string' && v.trim() !== '' ? Number(v) : v;
-    if (typeof n !== 'number' || !Number.isFinite(n)) return def;
-    return Math.min(max, Math.max(min, Math.floor(n)));
-}
-function _num(v, min, def) {
-    const n = typeof v === 'string' && v.trim() !== '' ? Number(v) : v;
-    if (typeof n !== 'number' || !Number.isFinite(n)) return def;
-    return Math.max(min, n);
-}
-function _validPokemonId(id) {
-    const n = typeof id === 'string' && /^\d+$/.test(id) ? Number(id) : id;
-    return Number.isInteger(n) && _has(POKEMON_DATA, n) ? n : null;
-}
 function _findRoute(routeId) {
     if (typeof routeId !== 'string') return null;
     for (const regionKey in REGIONS) {
@@ -217,7 +208,7 @@ function sanitizeSave(raw, now = Date.now()) {
     const dropped = { pokemon: 0, gems: 0, other: 0 };
 
     if (!_isObj(raw)) return { ok: false, state: null, errors: ['存档不是对象'], warnings };
-    if (!Array.isArray(raw.team) || raw.team.length === 0) {
+    if (!_hasTeamData(raw)) {
         return { ok: false, state: null, errors: ['存档缺少队伍数据'], warnings };
     }
 
@@ -242,22 +233,6 @@ function sanitizeSave(raw, now = Date.now()) {
         };
     }
 
-    // ---- pokedex（与 caughtPokemon 保持一致）----
-    out.pokedex = {};
-    const srcDex = _isObj(raw.pokedex) ? raw.pokedex : {};
-    for (const key of Object.keys(srcDex)) {
-        const id = _validPokemonId(key);
-        if (id === null) { dropped.other++; continue; }
-        const state = srcDex[key];
-        if (state === 'caught') {
-            // 没有对应数据的“已捕获”降级为“已见过”，避免队伍/战斗拿到空数据
-            out.pokedex[id] = out.caughtPokemon[id] ? 'caught' : 'seen';
-        } else if (state === 'seen') {
-            out.pokedex[id] = 'seen';
-        }
-    }
-    for (const id in out.caughtPokemon) out.pokedex[id] = 'caught';
-
     // ---- shiny ----
     out.shinyDex = {};
     if (_isObj(raw.shinyDex)) {
@@ -274,18 +249,30 @@ function sanitizeSave(raw, now = Date.now()) {
         }
     }
 
-    // ---- 队伍 ----
-    const team = [];
-    for (const v of raw.team.slice(0, 100)) {
-        const id = _validPokemonId(v);
-        if (id !== null && out.caughtPokemon[id] && !team.includes(id)) team.push(id);
-        if (team.length >= 6) break;
+    // ---- 个体名册：ownedPokemon / party / pc / released，并重建旧兼容视图（caughtPokemon、team）----
+    const roster = sanitizeRosterSection(raw, out);
+    if (!roster.ok) {
+        return { ok: false, state: null, errors: [roster.error], warnings };
     }
-    if (team.length === 0) {
-        return { ok: false, state: null, errors: ['队伍中没有有效的已捕获宝可梦'], warnings };
+    warnings.push(...roster.warnings);
+    out.activePokemonIndex = _int(raw.activePokemonIndex, 0, out.party.length - 1, 0);
+
+    // ---- pokedex（必须与个体保持一致）----
+    out.pokedex = {};
+    const srcDex = _isObj(raw.pokedex) ? raw.pokedex : {};
+    for (const key of Object.keys(srcDex)) {
+        const id = _validPokemonId(key);
+        if (id === null) { dropped.other++; continue; }
+        const state = srcDex[key];
+        if (state === 'caught') {
+            // 没有对应数据的“已捕获”降级为“已见过”，避免队伍/战斗拿到空数据
+            out.pokedex[id] = out.caughtPokemon[id] ? 'caught' : 'seen';
+        } else if (state === 'seen') {
+            out.pokedex[id] = 'seen';
+        }
     }
-    out.team = team;
-    out.activePokemonIndex = _int(raw.activePokemonIndex, 0, team.length - 1, 0);
+    for (const id in out.caughtPokemon) out.pokedex[id] = 'caught';
+
 
     // ---- 地区/路线 ----
     let found = _findRoute(raw.currentRoute);
@@ -440,7 +427,7 @@ function sanitizeSave(raw, now = Date.now()) {
 // 完整流水线：已解码的对象 → { ok, state, fromVersion, warnings, error, code }
 function processSaveObject(obj, now = Date.now()) {
     if (!_isObj(obj)) return { ok: false, error: '存档不是对象', code: 'shape' };
-    if (!Array.isArray(obj.team) || obj.team.length === 0) {
+    if (!_hasTeamData(obj)) {
         return { ok: false, error: '存档缺少队伍数据', code: 'shape' };
     }
     let migrated;

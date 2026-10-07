@@ -467,7 +467,7 @@ const NEXT_BATTLE_MAX_DELAY_MS = 800;   // 两场战斗之间的最大间隔
 
 // ===================== 存档配置 =====================
 const SAVE_KEY = 'pokemon_idle_save';
-const SAVE_SCHEMA_VERSION = 2;          // 当前存档结构版本（旧存档无此字段，视为 1）
+const SAVE_SCHEMA_VERSION = 3;          // 当前存档结构版本（v1=无版本号的旧存档，v2=第1阶段，v3=个体名册）
 const SAVE_DEBOUNCE_MS = 2000;          // 防抖：最后一次请求后 2 秒写入
 const SAVE_MAX_WAIT_MS = 10000;         // 防抖上限：持续请求时最迟 10 秒写入
 const SAVE_BACKUP_COUNT = 3;            // 轮转备份份数

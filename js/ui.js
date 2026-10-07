@@ -506,8 +506,10 @@ class GameUI {
 
     renderBattleStart(battle) {
         const wild = battle.wild;
-        const playerPokemonId = this.game.gameState.team[this.game.gameState.activePokemonIndex];
-        const playerPokemon = this.game.createPokemon(playerPokemonId, true);
+        const activeInst = this.game.getPartyInstance(this.game.gameState.activePokemonIndex);
+        const playerPokemonId = activeInst.speciesId;
+        const playerPokemon = this.game.createPokemon(playerPokemonId, true, activeInst);
+        playerPokemon.name = getInstanceDisplayName(activeInst);   // 有昵称时显示昵称
 
         // 获取双方属性
         const wildData = POKEMON_DATA[wild.id];
@@ -552,7 +554,7 @@ class GameUI {
 
         // 玩家信息（根据图鉴展示偏好决定是否显示闪光外观）
         const playerShowShiny = this.game.gameState.pokedexDisplay[playerPokemonId] === 'shiny';
-        const playerHasShiny = this.game.gameState.shinyDex[playerPokemonId];
+        const playerHasShiny = activeInst.shiny;
         const playerShinyPrefix = playerHasShiny ? '✨ ' : '';
         document.getElementById('player-name').textContent = playerShinyPrefix + playerPokemon.name;
         document.getElementById('player-level').textContent = `Lv.${playerPokemon.level}`;
@@ -576,7 +578,7 @@ class GameUI {
         // 玩家精灵图（根据图鉴展示偏好决定是否使用闪光图片）
         const playerSprite = document.getElementById('player-sprite');
         const playerSpriteUrl = playerShowShiny ? getShinyPokemonSpriteUrl(playerPokemonId) : getPokemonSpriteUrl(playerPokemonId);
-        playerSprite.innerHTML = `<img src="${playerSpriteUrl}" alt="${playerPokemon.name}" onerror="this.parentElement.textContent='⚡'">`;
+        playerSprite.innerHTML = `<img src="${playerSpriteUrl}" alt="${escapeHtml(playerPokemon.name)}" onerror="this.parentElement.textContent='⚡'">`;
         if (playerShowShiny) {
             playerSprite.classList.add('shiny');
         } else {
@@ -783,23 +785,25 @@ class GameUI {
         const activeIdx = this.game.gameState.activePokemonIndex;
         const restIndices = this.game.gameState.team.map((_, i) => i).filter(i => i !== activeIdx);
         restIndices.sort((a, b) => {
-            const levelA = this.game.getStoredData(this.game.gameState.team[a])?.level || 1;
-            const levelB = this.game.getStoredData(this.game.gameState.team[b])?.level || 1;
+            const levelA = this.game.getPartyInstance(a)?.level || 1;
+            const levelB = this.game.getPartyInstance(b)?.level || 1;
             return levelB - levelA;
         });
         const renderOrder = [activeIdx, ...restIndices];
 
         renderOrder.forEach((index) => {
-            const pokemonId = this.game.gameState.team[index];
-            if (!pokemonId) return;
+            const inst = this.game.getPartyInstance(index);
+            if (!inst) return;
+            const pokemonId = inst.speciesId;
             const isActive = index === activeIdx;
             
-            // 从 game.createPokemon 获取宝可梦实例（使用存储的等级）
-            const pokemon = this.game.createPokemon(pokemonId, true);
+            // 队伍里的每一格都是一只真实个体：等级/个体值/经验/闪光/昵称都是它自己的
+            const pokemon = this.game.createPokemon(pokemonId, true, inst);
             if (!pokemon) return;
+            pokemon.name = getInstanceDisplayName(inst);
 
             const battleStats = this.game.calculateBattleStats(index);
-            const expProgress = this.game.getExpProgress(pokemonId);
+            const expProgress = this.game.getExpProgress(pokemonId, inst);
             const baseData = POKEMON_DATA[pokemonId];
 
             const typeBadges = baseData.types.map(t =>
@@ -810,16 +814,16 @@ class GameUI {
             slot.className = `team-slot${isActive ? ' active' : ''}`;
             
             // 获取宝可梦的存储数据
-            const storedData = this.game.getStoredData(pokemonId);
+            const storedData = inst;
             
             // 计算战力和潜力
-            const power = this.game.calculatePower(pokemonId, true);
-            const potential = this.game.calculatePotential(pokemonId);
+            const power = this.game.calculatePower(pokemonId, true, inst);
+            const potential = this.game.calculatePotential(pokemonId, inst);
             const potentialColor = potential >= 80 ? '#2ecc71' : potential >= 60 ? '#f39c12' : '#e74c3c';
             
             const showShiny = this.game.gameState.pokedexDisplay[pokemonId] === 'shiny';
             const slotSpriteUrl = showShiny ? getShinyPokemonSpriteUrl(pokemonId) : getPokemonSpriteUrl(pokemonId);
-            const hasShiny = this.game.gameState.shinyDex[pokemonId];
+            const hasShiny = inst.shiny;
             const shinyNamePrefix = hasShiny ? '✨ ' : '';
 
             // 技能等级显示（0不显示）
@@ -828,9 +832,9 @@ class GameUI {
 
             slot.innerHTML = `
                 <div class="slot-main-row">
-                    <div class="slot-sprite${showShiny ? ' shiny' : ''}"><img src="${slotSpriteUrl}" alt="${pokemon.name}" onerror="this.parentElement.textContent='🔵'"></div>
+                    <div class="slot-sprite${showShiny ? ' shiny' : ''}"><img src="${slotSpriteUrl}" alt="${escapeHtml(pokemon.name)}" onerror="this.parentElement.textContent='🔵'"></div>
                     <div class="slot-info">
-                        <div class="slot-name">${shinyNamePrefix}${pokemon.name} ${isActive ? '⚔️' : ''} <small style="color:var(--text-secondary);font-weight:normal">Lv.${pokemon.level}</small>${skillBadgeHtml}</div>
+                        <div class="slot-name">${shinyNamePrefix}${escapeHtml(pokemon.name)} ${isActive ? '⚔️' : ''} <small style="color:var(--text-secondary);font-weight:normal">Lv.${pokemon.level}</small>${skillBadgeHtml}</div>
                         <div class="slot-type-nature">${typeBadges}</div>
                     </div>
                     <div class="team-slot-actions">
