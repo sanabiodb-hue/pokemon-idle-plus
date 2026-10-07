@@ -13,7 +13,8 @@ const HUNT_SESSION_TRANSITIONS = {
     stopped: [],
     finished: [],
 };
-const HUNT_STAT_KEYS = ['battles', 'victories', 'defeats', 'captures', 'shinies', 'xp', 'money', 'healingSpent'];
+// healCost = valor de reposição das poções usadas (preço da poção no momento do uso); qualitySum = soma da qualidade (%) das capturas novas
+const HUNT_STAT_KEYS = ['battles', 'victories', 'defeats', 'captures', 'shinies', 'xp', 'money', 'healingSpent', 'healCost', 'qualitySum'];
 
 function createHuntSessionStats() {
     const s = {};

@@ -68,19 +68,22 @@ class AutomationEngine {
 
     _onHeal(e) {
         const s = this._session();
-        if (s && e.potion) huntSessionRecord(s, { healingSpent: 1 });
+        if (s && e.potion) huntSessionRecord(s, { healingSpent: 1, healCost: Number.isFinite(e.price) ? e.price : 0 });
     }
 
     _onCaptured(e) {
         const s = this._session();
         if (!s) return;
         const isNew = e.firstCatch || e.newIndividual;
-        huntSessionRecord(s, { captures: isNew ? 1 : 0, shinies: isNew && e.shiny ? 1 : 0 });
+        huntSessionRecord(s, { captures: isNew ? 1 : 0, shinies: isNew && e.shiny ? 1 : 0, qualitySum: isNew && Number.isFinite(e.quality) ? e.quality : 0 });
     }
 
     _onRouteChanged(e) {
         const s = this._session();
-        if (s) s.routeId = e.route;
+        if (!s) return;
+        this.game.analyzerFlush('route_change');       // 切路线前，把到目前为止的成绩记到旧路线上
+        s.routeId = e.route;
+        this.game.analyzerMarkRoute(e.route);
     }
 
     _onBattleStarted(e) {

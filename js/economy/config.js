@@ -61,6 +61,15 @@ const ECONOMY_CONFIG = {
         },
     },
 
+    // 狩猎分析器：只存聚合数字（最近 N 次狩猎 + 每条路线的累计），不存逐场事件
+    analyzer: {
+        goals: ['xp', 'money', 'captures', 'shiny'],
+        defaultGoal: 'xp',
+        historyMax: 20,
+        routesMax: 60,                         // 最多保留多少条路线的累计（超出时淘汰最久没玩的）
+        minSampleMs: 10 * 60 * 1000,           // 真实数据至少要有这么长的样本才当作"实测"，否则显示"估算"
+    },
+
     // 余额上限（防止数值溢出）
     maxMoney: Number.MAX_SAFE_INTEGER / 4,
 };

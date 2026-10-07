@@ -304,6 +304,7 @@ function sanitizeSave(raw, now = Date.now()) {
     // ---- 经济累计数字（可选字段；没有 = 从未有过经济活动）----
     if (_isObj(raw.economy)) out.economy = sanitizeEconomyState(raw.economy);
     if (_isObj(raw.upgrades)) { const up = sanitizeUpgradesState(raw.upgrades); if (Object.keys(up).length) out.upgrades = up; }
+    if (_isObj(raw.analyzer) && typeof sanitizeAnalyzerState === 'function') out.analyzer = sanitizeAnalyzerState(raw.analyzer);
     // ---- 自动化（可选字段；没有 = 从未配置，保持默认关闭）----
     const automation = typeof sanitizeAutomationState === 'function' ? sanitizeAutomationState(raw.automation) : null;
     if (automation) out.automation = automation;

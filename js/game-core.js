@@ -516,6 +516,7 @@ class GameCore {
         if (s && s.simClock) s.simClock = null;
         // 读档恢复的狩猎：离线结算完成后回到"暂停"，由玩家决定何时继续
         if (session && h.resumeFromReload && session.state === 'running') {
+            this.analyzerFlush();
             huntSessionTransition(session, 'paused', simClock.now());
             this._getEngine().sync();
         }
@@ -822,7 +823,7 @@ class GameCore {
             s.playerHp = Math.min(max, Math.max(0, hpBefore) + potionHealAmount(max, this.getPotionHealPercent()));
             inv.potions--;
             s.lowHpNotified = false;
-            this._emit('heal', { potion: true, reason: 'automation', amount: s.playerHp - Math.max(0, hpBefore), hpBefore, hpAfter: s.playerHp, maxHp: max, revived, potionsLeft: inv.potions });
+            this._emit('heal', { potion: true, reason: 'automation', amount: s.playerHp - Math.max(0, hpBefore), hpBefore, hpAfter: s.playerHp, maxHp: max, revived, potionsLeft: inv.potions, price: this.getPotionPrice() });
             return { ok: true, type: 'HEAL', amount: s.playerHp - Math.max(0, hpBefore), potionsLeft: inv.potions, revived };
         }
         if (action.type === 'SWITCH_POKEMON') {
@@ -2039,7 +2040,7 @@ class GameCore {
             this.save();
         }
         const hpAfter = this.currentBattle ? this.currentBattle.playerCurrentHp : b.playerCurrentHp;
-        this._emit('heal', { potion: true, reason, amount: hpAfter - hpBefore, hpBefore, hpAfter, maxHp: b.playerMaxHp, revived: fainted, potionsLeft: inv.potions });
+        this._emit('heal', { potion: true, reason, amount: hpAfter - hpBefore, hpBefore, hpAfter, maxHp: b.playerMaxHp, revived: fainted, potionsLeft: inv.potions, price: this.getPotionPrice() });
         if (this.onBattleEvent) this.onBattleEvent('healing', { hp: hpAfter, maxHp: b.playerMaxHp });
         return { ok: true, amount: hpAfter - hpBefore, potionsLeft: inv.potions, revived: fainted };
     }
@@ -2495,7 +2496,7 @@ class GameCore {
         const outcome = this._applyCapture(wildPokemon);
         this._emit('pokemon_captured', {
             id: wildPokemon.id, uid: outcome.uid, firstCatch: outcome.firstCatch, newIndividual: !!outcome.uid,
-            shiny: !!(outcome.shiny), grade: q ? q.grade : null, reason: decision.reason,
+            shiny: !!(outcome.shiny), grade: q ? q.grade : null, quality: q ? q.percentage : null, reason: decision.reason,
         });
         return outcome;
     }

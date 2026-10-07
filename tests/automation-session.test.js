@@ -10,8 +10,8 @@ test('sessão nova: idle, estatísticas zeradas, política copiada', () => {
     const { ctx } = newGame();
     const s = mk(ctx);
     assert.equal(s.state, 'idle');
-    assert.deepEqual(plain(s.stats), { battles: 0, victories: 0, defeats: 0, captures: 0, shinies: 0, xp: 0, money: 0, healingSpent: 0 });
-    assert.deepEqual(plain(ctx.HUNT_STAT_KEYS), ['battles', 'victories', 'defeats', 'captures', 'shinies', 'xp', 'money', 'healingSpent']);
+    assert.deepEqual(plain(s.stats), { battles: 0, victories: 0, defeats: 0, captures: 0, shinies: 0, xp: 0, money: 0, healingSpent: 0, healCost: 0, qualitySum: 0 });
+    assert.deepEqual(plain(ctx.HUNT_STAT_KEYS), ['battles', 'victories', 'defeats', 'captures', 'shinies', 'xp', 'money', 'healingSpent', 'healCost', 'qualitySum']);
     assert.equal(ctx.huntSessionDurationMs(s, 99999), 0, 'idle não conta tempo');
 });
 
@@ -59,7 +59,7 @@ test('estatísticas só acumulam em running; chaves/valores inválidos são igno
     assert.equal(ctx.huntSessionRecord(s, { battles: 1 }), false, 'idle ignora');
     ctx.huntSessionTransition(s, 'running', 0);
     assert.equal(ctx.huntSessionRecord(s, { battles: 1, victories: 1, xp: 30, money: 12, bogus: 5, captures: -2, shinies: NaN, defeats: '3' }), true);
-    assert.deepEqual(plain(s.stats), { battles: 1, victories: 1, defeats: 0, captures: 0, shinies: 0, xp: 30, money: 12, healingSpent: 0 });
+    assert.deepEqual(plain(s.stats), { battles: 1, victories: 1, defeats: 0, captures: 0, shinies: 0, xp: 30, money: 12, healingSpent: 0, healCost: 0, qualitySum: 0 });
     assert.equal(s.stats.bogus, undefined);
     ctx.huntSessionTransition(s, 'paused', 10);
     assert.equal(ctx.huntSessionRecord(s, { battles: 5 }), false, 'pausada ignora');

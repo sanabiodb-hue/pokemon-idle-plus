@@ -48,6 +48,7 @@ const AUTOMATION_ACTION_HANDLERS = {
             huntSessionTransition(session, 'running', game.now());
             gs.automation.session = session;
             game._emit('hunt_started', { id: session.id, route: session.routeId });
+            game.analyzerBegin(session);
             game.save();
             game._automationSync();
             return { sessionId: session.id };
@@ -64,6 +65,7 @@ const AUTOMATION_ACTION_HANDLERS = {
             const s = game.getHuntSession();
             huntSessionTransition(s, 'paused', game.now());
             game._emit('hunt_paused', { id: s.id });
+            game.analyzerFlush();
             game.save();
             game._automationSync();
             return {};
@@ -81,6 +83,8 @@ const AUTOMATION_ACTION_HANDLERS = {
             const s = game.getHuntSession();
             huntSessionTransition(s, 'running', game.now());
             game._emit('hunt_resumed', { id: s.id });
+            game.analyzerFlush();                         // 读档后恢复的会话可能还有没记账的增量
+            game.analyzerBegin(s);
             game.save();
             game._automationSync();
             return {};
@@ -96,6 +100,7 @@ const AUTOMATION_ACTION_HANDLERS = {
             const s = game.getHuntSession();
             const reason = HUNT_STOP_REASONS.includes(a.reason) ? a.reason : 'manual';
             huntSessionTransition(s, 'stopped', game.now(), reason);
+            game.analyzerFinish(s);
             game._emit('hunt_stopped', { id: s.id, reason, message: huntStopMessage(s), durationMs: huntSessionDurationMs(s, game.now()), stats: { ...s.stats } });
             game.save();
             game._automationSync();
