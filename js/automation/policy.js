@@ -6,7 +6,7 @@
 
 const AUTOMATION_POLICY_VERSION = 1;
 const AUTOMATION_TARGET_TYPES = ['any', 'species'];
-const AUTOMATION_ROUTE_MODES = ['stay', 'stop', 'switchWhenComplete'];
+const AUTOMATION_ROUTE_MODES = ['stay', 'switchWhenComplete', 'stopWhenComplete'];
 const AUTOMATION_SWITCH_MODES = ['keep', 'bestMatchup'];
 const AUTOMATION_NO_POTION_BEHAVIORS = ['stop'];         // 'rest'（原地休息回血）留给以后
 const AUTOMATION_RESERVED_NO_POTION = ['rest'];
@@ -18,11 +18,13 @@ function defaultAutomationPolicy() {
         version: AUTOMATION_POLICY_VERSION,
         target: { type: 'any', speciesIds: [] },
         capture: { enabled: true, minQualityPercent: 0, alwaysShiny: true, alwaysNewSpecies: true },
-        heal: { enabled: true, belowPercent: 40, onNoPotions: 'stop' },
+        heal: { enabled: true, whenHpBelowPercent: 30, onNoPotions: 'stop' },
         route: { mode: 'stay' },
         switchPolicy: { mode: 'bestMatchup' },
         ballPolicy: { type: 'none' },
-        stopConditions: { maxBattles: 0, maxMinutes: 0 },   // 0 = 不限
+        // 停止条件（0/false = 不启用）。没有药水则停由 heal.onNoPotions 决定；
+        // 预留：inventoryFull / pcFull / captureLimit / moneyTarget / xpTarget
+        stopConditions: { timeLimitMinutes: 0, battleLimit: 0, shinyFound: false, routeComplete: false },
     };
 }
 
@@ -94,10 +96,10 @@ function _normalizePolicy(raw) {
     const heal = section('heal');
     if (heal) {
         if (_has(heal, 'enabled')) { if (typeof heal.enabled === 'boolean') out.heal.enabled = heal.enabled; else err('heal.enabled', 'not_boolean', 'Valor inválido.'); }
-        if (_has(heal, 'belowPercent')) {
-            const v = _strictNumber(heal.belowPercent, 1, 99);
-            if (v === null) err('heal.belowPercent', 'out_of_range', 'O limite de cura deve estar entre 1% e 99%.');
-            else out.heal.belowPercent = v;
+        if (_has(heal, 'whenHpBelowPercent')) {
+            const v = _strictNumber(heal.whenHpBelowPercent, 1, 99);
+            if (v === null) err('heal.whenHpBelowPercent', 'out_of_range', 'O limite de cura deve estar entre 1% e 99%.');
+            else out.heal.whenHpBelowPercent = v;
         }
         if (_has(heal, 'onNoPotions')) {
             if (AUTOMATION_NO_POTION_BEHAVIORS.includes(heal.onNoPotions)) out.heal.onNoPotions = heal.onNoPotions;
@@ -126,12 +128,18 @@ function _normalizePolicy(raw) {
 
     const stop = section('stopConditions');
     if (stop) {
-        for (const [key, max] of [['maxBattles', 1e9], ['maxMinutes', 1e6]]) {
+        for (const [key, max] of [['battleLimit', 1e9], ['timeLimitMinutes', 1e6]]) {
             if (!_has(stop, key)) continue;
             const v = _strictNumber(stop[key], 0, max);
             if (v === null || !Number.isInteger(v)) err(`stopConditions.${key}`, 'out_of_range', 'Limite de parada inválido.');
             else out.stopConditions[key] = v;
         }
+        for (const key of ['shinyFound', 'routeComplete']) {
+            if (!_has(stop, key)) continue;
+            if (typeof stop[key] === 'boolean') out.stopConditions[key] = stop[key];
+            else err(`stopConditions.${key}`, 'not_boolean', 'Valor inválido.');
+        }
+        for (const k of Object.keys(stop)) if (!['battleLimit', 'timeLimitMinutes', 'shinyFound', 'routeComplete'].includes(k)) err(`stopConditions.${k}`, 'unknown_field', `Condição de parada desconhecida: ${k}.`);
     }
     return { policy: out, errors };
 }

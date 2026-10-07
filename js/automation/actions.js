@@ -4,7 +4,6 @@
 //   - execute 只调用核心已有的规则（changeRoute / setActivePokemon / processDefeat …），不自己算伤害、经验、奖励。
 //   - 除 START_HUNT 外，所有动作都要求有一场"进行中"的狩猎；没有狩猎 = 什么都不执行。
 //   - 动作对象是纯数据：{ type, ...参数 }，以后服务器版可以原样序列化传输。
-// HEAL 的校验已登记但暂不可用（药水在后续阶段接入）。
 
 const AUTOMATION_ACTION_TYPES = [
     'START_HUNT', 'PAUSE_HUNT', 'RESUME_HUNT', 'STOP_HUNT',
@@ -56,7 +55,11 @@ const AUTOMATION_ACTION_HANDLERS = {
     },
 
     PAUSE_HUNT: {
-        validate(game) { return _huntActive(game) ? _pass : _fail('no_running_hunt', 'Não há caçada em execução.'); },
+        validate(game) {
+            if (!_huntActive(game)) return _fail('no_running_hunt', 'Não há caçada em execução.');
+            if (game._towerMode) return _fail('tower_mode', 'Saia da Torre de Desafio antes de pausar a caçada.');
+            return _pass;
+        },
         execute(game) {
             const s = game.getHuntSession();
             huntSessionTransition(s, 'paused', game.now());
@@ -93,7 +96,7 @@ const AUTOMATION_ACTION_HANDLERS = {
             const s = game.getHuntSession();
             const reason = HUNT_STOP_REASONS.includes(a.reason) ? a.reason : 'manual';
             huntSessionTransition(s, 'stopped', game.now(), reason);
-            game._emit('hunt_stopped', { id: s.id, reason, durationMs: huntSessionDurationMs(s, game.now()), stats: { ...s.stats } });
+            game._emit('hunt_stopped', { id: s.id, reason, message: huntStopMessage(s), durationMs: huntSessionDurationMs(s, game.now()), stats: { ...s.stats } });
             game.save();
             game._automationSync();
             return { reason };
@@ -115,13 +118,21 @@ const AUTOMATION_ACTION_HANDLERS = {
         },
     },
 
-    // 药水系统尚未接入：登记动作但一律拒绝，保证现在不会有任何治疗副作用
+    // 对出战宝可梦使用一瓶药水（消耗与回血由核心 usePotion 完成）
     HEAL: {
         validate(game) {
             if (!_huntActive(game)) return _fail('no_running_hunt', 'Não há caçada em execução.');
-            return _fail('heal_unavailable', 'A cura automática ainda não está disponível.');
+            if (game._towerMode) return _fail('tower_mode', 'Indisponível na Torre de Desafio.');
+            if (!game.currentBattle) return _fail('no_battle', 'Não há batalha em andamento.');
+            if (game.getPotions() <= 0) return _fail('no_potions', 'Sem poções.');
+            const b = game.currentBattle;
+            if (b.playerCurrentHp > 0 && b.playerCurrentHp >= b.playerMaxHp) return _fail('full_hp', 'O Pokémon já está com a vida cheia.');
+            return _pass;
         },
-        execute() { return {}; },
+        execute(game) {
+            const r = game.usePotion('automation');
+            return r.ok ? { amount: r.amount, potionsLeft: r.potionsLeft, revived: r.revived } : {};
+        },
     },
 
     // 对一只已被击败、尚未结算的野生宝可梦执行捕获决策。每只只结算一次

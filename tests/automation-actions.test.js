@@ -175,14 +175,6 @@ test('SWITCH_POKEMON: valida índice, ativo atual e estado; troca e emite pokemo
     assert.equal(seen.length, 1);
 });
 
-test('HEAL: registrada mas recusada enquanto poções não existem (nenhum efeito colateral)', () => {
-    const { game } = newGame();
-    start(game);
-    const before = snapshot(game);
-    assert.equal(game.dispatchAutomationAction({ type: 'HEAL' }).code, 'heal_unavailable');
-    assert.equal(snapshot(game), before);
-});
-
 test('ATTACK: só com batalha ociosa; em curso é recusado', () => {
     const { game } = newGame();
     start(game);

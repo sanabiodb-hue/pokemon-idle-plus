@@ -114,7 +114,8 @@ function loadGameContext(opts = {}) {
   GUIDE_ONBOARDING_STEPS, GUIDE_GOALS, guideDefaultState, sanitizeGuideState,
   SystemClock, ManualClock, EventBus, AUTOMATION_EVENT_TYPES, calculatePokemonQuality, QUALITY_GRADES,
   defaultAutomationPolicy, validateAutomationPolicy, sanitizeAutomationPolicy, sanitizeAutomationState, policyTargetsSpecies, shouldCapture, AUTOMATION_ACTION_TYPES, ActionDispatcher, decideAutomationActions, AutomationEngine, AUTOMATION_MAX_ACTIONS_PER_EVALUATION,
-  createHuntSession, huntSessionTransition, huntSessionCanTransition, huntSessionDurationMs, huntSessionRecord, sanitizeHuntSession, HUNT_STAT_KEYS, HUNT_SESSION_STATES,
+  createHuntSession, huntSessionTransition, huntSessionCanTransition, huntSessionDurationMs, huntSessionRecord, sanitizeHuntSession, HUNT_STAT_KEYS, HUNT_SESSION_STATES, huntStopMessage, huntStoppedByCondition, huntStopReasonShort, HUNT_STOP_REASONS,
+  MAX_POTIONS, INITIAL_POTIONS, POTION_HEAL_PERCENT,
   Analytics, ANALYTICS_STORAGE_KEY, ANALYTICS_QUEUE_MAX, ANALYTICS_EVENT_NAMES, ANALYTICS_SESSION_GAP_MS,
   CAPTURE_DUPLICATE_POLICIES, DEFAULT_CAPTURE_DUPLICATE_POLICY, DUPLICATE_CAPTURE_RATE, DUPLICATE_SPECIES_CAP,
   MAX_POKEMON_LEVEL, MAX_SKILL_LEVEL, TOWER_MAX_FLOOR, GEM_BAG_MAX, BERRY_STAT_CAP

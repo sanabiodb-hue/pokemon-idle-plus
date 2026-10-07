@@ -29,12 +29,12 @@ const completeRoute = (game, routeId) => {
 // ------------------------------------------------------------- decisão pura
 test('decisão: condições de parada têm prioridade e são puras', () => {
     const { ctx } = newGame();
-    const pol = basePolicy(ctx, { stopConditions: { maxBattles: 10, maxMinutes: 2 }, route: { mode: 'switchWhenComplete' } });
+    const pol = basePolicy(ctx, { stopConditions: { battleLimit: 10, timeLimitMinutes: 2 }, route: { mode: 'switchWhenComplete' } });
     const snap = { policy: pol, stats: { battles: 10 }, durationMs: 0, routeComplete: true, nextRouteId: 'r2', currentRouteId: 'r1' };
     const frozen = JSON.stringify(snap);
-    assert.deepEqual(D(ctx, 'after_battle', snap), [{ action: { type: 'STOP_HUNT', reason: 'max_battles' }, reason: 'max_battles' }]);
+    assert.deepEqual(D(ctx, 'after_battle', snap), [{ action: { type: 'STOP_HUNT', reason: 'battle_limit' }, reason: 'battle_limit' }]);
     assert.equal(JSON.stringify(snap), frozen, 'não muta a entrada');
-    assert.equal(D(ctx, 'after_battle', { ...snap, stats: { battles: 3 }, durationMs: 120000 })[0].action.reason, 'max_minutes');
+    assert.equal(D(ctx, 'after_battle', { ...snap, stats: { battles: 3 }, durationMs: 120000 })[0].action.reason, 'time_limit');
     assert.equal(D(ctx, 'after_battle', { ...snap, stats: { battles: 9 }, durationMs: 119999 })[0].action.type, 'CHANGE_ROUTE');
     assert.deepEqual(D(ctx, 'after_battle', snap), D(ctx, 'after_battle', snap), 'determinística');
 });
@@ -43,10 +43,10 @@ test('decisão: modos de rota', () => {
     const { ctx } = newGame();
     const mk = (mode, extra = {}) => ({ policy: basePolicy(ctx, { route: { mode } }), stats: { battles: 1 }, durationMs: 0, routeComplete: true, nextRouteId: 'r2', currentRouteId: 'r1', ...extra });
     assert.deepEqual(D(ctx, 'after_battle', mk('stay')), []);
-    assert.equal(D(ctx, 'after_battle', mk('stop'))[0].action.reason, 'route_complete');
+    assert.equal(D(ctx, 'after_battle', mk('stopWhenComplete'))[0].action.reason, 'route_complete');
     assert.deepEqual(D(ctx, 'after_battle', mk('switchWhenComplete'))[0].action, { type: 'CHANGE_ROUTE', routeId: 'r2' });
     assert.equal(D(ctx, 'after_battle', mk('switchWhenComplete', { nextRouteId: null }))[0].action.type, 'STOP_HUNT', 'sem próxima rota: para');
-    assert.deepEqual(D(ctx, 'after_battle', mk('stop', { routeComplete: false })), [], 'rota incompleta: nada');
+    assert.deepEqual(D(ctx, 'after_battle', mk('stopWhenComplete', { routeComplete: false })), [], 'rota incompleta: nada');
 });
 
 test('decisão: troca de Pokémon no encontro; entradas inválidas não geram ações', () => {
@@ -118,25 +118,25 @@ test('derrota real do jogador emite battle_completed(defeat) e entra nas estatí
     assert.equal(s.stats.victories, 0);
 });
 
-test('maxBattles: a caçada para sozinha na batalha N, com razão e sem assinantes sobrando', () => {
+test('battleLimit: a caçada para sozinha na batalha N, com razão e sem assinantes sobrando', () => {
     const { game } = newGame({ seed: 34 });
-    const s = hunt(game, { stopConditions: { maxBattles: 5 } });
+    const s = hunt(game, { stopConditions: { battleLimit: 5 } });
     const stopped = [];
     game.bus.on('hunt_stopped', (e) => stopped.push(e));
     for (let i = 0; i < 9; i++) win(game);
     assert.equal(s.state, 'stopped');
-    assert.equal(s.stopReason, 'max_battles');
+    assert.equal(s.stopReason, 'battle_limit');
     assert.equal(s.stats.battles, 5, 'depois de parar nada é contado');
     assert.equal(stopped.length, 1);
     assert.equal(stopped[0].stats.battles, 5);
     assert.equal(game._engine.isAttached(), false);
 });
 
-test('maxMinutes usa o relógio injetado (a pausa não conta)', () => {
+test('timeLimitMinutes usa o relógio injetado (a pausa não conta)', () => {
     const { game, ctx } = newGame({ seed: 35 });
     const clock = new ctx.ManualClock(5_000_000);
     game.clock = clock;
-    const s = hunt(game, { stopConditions: { maxMinutes: 2 } });
+    const s = hunt(game, { stopConditions: { timeLimitMinutes: 2 } });
     clock.advance(60_000);
     win(game);
     assert.equal(s.state, 'running');
@@ -148,11 +148,11 @@ test('maxMinutes usa o relógio injetado (a pausa não conta)', () => {
     clock.advance(60_000);
     win(game);
     assert.equal(s.state, 'stopped');
-    assert.equal(s.stopReason, 'max_minutes');
+    assert.equal(s.stopReason, 'time_limit');
 });
 
 test('rota completa: stop → para; switchWhenComplete → muda para a próxima; stay → fica', () => {
-    for (const [mode, expect] of [['stop', 'stopped'], ['switchWhenComplete', 'running'], ['stay', 'running']]) {
+    for (const [mode, expect] of [['stopWhenComplete', 'stopped'], ['switchWhenComplete', 'running'], ['stay', 'running']]) {
         const { game } = newGame({ seed: 36 });
         completeRoute(game, 'kanto_route1');
         const s = hunt(game, { route: { mode } });
@@ -163,7 +163,7 @@ test('rota completa: stop → para; switchWhenComplete → muda para a próxima;
             assert.equal(s.routeId, game.gameState.currentRoute, 'a sessão acompanha a rota');
         }
         if (mode === 'stay') assert.equal(game.gameState.currentRoute, 'kanto_route1');
-        if (mode === 'stop') assert.equal(s.stopReason, 'route_complete');
+        if (mode === 'stopWhenComplete') assert.equal(s.stopReason, 'route_complete');
     }
 });
 
@@ -203,7 +203,7 @@ test('troca de Pokémon no encontro: bestMatchup troca via SWITCH_POKEMON; keep 
 
 test('pausada: não registra, não decide; retomar volta ao normal', () => {
     const { game } = newGame({ seed: 39 });
-    const s = hunt(game, { stopConditions: { maxBattles: 3 } });
+    const s = hunt(game, { stopConditions: { battleLimit: 3 } });
     win(game);
     game.dispatchAutomationAction({ type: 'PAUSE_HUNT' });
     assert.equal(game._engine.isAttached(), false);
@@ -256,7 +256,7 @@ test('erro dentro do motor é contido (automation_error) e a caçada continua s�
 
 test('offline com caçada rodando: estatísticas acumulam, decisões não rodam no meio do lote, sem exceções', async () => {
     const { game } = newGame({ seed: 43 });
-    const s = hunt(game, { stopConditions: { maxBattles: 5 } });
+    const s = hunt(game, { stopConditions: { battleLimit: 5 } });
     game.stopBattle();
     await runOffline(game, 10 * 60 * 1000);
     assert.ok(s.stats.victories > 50);

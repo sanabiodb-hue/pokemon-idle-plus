@@ -810,6 +810,7 @@ class GameCore {
             },
             settings: {},
             guide: guideDefaultState('active'),   // 新手引导与目标进度（见 guidance.js）
+            inventory: { potions: INITIAL_POTIONS },   // 消耗品背包（目前只有药水）
             // 树果系统
             berryPlots: [],         // 种植槽 [{ berryId, plantedAt }]  成熟判定: Date.now() - plantedAt >= BERRY_GROW_TIME
             berryBag: {},           // 树果背包 { berryId: count }
@@ -1834,6 +1835,60 @@ class GameCore {
     }
 
     // 失败后逐步回复生命值：每秒回复20%，直到100%（使用 Worker 定时器，后台不被节流）
+    // ===================== 药水 =====================
+    // 旧存档/导入存档没有 inventory：补发初始药水（一次性，之后随存档保存）
+    ensureInventory() {
+        const gs = this.gameState;
+        if (!gs) return null;
+        if (!_isObj(gs.inventory)) gs.inventory = { potions: INITIAL_POTIONS };
+        return gs.inventory;
+    }
+
+    getPotions() {
+        const inv = this.ensureInventory();
+        return inv ? inv.potions : 0;
+    }
+
+    // 对出战宝可梦使用一瓶药水（核心规则：消耗、回血、复活后重开战斗都在这里）。界面/自动化只"请求"。
+    // 返回 { ok, code?, amount, potionsLeft }
+    usePotion(reason = 'manual') {
+        const b = this.currentBattle;
+        if (!b || this._towerMode) return { ok: false, code: 'no_battle' };
+        const inv = this.ensureInventory();
+        if (inv.potions <= 0) return { ok: false, code: 'no_potions' };
+        const fainted = b.playerCurrentHp <= 0;
+        if (!fainted && b.playerCurrentHp >= b.playerMaxHp) return { ok: false, code: 'full_hp' };
+        const hpBefore = b.playerCurrentHp;
+        const amount = Math.max(1, Math.ceil(b.playerMaxHp * POTION_HEAL_PERCENT));
+        b.playerCurrentHp = Math.min(b.playerMaxHp, b.playerCurrentHp + amount);
+        b._lowHpNotified = false;
+        inv.potions--;
+        if (fainted) {
+            // 复活：停掉战败回血，换一只新的敌人重新开战（与回血完成时的流程一致）
+            this._clearHealTimer();
+            this.gameState.currentEnemy = null;
+            this.save();
+            this.startBattle();
+        } else {
+            this.save();
+        }
+        const hpAfter = this.currentBattle ? this.currentBattle.playerCurrentHp : b.playerCurrentHp;
+        this._emit('heal', { potion: true, reason, amount: hpAfter - hpBefore, hpBefore, hpAfter, maxHp: b.playerMaxHp, revived: fainted, potionsLeft: inv.potions });
+        if (this.onBattleEvent) this.onBattleEvent('healing', { hp: hpAfter, maxHp: b.playerMaxHp });
+        return { ok: true, amount: hpAfter - hpBefore, potionsLeft: inv.potions, revived: fainted };
+    }
+
+    // 狩猎中检查血量：低于策略阈值时发 hp_low（每次越过阈值只发一次，除非 force）
+    _checkLowHp(battle, force) {
+        const heal = this.getAutomationPolicy().heal;
+        if (!heal.enabled || battle.playerMaxHp <= 0) return;
+        const pct = battle.playerCurrentHp / battle.playerMaxHp * 100;
+        if (pct >= heal.whenHpBelowPercent) { battle._lowHpNotified = false; return; }
+        if (battle._lowHpNotified && !force) return;
+        battle._lowHpNotified = true;
+        this._emit('hp_low', { hpPercent: pct, hp: battle.playerCurrentHp, maxHp: battle.playerMaxHp });
+    }
+
     startHealingAfterDefeat() {
         if (!this.currentBattle) return;
         this._clearHealTimer();
@@ -1952,13 +2007,12 @@ class GameCore {
                     });
                 }
 
+                if (battle.playerCurrentHp > 0 && this.isHuntRunning() && !this._towerMode) this._checkLowHp(battle, false);
+
                 // 玩家宝可梦被击败
                 if (battle.playerCurrentHp <= 0) {
                     battle.playerCurrentHp = 0;
                     if (d.activeInst) d.activeInst.stats.faints++;
-                    this._emit('battle_completed', {
-                        result: 'defeat', enemyId: this.gameState.currentEnemy ? this.gameState.currentEnemy.id : null, xp: 0, gold: 0, route: this.gameState.currentRoute, tower: !!this._towerMode,
-                    });
                     if (this.onBattleEvent) {
                         this.onBattleEvent('playerFainted', {});
                     }
@@ -1969,6 +2023,10 @@ class GameCore {
                         // 开始逐步回复生命值
                         this.startHealingAfterDefeat();
                     }
+                    // 事件放在回血计时器启动之后：自动化可以在这里用药水复活并立刻重开战斗
+                    this._emit('battle_completed', {
+                        result: 'defeat', enemyId: this.gameState.currentEnemy ? this.gameState.currentEnemy.id : null, xp: 0, gold: 0, route: this.gameState.currentRoute, tower: !!this._towerMode,
+                    });
                     return;
                 }
             }
@@ -2002,6 +2060,7 @@ class GameCore {
             battle.playerMaxHp, battle.playerCurrentHp
         );
         this.currentBattle.playerCurrentHp = rewards.newPlayerHp;
+        if (this.isHuntRunning()) this._checkLowHp(this.currentBattle, true);   // 胜利回血结算后，自动化按策略检查是否需要治疗
 
         if (this.onBattleEvent) {
             this.onBattleEvent('enemyDefeated', {
@@ -3066,6 +3125,7 @@ class GameCore {
         this.currentBattle = null;
         this._invalidateAllCaches();
         this.ensureGuide();
+        this.ensureInventory();
         return true;
     }
 
@@ -3091,6 +3151,7 @@ class GameCore {
         this.gameState = r.state;
         this._invalidateAllCaches();
         this.ensureGuide();
+        this.ensureInventory();
         // 记录导入存档的 lastSave，用于离线结算
         this._importedLastSave = this.gameState.lastSave || null;
         this.saveNow();
@@ -4334,6 +4395,7 @@ class GameCore {
 
     // 进入挑战塔（暂停主线战斗，初始化当前层）
     enterTower() {
+        if (this.isHuntRunning()) return { success: false, message: 'Pare ou pause a caçada antes de entrar na Torre.' };
         if (!this.isTowerUnlocked()) return { success: false, message: 'Torre de Desafio bloqueada.' };
 
         const tower = this.gameState.tower;

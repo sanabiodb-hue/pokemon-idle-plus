@@ -79,7 +79,7 @@ test('sanitizeHuntSession: running vira paused no carregamento, lixo vira null, 
     assert.equal(clean.stats.battles, 4);
     for (const bad of [null, 5, 'x', [], {}, { state: 'wat' }, { state: 'running' }, { state: 'running', routeId: '../../x' }]) assert.equal(ctx.sanitizeHuntSession(bad), null, JSON.stringify(bad));
     const raw = JSON.parse(JSON.stringify(s));
-    raw.policy = { heal: { belowPercent: 'x' } }; raw.stats.xp = -9; raw.stats.battles = 'abc'; raw.partyUids = ['ok', '<script>', 5]; raw.id = 'a b';
+    raw.policy = { heal: { whenHpBelowPercent: 'x' } }; raw.stats.xp = -9; raw.stats.battles = 'abc'; raw.partyUids = ['ok', '<script>', 5]; raw.id = 'a b';
     const c2 = ctx.sanitizeHuntSession(raw);
     assert.equal(ctx.validateAutomationPolicy(c2.policy).ok, true);
     assert.equal(c2.stats.xp, 0);

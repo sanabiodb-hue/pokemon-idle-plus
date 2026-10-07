@@ -33,6 +33,8 @@ class AutomationEngine {
             bus.on('battle_started', (e) => this._onBattleStarted(e)),
             bus.on('pokemon_captured', (e) => this._onCaptured(e)),
             bus.on('route_changed', (e) => this._onRouteChanged(e)),
+            bus.on('hp_low', (e) => this._onHpLow(e)),
+            bus.on('heal', (e) => this._onHeal(e)),
         ];
     }
 
@@ -54,7 +56,17 @@ class AutomationEngine {
         if (e.result === 'victory') huntSessionRecord(s, { battles: 1, victories: 1, xp: e.xp, money: e.gold });
         else if (e.result === 'defeat') huntSessionRecord(s, { battles: 1, defeats: 1 });
         if (e.offline) return;                          // 离线结算期间只累计统计，不在批处理中途做决策
-        this.evaluate('after_battle');
+        this.evaluate('after_battle', { fainted: e.result === 'defeat' });
+    }
+
+    _onHpLow(e) {
+        if (!this._session() || e.offline) return;
+        this.evaluate('hp_low');
+    }
+
+    _onHeal(e) {
+        const s = this._session();
+        if (s && e.potion) huntSessionRecord(s, { healingSpent: 1 });
     }
 
     _onCaptured(e) {
@@ -74,7 +86,7 @@ class AutomationEngine {
         this.evaluate('encounter');
     }
 
-    _snapshot(stage) {
+    _snapshot(stage, extra) {
         const g = this.game;
         const session = g.getHuntSession();
         const snap = {
@@ -83,7 +95,11 @@ class AutomationEngine {
             durationMs: huntSessionDurationMs(session, g.now()),
             currentRouteId: g.gameState.currentRoute,
             activeIndex: g.gameState.activePokemonIndex,
+            potions: g.getPotions(),
+            fainted: !!(extra && extra.fainted),
         };
+        const b = g.currentBattle;
+        snap.hpPercent = b && b.playerMaxHp > 0 ? b.playerCurrentHp / b.playerMaxHp * 100 : 100;
         if (stage === 'after_battle') {
             snap.routeComplete = g._isRouteCompleteByCondition(g.gameState.currentRoute);
             if (snap.routeComplete && snap.policy.route.mode === 'switchWhenComplete') {
@@ -98,13 +114,13 @@ class AutomationEngine {
     }
 
     // 评估一次：快照 → 决策 → 逐个动作经调度器执行。返回执行结果列表（便于测试/调试）
-    evaluate(stage) {
+    evaluate(stage, extra) {
         if (this._evaluating || !this.game.isHuntRunning()) return [];
         this._evaluating = true;
         const results = [];
         try {
             this.stats.evaluations++;
-            const decisions = decideAutomationActions(stage, this._snapshot(stage)).slice(0, AUTOMATION_MAX_ACTIONS_PER_EVALUATION);
+            const decisions = decideAutomationActions(stage, this._snapshot(stage, extra)).slice(0, AUTOMATION_MAX_ACTIONS_PER_EVALUATION);
             for (const d of decisions) {
                 if (!this.game.isHuntRunning()) break;           // 前一个动作（例如停止）之后不再继续
                 this.stats.decisions++;

@@ -5,7 +5,7 @@
 //   只有 running 时才累计统计与时长；stopped/finished 之后任何记录都被忽略。
 
 const HUNT_SESSION_STATES = ['idle', 'running', 'paused', 'stopped', 'finished'];
-const HUNT_STOP_REASONS = ['manual', 'no_potions', 'party_fainted', 'max_battles', 'max_minutes', 'route_complete', 'invalid_policy', 'error'];
+const HUNT_STOP_REASONS = ['manual', 'no_potions', 'battle_limit', 'time_limit', 'shiny_found', 'route_complete', 'invalid_policy', 'error'];
 const HUNT_SESSION_TRANSITIONS = {
     idle: ['running', 'stopped'],
     running: ['paused', 'stopped', 'finished'],
@@ -101,4 +101,34 @@ function sanitizeHuntSession(raw) {
     // 关机期间的时间不算运行时长：running 降为 paused 时只保留已并入 activeMs 的部分
     if (out.routeId === null) return null;
     return out;
+}
+
+// ---------- 文案（界面显示的原因，巴西葡萄牙语）----------
+// 自动停止（非 manual）算"因条件停止"：界面用红色状态
+function huntStoppedByCondition(session) {
+    return !!session && session.state === 'stopped' && !!session.stopReason && session.stopReason !== 'manual';
+}
+
+// 短原因，例如 "sem poções"
+function huntStopReasonShort(session) {
+    if (!session || !session.stopReason) return '';
+    const sc = session.policy && session.policy.stopConditions ? session.policy.stopConditions : {};
+    switch (session.stopReason) {
+        case 'no_potions': return 'sem poções';
+        case 'shiny_found': return 'Shiny encontrado';
+        case 'route_complete': return 'rota concluída';
+        case 'battle_limit': return `limite de ${ptNumber(sc.battleLimit || session.stats.battles)} ${ptPlural(sc.battleLimit || session.stats.battles, 'batalha', 'batalhas')} atingido`;
+        case 'time_limit': return `limite de ${ptNumber(sc.timeLimitMinutes)} ${ptPlural(sc.timeLimitMinutes, 'minuto', 'minutos')} atingido`;
+        case 'invalid_policy': return 'política inválida';
+        case 'error': return 'erro inesperado';
+        default: return 'encerrada pelo jogador';
+    }
+}
+
+// 整句，例如 "Caça interrompida: sem poções."
+function huntStopMessage(session) {
+    if (!session || session.state !== 'stopped') return '';
+    if (session.stopReason === 'no_potions') return 'Caça interrompida: sem poções.';
+    if (!huntStoppedByCondition(session)) return 'Caça encerrada.';
+    return `Caça encerrada: ${huntStopReasonShort(session)}.`;
 }

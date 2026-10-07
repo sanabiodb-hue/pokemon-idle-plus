@@ -299,6 +299,8 @@ function sanitizeSave(raw, now = Date.now()) {
     // ---- 新手引导 / 目标进度（没有这个字段 = 老存档，由 GameCore.ensureGuide 判断是否老玩家）----
     const guide = typeof sanitizeGuideState === 'function' ? sanitizeGuideState(raw.guide) : null;
     if (guide) out.guide = guide;
+    // ---- 背包（消耗品）：没有这个字段 = 旧存档，读档后由 ensureInventory 补发初始药水 ----
+    if (_isObj(raw.inventory)) out.inventory = { potions: _int(raw.inventory.potions, 0, MAX_POTIONS, 0) };
     // ---- 自动化（可选字段；没有 = 从未配置，保持默认关闭）----
     const automation = typeof sanitizeAutomationState === 'function' ? sanitizeAutomationState(raw.automation) : null;
     if (automation) out.automation = automation;

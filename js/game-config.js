@@ -16,6 +16,11 @@ const DUPLICATE_CAPTURE_RATE = 0.05;
 // 同一物种最多这么多只个体时，不再自动收普通（非闪光）重复，避免长时间挂机把 PC 塞满。闪光不受限制。
 const DUPLICATE_SPECIES_CAP = 20;
 
+// ===================== 消耗品：药水（阶段 5A 的第一个消耗品）=====================
+const INITIAL_POTIONS = 10;          // 新玩家（以及还没有 inventory 的旧存档）的初始药水数
+const MAX_POTIONS = 99999;           // 存档清洗上限
+const POTION_HEAL_PERCENT = 0.5;     // 一瓶药水回复出战宝可梦最大生命的比例
+
 // ===================== 徽章配置 =====================
 const BADGE_DATA = {
     kanto: {
