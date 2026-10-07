@@ -252,57 +252,65 @@ test('个体统计：伤害、暴击、承伤、倒下次数记在出战个体�
 
 // ---------------------------------------------------------------- 进化
 
-test('进化：为进化形态创建新的个体（继承个体值与性格，来历 evolution），换下原个体到 PC', () => {
+// 第 3 阶段起，进化 = 个体自己变身（旧版“另外创建一只进化形态”的规则被有意取代）。
+// 完整覆盖见 tests/evolution-individual.test.js；这里保留与旧系统兼容相关的断言。
+test('进化（目标物种还没登记）：个体自己变身，uid 与个体数据不变，等级归零；原物种留下图鉴存档', () => {
     const { game, ctx } = newGame();
     game.catchPokemonWithIvs(1, 5, { hp: 31, atk: 20, def: 10, spAtk: 5, spDef: 1, speed: 0 });
     const base = game.roster.primaryOf(1);
     base.nature = 'modest';
     game.addToTeamFromPokedex(1);
+    const uid = base.uid;
     const events = [];
     game.onBattleEvent = (e, d) => events.push([e, d]);
     game.addExpToInstance(base, ctx.getExpForLevel('mediumSlow', 16));
-    const evo = game.roster.primaryOf(2);
-    assert.ok(evo);
-    assert.equal(evo.origin, 'evolution');
-    assert.equal(evo.level, 1);
-    assert.equal(evo.nature, 'modest');
-    assert.deepEqual(plain(evo.ivs), { hp: 31, atk: 20, def: 10, spAtk: 5, spDef: 1, speed: 0 });
-    assert.notEqual(evo.ivs, base.ivs);
-    assert.equal(game.roster.locate(evo.uid).where, 'party');
-    assert.equal(game.roster.locate(base.uid).where, 'pc', '原个体仍然拥有，放进 PC');
+    assert.equal(game.roster.get(uid), base, '同一个对象、同一个 uid');
+    assert.equal(base.speciesId, 2);
+    assert.equal(base.level, 1);
+    assert.equal(base.nature, 'modest');
+    assert.deepEqual(plain(base.ivs), { hp: 31, atk: 20, def: 10, spAtk: 5, spDef: 1, speed: 0 });
+    assert.equal(game.roster.locate(uid).where, 'party', '队伍位置不变');
     assert.equal(game.gameState.team.includes(1), false);
     assert.equal(game.gameState.team.includes(2), true);
-    assert.equal(game.gameState.caughtPokemon[2], evo);
+    assert.equal(game.gameState.caughtPokemon[2], base);
+    assert.equal(game.gameState.pokedex[1], 'caught', '原物种图鉴仍是已捕获');
+    assert.ok(game.gameState.archivedSpecies[1], '原物种以图鉴存档保留');
+    assert.equal(game.gameState.caughtPokemon[1], game.gameState.archivedSpecies[1]);
     const ev = events.find(e => e[0] === 'evolved');
-    assert.equal(ev[1].uid, evo.uid);
+    assert.equal(ev[1].uid, uid);
+    assert.equal(ev[1].keptLevel, false);
     healthy(game);
 });
 
-test('进化：目标物种已拥有时不再进化（沿用旧规则），个体保持原样', () => {
+test('进化（目标物种已登记）：照常进化并保留等级，另一只妙蛙草不受影响', () => {
     const { game, ctx } = newGame();
     game.catchPokemonWithIvs(1, 5, ivs(5));
-    game.catchPokemonWithIvs(2, 1, ivs(5));        // 妙蛙草已拥有
+    game.catchPokemonWithIvs(2, 1, ivs(7));        // 妙蛙草已拥有
+    const other = game.roster.primaryOf(2);
     const base = game.roster.primaryOf(1);
     game.addExpToInstance(base, ctx.getExpForLevel('mediumSlow', 20));
-    assert.equal(game.roster.countOfSpecies(2), 1);
-    assert.equal(base.level, 20);
+    assert.equal(base.speciesId, 2, '这只妙蛙种子变成了妙蛙草');
+    assert.equal(base.level, 20, '保留等级');
+    assert.equal(game.roster.countOfSpecies(2), 2);
+    assert.equal(game.roster.primaryOf(2), other, '已有的主个体保持不变');
+    assert.equal(other.level, 1);
     healthy(game);
 });
 
-test('同物种非主个体升级进化：只替换它自己在队伍里的位置，主个体不受影响', () => {
+test('同物种非主个体升级进化：自己变身并留在队伍里，主个体不受影响', () => {
     const { game, ctx } = newGame();
     const a = game.roster.primaryOf(25);              // 主个体，Lv5，在队伍里
     game.catchPokemonWithIvs(1, 5, ivs(5));
     const b = addIndividual(game, 1, { level: 5, ivs: ivs(9) });       // 妙蛙种子的第二只
     game.roster.moveToParty(b.uid);
     game.addExpToInstance(b, ctx.getExpForLevel('mediumSlow', 16));
-    const evo = game.roster.primaryOf(2);
-    assert.ok(evo, '妙蛙草应被创建');
-    assert.deepEqual(plain(evo.ivs), ivs(9), '继承的是升级的那只（b）的个体值');
-    assert.equal(game.roster.locate(evo.uid).where, 'party', 'b 在队伍里，所以进化形态接替它的位置');
-    assert.equal(game.roster.locate(b.uid).where, 'pc');
+    assert.equal(b.speciesId, 2, 'b 自己变成了妙蛙草');
+    assert.deepEqual(plain(b.ivs), ivs(9), '保留的是 b 自己的个体值');
+    assert.equal(game.roster.primaryOf(2), b, '妙蛙草还没有个体，所以 b 就是它的主个体');
+    assert.equal(game.roster.locate(b.uid).where, 'party');
     assert.equal(game.roster.primaryOf(1).level, 5, '主个体没有升级');
     assert.equal(game.roster.locate(a.uid).where, 'party');
+    assert.equal(game.gameState.archivedSpecies[1], undefined, '妙蛙种子仍有活着的个体，不需要存档');
     healthy(game);
 });
 
@@ -365,7 +373,11 @@ test('模糊测试：随机混用旧接口与个体接口，名册不变量始�
         const teamSet = new Set(gs.party.map(u => String(gs.ownedPokemon[u].speciesId)));
         let dex = 0;
         for (const id in gs.pokedex) {
-            if (gs.pokedex[id] === 'caught' && !teamSet.has(id)) dex += stat(game.roster.primaryOf(Number(id))).hp * 0.01;
+            // 没有活着的个体时（最后一只进化走了）由图鉴存档代表这个物种
+            if (gs.pokedex[id] === 'caught' && !teamSet.has(id)) {
+                const rec = game.roster.primaryOf(Number(id)) || gs.archivedSpecies[id];
+                dex += game.calculateStats({ id: Number(id), level: rec.level, ivs: rec.ivs, isShiny: !!gs.shinyDex[id] }).hp * 0.01;
+            }
         }
         return Math.floor(base.hp + hp + dex);
     };

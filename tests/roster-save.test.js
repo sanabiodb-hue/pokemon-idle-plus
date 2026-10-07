@@ -61,10 +61,12 @@ test('读档后：旧视图重新指向主个体（同一引用），旧代码�
     const { game: g2 } = newGame({ storage, load: true });
     const gs = g2.gameState;
     for (const id of Object.keys(gs.caughtPokemon)) {
-        assert.equal(gs.caughtPokemon[id], gs.ownedPokemon[gs.speciesPrimary[id]], `#${id}`);
+        // 旧视图指向主个体；物种没有活着的个体时指向图鉴存档
+        const live = gs.ownedPokemon[gs.speciesPrimary[id]];
+        assert.equal(gs.caughtPokemon[id], live || gs.archivedSpecies[id], `#${id}`);
     }
-    g2.addExpToPokemon(7, 123456);
-    assert.ok(g2.roster.primaryOf(7).exp >= 123456);
+    g2.addExpToPokemon(20, 123456);          // 拉达（没有进化形态）：旧接口给物种加经验 = 给主个体加经验
+    assert.ok(g2.roster.primaryOf(20).exp >= 123456);
     assert.equal(g2.roster.get(game.roster.primaryOf(25).uid).speciesId, 25);
 });
 

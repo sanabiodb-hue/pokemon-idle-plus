@@ -5,6 +5,15 @@
 // ===================== 基础常量 =====================
 const MAX_POKEMON_LEVEL = 9999; // 宝可梦等级上限
 
+// 重复捕获：已拥有的物种再次遇到时，是否把野生个体收为一只新的独立个体
+//   all    = 以 DUPLICATE_CAPTURE_RATE 的概率捕获（默认）
+//   better = 只有个体值总和高于已拥有的所有同种个体时才捕获
+//   off    = 不捕获重复（旧版行为：只提升主个体的个体值）
+// 闪光个体不受概率限制（始终捕获，除非策略为 off 或 PC 已满）。
+const CAPTURE_DUPLICATE_POLICIES = ['all', 'better', 'off'];
+const DEFAULT_CAPTURE_DUPLICATE_POLICY = 'all';
+const DUPLICATE_CAPTURE_RATE = 0.05;
+
 // ===================== 徽章配置 =====================
 const BADGE_DATA = {
     kanto: {

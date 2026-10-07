@@ -62,6 +62,7 @@ function migrateLegacyToInstances(data) {
     data.party = party;
     data.pc = pc;
     data.released = [];
+    data.archivedSpecies = {};
     data.speciesPrimary = Object.fromEntries(speciesIds.map(id => [id, uidBySpecies[id]]));
     data.nextPokemonSeq = seq;
     return { data, created: speciesIds.length, overflow: overflow.length };

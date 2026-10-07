@@ -116,7 +116,11 @@ for (const c of CASES) {
         assert.equal(g2.loadReport.fromVersion, ctx.SAVE_SCHEMA_VERSION);
         assert.deepEqual(plain(g2.gameState), before, '读取后的状态与保存前逐项一致');
         assert.deepEqual(plain(g2.roster.checkIntegrity()), []);
-        assert.equal(g2.gameState.caughtPokemon[25], g2.roster.primaryOf(25), '读档后旧视图重新指向主个体（同一引用）');
+        // 旧视图指向主个体（同一引用）；游戏过程中最后一只个体进化走了的物种指向图鉴存档
+        for (const sp of Object.keys(g2.gameState.caughtPokemon)) {
+            const live = g2.roster.primaryOf(Number(sp));
+            assert.equal(g2.gameState.caughtPokemon[sp], live || g2.gameState.archivedSpecies[sp], `读档后 #${sp} 的旧视图`);
+        }
     });
 
     test(`迁移 ${c.name}：保留迁移前的原始存档副本，便于回退`, () => {

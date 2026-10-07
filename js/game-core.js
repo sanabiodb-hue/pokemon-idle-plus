@@ -66,6 +66,7 @@ class GameCore {
             const primary = this.roster.primaryOf(id);
             if (primary && gs.shinyDex[id] && !primary.shiny) primary.shiny = true;
             for (const inst of this.roster.ofSpecies(id)) this._instanceStats.delete(inst.uid);
+            this._instanceStats.delete('~' + id);     // 图鉴存档的属性缓存
         }
         this._dexBonus = null;
     }
@@ -331,6 +332,7 @@ class GameCore {
             events: [],
             eventsOverflow: 0,
             newCatches: [],
+            duplicateCatches: [],
             ivUpgrades: 0,
             levelUps: {},
         };
@@ -346,7 +348,8 @@ class GameCore {
             else summary.eventsOverflow++;
         };
         this.onCatch = (info) => {
-            if (info.isFirstCatch) summary.newCatches.push({ id: info.id, name: info.name });
+            if (info.isFirstCatch) summary.newCatches.push({ id: info.id, name: info.name, shiny: !!info.shiny });
+            else if (info.isDuplicate) summary.duplicateCatches.push({ id: info.id, name: info.name, shiny: !!info.shiny });
             else if (info.updatedStats && info.updatedStats.length) summary.ivUpgrades++;
         };
         this.onLevelUp = (info) => {
@@ -380,6 +383,7 @@ class GameCore {
             expGained: stats.totalExp - s.startExp,
             goldGained: stats.totalGold - s.startGold,
             newCatches: s.newCatches,
+            duplicateCatches: s.duplicateCatches,
             ivUpgrades: s.ivUpgrades,
             levelUps,
             levelUpCount: Object.keys(s.levelUps).length,
@@ -463,10 +467,12 @@ class GameCore {
         // 队伍战斗属性/等级缓存（仅升级或队伍变化时刷新）
         const cachedTeamStats = [];
         const cachedTeamLevels = [];
+        const cachedTeamSpecies = [];
         for (let i = 0; i < state.team.length; i++) {
             cachedTeamStats[i] = this.calculateBattleStats(i);
             const member = this._partyInstance(i);
             cachedTeamLevels[i] = member ? member.level : 0;
+            cachedTeamSpecies[i] = member ? member.speciesId : 0;
         }
 
         // 玩家起始血量：优先沿用进行中的战斗，其次存档中的血量百分比，最后满血
@@ -500,6 +506,7 @@ class GameCore {
             },
             cachedTeamStats,
             cachedTeamLevels,
+            cachedTeamSpecies,
             teamKey: state.party.join(','),
             cachedPlayerLevel: activeInst.level,
             cachedPlayerTypes: POKEMON_DATA[activePokemonId]?.types || [],
@@ -635,10 +642,13 @@ class GameCore {
                     const teamChanged = teamKey !== s.teamKey;
                     s.teamKey = teamKey;
                     for (let i = 0; i < state.team.length; i++) {
-                        const newLv = this._partyInstance(i)?.level || 0;
-                        if (teamChanged || newLv !== s.cachedTeamLevels[i]) {
+                        const member = this._partyInstance(i);
+                        const newLv = member?.level || 0;
+                        const newSp = member?.speciesId || 0;
+                        if (teamChanged || newLv !== s.cachedTeamLevels[i] || newSp !== s.cachedTeamSpecies[i]) {
                             s.cachedTeamStats[i] = this.calculateBattleStats(i);
                             s.cachedTeamLevels[i] = newLv;
+                            s.cachedTeamSpecies[i] = newSp;
                         }
                     }
                     const refreshed = s.cachedTeamStats[state.activePokemonIndex];
@@ -858,8 +868,9 @@ class GameCore {
 
 
     // 捕获宝可梦（带指定个体值）
-    // opts（可选）：{ origin, originRoute, place }，默认来历为野外捕获，放进 PC。
-    // 旧规则保持不变：每个物种只在“首次捕获”时创建个体；之后再捕获只会提升个体值。
+    // opts（可选）：{ origin, originRoute, place, shiny, traits }，默认来历为野外捕获，放进 PC。
+    // 这个入口只负责“物种的第一只”；之后再遇到同种由 processDefeat 决定是否收为新的独立个体
+    // （见 _captureDuplicate），否则只会提升主个体的个体值。
     catchPokemonWithIvs(pokemonId, level, ivs, opts = {}) {
         // 标记为已捕获
         this.gameState.pokedex[pokemonId] = 'caught';
@@ -873,8 +884,12 @@ class GameCore {
                 // 经验从该等级的起点开始（初始皮卡丘 Lv5 之前是 0，会让经验条显示为负数）
                 exp: getExpForLevel(POKEMON_DATA[pokemonId].expGroup, level),
                 ivs: { ...ivs },
-                shiny: !!this.gameState.shinyDex[pokemonId],   // 家族传播来的“待定闪光”
-                nature: DEFAULT_NATURE,                         // 中性性格：与旧版数值完全一致，且不消耗随机数
+                // 野生闪光，或家族传播来的“待定闪光”
+                shiny: opts.shiny === true || !!this.gameState.shinyDex[pokemonId],
+                // 没有传入特质时用中性性格（与旧版数值完全一致，且不消耗随机数）
+                nature: opts.traits ? opts.traits.nature : DEFAULT_NATURE,
+                ability: opts.traits ? opts.traits.ability : null,
+                gender: opts.traits ? opts.traits.gender : null,
                 origin: opts.origin || 'wild',
                 originRoute: opts.originRoute !== undefined ? opts.originRoute : this.gameState.currentRoute,
                 place: opts.place || 'pc',
@@ -896,9 +911,59 @@ class GameCore {
                 uid: inst ? inst.uid : null,
                 name: POKEMON_DATA[pokemonId].name, 
                 level: 1,
-                isFirstCatch: true
+                isFirstCatch: true,
+                shiny: !!(inst && inst.shiny),
             });
         }
+    }
+
+    // ===================== 重复捕获 =====================
+    getCaptureDuplicatePolicy() {
+        const p = this.gameState.settings?.captureDuplicates;
+        return CAPTURE_DUPLICATE_POLICIES.includes(p) ? p : DEFAULT_CAPTURE_DUPLICATE_POLICY;
+    }
+
+    // 已拥有该物种时，这只野生宝可梦要不要收为新的个体？
+    // 随机数只在“概率捕获”时消耗（策略 all 且非闪光），其余情况是确定性的。
+    _shouldCaptureDuplicate(wild) {
+        const policy = this.getCaptureDuplicatePolicy();
+        if (policy === 'off') return false;
+        if (wild.isShiny) return true;
+        if (policy === 'better') {
+            const total = ivTotal(wild.ivs);
+            return this.roster.ofSpecies(wild.id).every(i => total > ivTotal(i.ivs));
+        }
+        return this.rng() < DUPLICATE_CAPTURE_RATE;
+    }
+
+    // 把野生宝可梦收为一只全新的个体（新 uid；IV/性格/特性/性别/闪光各自独立；Lv1）。
+    // 返回新个体，PC 已满时返回 null。
+    _captureDuplicate(wild) {
+        if (!this.roster.hasRoom()) {
+            if (wild.isShiny && this.onBattleEvent) {
+                this.onBattleEvent('captureBlocked', { id: wild.id, name: POKEMON_DATA[wild.id].name, reason: 'pc_full' });
+            }
+            return null;
+        }
+        const r = this.roster.create({
+            speciesId: wild.id,
+            level: 1,
+            exp: getExpForLevel(POKEMON_DATA[wild.id].expGroup, 1),
+            ivs: { ...wild.ivs },
+            shiny: !!wild.isShiny,
+            ...rollTraits(wild.id, this.rng),
+            origin: 'wild',
+            originRoute: this.gameState.currentRoute,
+            place: 'pc',
+        });
+        if (!r.ok) return null;
+        const inst = r.instance;
+        this.gameState.stats.totalCatches++;
+        // 闪光与图鉴的“物种级闪光”标记绑定在主个体上：还没有闪光主个体时，新的闪光个体成为主个体
+        const primary = this.roster.primaryOf(wild.id);
+        if (inst.shiny && primary && !primary.shiny) this.roster.setPrimary(inst.uid);
+        this._touchSpecies(wild.id);
+        return inst;
     }
 
     // 捕获时检查进化（处理捕捉时等级已超过进化等级的情况）
@@ -1135,9 +1200,19 @@ class GameCore {
     }
 
     // 旧接口：某个物种的属性 = 它的主个体
+    // 没有活着的个体时退回图鉴存档（最后一只个体进化走了，图鉴里仍保留着它）
     _getSpeciesStats(id) {
         const primary = this.roster.primaryOf(id);
-        return primary ? this._getInstanceStats(primary) : null;
+        if (primary) return this._getInstanceStats(primary);
+        const archived = this.gameState.archivedSpecies;
+        if (!archived || !_has(archived, id)) return null;
+        const key = '~' + id;
+        const cached = this._instanceStats.get(key);
+        if (cached) return cached;
+        const rec = archived[id];
+        const stats = this.calculateStats({ id, level: rec.level, ivs: rec.ivs, isShiny: !!this.gameState.shinyDex[id] });
+        this._instanceStats.set(key, stats);
+        return stats;
     }
 
     // 图鉴中已捕获但不在队伍中的宝可梦 1% 加成（缓存；队伍或任一物种变化时失效）
@@ -1385,7 +1460,8 @@ class GameCore {
         // 出战精灵获得100%经验（经验记在“出战的那一只个体”身上）
         this.roster.reconcile();
         let activeInst = this._partyInstance(state.activePokemonIndex);
-        if (!activeInst || activeInst.speciesId !== activePokemonId) activeInst = this.roster.primaryOf(activePokemonId);
+        // 出战个体以队伍位置为准（它可能在上一场刚进化，物种 id 与调用方缓存的不同）
+        if (!activeInst) activeInst = this.roster.primaryOf(activePokemonId);
         let anyLevelUp = false;
         if (activeInst) {
             anyLevelUp = !!this.addExpToInstance(activeInst, expGained);
@@ -1428,10 +1504,12 @@ class GameCore {
         const newPlayerHp = Math.min(playerMaxHp, playerCurrentHp + healAmount);
 
         // 击败处理（捕获/IV更新/地区解锁/徽章）
+        // 捕获闪光个体时 roster 会先把 shinyDex 写好，所以“是不是第一次闪光”要在击败处理之前记下
+        const wasShinyKnown = !!state.shinyDex[wildPokemon.id];
         this.processDefeat(wildPokemon);
 
         // 闪光记录：击败闪光宝可梦后，双向传播闪光给整条进化链
-        if (wildPokemon.isShiny && !state.shinyDex[wildPokemon.id]) {
+        if (wildPokemon.isShiny && !wasShinyKnown) {
             state.shinyDex[wildPokemon.id] = true;
             this._touchSpecies(wildPokemon.id);
             this._syncShinyInFamily(wildPokemon.id);
@@ -1911,16 +1989,32 @@ class GameCore {
     }
 
     // 给指定宝可梦增加经验（每个形态独立存储）
-    // 旧接口：给“物种”加经验 = 给该物种的主个体加经验
+    // 旧接口：给“物种”加经验 = 给该物种的主个体加经验；
+    // 物种只剩图鉴存档（最后一只个体已经进化走了）时，存档记录继续吃储备经验（但不会进化）。
     addExpToPokemon(pokemonId, amount) {
         const inst = this.roster.primaryOf(pokemonId);
-        return inst ? this.addExpToInstance(inst, amount) : false;
+        if (inst) return this.addExpToInstance(inst, amount);
+        const archived = this.gameState.archivedSpecies;
+        return archived && _has(archived, pokemonId) ? this._addExpToArchived(archived[pokemonId], amount) : false;
+    }
+
+    _addExpToArchived(rec, amount) {
+        const data = POKEMON_DATA[rec.speciesId];
+        if (!data || rec.level >= MAX_POKEMON_LEVEL) return false;
+        rec.exp += amount;
+        let leveledUp = false;
+        while (rec.level < MAX_POKEMON_LEVEL && rec.exp >= getExpForLevel(data.expGroup, rec.level + 1)) {
+            rec.level++;
+            leveledUp = true;
+        }
+        if (leveledUp) this._touchSpecies(rec.speciesId);
+        return leveledUp;
     }
 
     // 给指定个体加经验（队伍成员、图鉴储备经验都走这里）
+    // 个体可能在升级途中进化（物种变了），所以每一轮都重新读取它当前的物种。
     addExpToInstance(inst, amount) {
-        const baseData = POKEMON_DATA[inst.speciesId];
-        if (!baseData) return false;
+        if (!POKEMON_DATA[inst.speciesId]) return false;
 
         // 等级上限检查
         if (inst.level >= MAX_POKEMON_LEVEL) {
@@ -1933,13 +2027,14 @@ class GameCore {
         // 检查升级
         let leveledUp = false;
         const startLevel = inst.level;
+        const startSpecies = inst.speciesId;
         while (inst.level < MAX_POKEMON_LEVEL) {
-            const nextLevelExp = getExpForLevel(baseData.expGroup, inst.level + 1);
+            const nextLevelExp = getExpForLevel(POKEMON_DATA[inst.speciesId].expGroup, inst.level + 1);
             if (inst.exp >= nextLevelExp) {
                 inst.level++;
                 leveledUp = true;
 
-                // 检查进化
+                // 检查进化（个体自己变成新物种；等级可能被重置，循环条件会自然收敛）
                 this.checkEvolutionOfInstance(inst);
             } else {
                 break;
@@ -1955,7 +2050,10 @@ class GameCore {
 
         // 升级通知合并为一条（显示起始等级 → 最终等级）
         if (leveledUp && this.onLevelUp) {
-            this.onLevelUp({ id: inst.speciesId, uid: inst.uid, name: baseData.name, nickname: inst.nickname, level: inst.level, startLevel });
+            this.onLevelUp({
+                id: inst.speciesId, uid: inst.uid, name: POKEMON_DATA[inst.speciesId].name, nickname: inst.nickname,
+                level: inst.level, startLevel, evolvedFrom: inst.speciesId !== startSpecies ? startSpecies : null,
+            });
         }
 
         return leveledUp;
@@ -1979,108 +2077,90 @@ class GameCore {
         if (inst) this.checkEvolutionOfInstance(inst, replaceTeam);
     }
 
-    // 检查某只个体是否该进化。
-    // 规则与旧版一致：进化目标物种“还没有任何个体”时，才会为它创建一只 Lv1 的新个体（继承个体值，
-    // 这是图鉴收集机制）；队伍里的原个体被换成新个体，原个体回到 PC。目标物种已拥有时不进化。
+    // 检查某只个体是否该进化。进化 = 这只个体自己变成新物种（uid、个体值、性格、特性、性别、闪光、昵称、
+    // 战斗统计、队伍/PC 位置全部保持不变，Pikachu A → Raichu A）。
+    //   · 目标物种还没登记图鉴：沿用旧规则——等级/经验/技能等级归零（新登记的形态从 Lv1 开始）；
+    //     如果它是该物种的最后一只，原物种以“图鉴存档”的形式保留（图鉴与 1% 加成不会丢）。
+    //   · 目标物种图鉴里已有（玩家已经拥有进化形态的个体）：照常进化，并保留等级。
+    // 多个可进化分支时，优先选还没登记的目标，否则取数据里第一个满足条件的。
+    // replaceTeam 仅为旧签名保留：个体原地进化，队伍位置不变，不再需要换位。
     checkEvolutionOfInstance(inst, replaceTeam = true) {
+        let evolvedAny = false;
+        // 保留等级的进化可以连续发生（等级已经超过后续进化等级），上限只是防御死循环
+        for (let guard = 0; guard < 8; guard++) {
+            if (!this._evolveOnce(inst)) break;
+            evolvedAny = true;
+        }
+        return evolvedAny;
+    }
+
+    _evolveOnce(inst) {
         const baseId = inst.speciesId;
         const baseData = POKEMON_DATA[baseId];
-        if (!baseData || !baseData.evolvesTo) return;
+        if (!baseData || !baseData.evolvesTo) return false;
         this.roster.reconcile();
+        const gs = this.gameState;
 
-        // 检查基础形态是否为闪光（个体自身的闪光；主个体同时跟随旧的物种级闪光标记）
-        const isBaseShiny = inst.shiny || (this.roster.isPrimary(inst) && !!this.gameState.shinyDex[baseId]);
-
-        // 统一处理进化目标列表
         const evolutions = Array.isArray(baseData.evolvesTo) ? baseData.evolvesTo : [baseData.evolvesTo];
+        // 跨代进化检查：进化目标所在地区必须已解锁
+        const eligible = evolutions.filter(evo =>
+            inst.level >= evo.level && POKEMON_DATA[evo.id] && this._isEvolutionRegionUnlocked(evo.id));
+        if (eligible.length === 0) return false;
+        const evo = eligible.find(e => gs.pokedex[e.id] !== 'caught') || eligible[0];
+        const evolvedData = POKEMON_DATA[evo.id];
 
-        for (const evo of evolutions) {
-            if (inst.level >= evo.level) {
-                // 跨代进化检查：进化目标所在地区是否已解锁
-                if (!this._isEvolutionRegionUnlocked(evo.id)) {
-                    continue;
-                }
+        const firstRegistration = gs.pokedex[evo.id] !== 'caught';
+        const wasPrimary = this.roster.isPrimary(inst);
+        const r = this.roster.evolveInstance(inst.uid, evo.id, { resetProgress: firstRegistration });
+        if (!r.ok) return false;
 
-                const evolvedData = POKEMON_DATA[evo.id];
-                if (!evolvedData) continue;
-
-                // 闪光传递：如果基础形态是闪光，进化型也应该是闪光
-                if (isBaseShiny && !this.gameState.shinyDex[evo.id]) {
-                    this.gameState.shinyDex[evo.id] = true;
-                    this._touchSpecies(evo.id);
-                    // 双向传播闪光给整条进化链
-                    this._syncShinyInFamily(evo.id);
-
-                    // 如果进化型已存在，跳过后面的新捕获逻辑
-                    const existing = this.roster.primaryOf(evo.id);
-                    if (existing) {
-                        if (this.onBattleEvent) {
-                            this.onBattleEvent('shinyEvolved', {
-                                oldName: baseData.name,
-                                newName: evolvedData.name,
-                                oldId: baseId,
-                                newId: evo.id,
-                                pokemon: { id: evo.id, name: evolvedData.name, level: existing.level },
-                            });
-                        }
-                        continue;
-                    }
-                }
-
-                // 检查是否已拥有该进化形态（非闪光传递情况）
-                if (this.roster.primaryOf(evo.id) || this.gameState.pokedex[evo.id] === 'caught') {
-                    continue;
-                }
-
-                // 标记进化形态为已捕获，创建它的第一只个体
-                this.gameState.pokedex[evo.id] = 'caught';
-                const created = this.roster.create({
-                    speciesId: evo.id,
-                    level: 1,
-                    exp: 0,
-                    ivs: { ...inst.ivs },
-                    shiny: !!this.gameState.shinyDex[evo.id],
-                    nature: inst.nature,
-                    ability: inst.ability,
-                    gender: inst.gender,
-                    origin: 'evolution',
-                    originRoute: inst.originRoute,
-                    place: 'pc',
-                });
-                this._touchSpecies(evo.id);
-
-                // 升级触发的进化需要替换队伍成员（原个体换到 PC 里新个体原来的格子）
-                if (replaceTeam && created.ok) {
-                    const partyIndex = this.roster.party.indexOf(inst.uid);
-                    if (partyIndex !== -1) {
-                        this.roster.swapPartyWithPc(partyIndex, created.instance.uid);
-                    }
-                }
-
-                if (this.onBattleEvent) {
-                    this.onBattleEvent('evolved', {
-                        oldName: baseData.name,
-                        newName: evolvedData.name,
-                        oldId: baseId,
-                        newId: evo.id,
-                        uid: created.ok ? created.instance.uid : null,
-                        pokemon: { id: evo.id, name: evolvedData.name, level: 1 },
-                    });
-                }
-
-                // 进化注册新宝可梦后也检查徽章解锁（进化可能集齐某地区图鉴）
-                for (const regionId in BADGE_DATA) {
-                    if (!this.hasBadge(regionId) && this.isRegionCompleted(regionId)) {
-                        this.tryUnlockBadge(regionId);
-                        if (this.onBattleEvent) {
-                            this.onBattleEvent('badgeUnlocked', { regionId, badgeName: BADGE_DATA[regionId].name });
-                        }
-                    }
-                }
-
-                break; // 每次只进化一次
+        // 闪光是个体的属性，进化后仍然闪光；同时让物种级闪光记录（shinyDex）跟上，并传播给整条进化链
+        let shinyRecorded = false;
+        if (inst.shiny) {
+            const target = this.roster.primaryOf(evo.id);
+            if (target && !target.shiny) this.roster.setPrimary(inst.uid);
+            if (!gs.shinyDex[evo.id]) {
+                gs.shinyDex[evo.id] = true;
+                shinyRecorded = true;
             }
         }
+        this._touchSpecies(baseId);
+        this._touchSpecies(evo.id);
+        this._touchInstance(inst);
+        if (shinyRecorded) this._syncShinyInFamily(evo.id);
+
+        if (this.onBattleEvent) {
+            if (shinyRecorded && !firstRegistration) {
+                this.onBattleEvent('shinyEvolved', {
+                    oldName: baseData.name,
+                    newName: evolvedData.name,
+                    oldId: baseId,
+                    newId: evo.id,
+                    pokemon: { id: evo.id, name: evolvedData.name, level: inst.level },
+                });
+            }
+            this.onBattleEvent('evolved', {
+                oldName: baseData.name,
+                newName: evolvedData.name,
+                oldId: baseId,
+                newId: evo.id,
+                uid: inst.uid,
+                keptLevel: !firstRegistration,
+                archivedOld: !!r.archived,
+                pokemon: { id: evo.id, name: evolvedData.name, level: inst.level },
+            });
+        }
+
+        // 进化注册新宝可梦后也检查徽章解锁（进化可能集齐某地区图鉴）
+        for (const regionId in BADGE_DATA) {
+            if (!this.hasBadge(regionId) && this.isRegionCompleted(regionId)) {
+                this.tryUnlockBadge(regionId);
+                if (this.onBattleEvent) {
+                    this.onBattleEvent('badgeUnlocked', { regionId, badgeName: BADGE_DATA[regionId].name });
+                }
+            }
+        }
+        return true;
     }
 
     // 击败后处理：首次捕获或更新个体值
@@ -2101,8 +2181,11 @@ class GameCore {
             const wasPaldeaUnlocked = this.isRegionUnlocked('paldea');
             const wasMegaUnlocked = this.isRegionUnlocked('mega');
             
-            // 首次捕获
-            this.catchPokemonWithIvs(wildPokemon.id, 1, wildPokemon.ivs);
+            // 首次捕获：个体的性格/特性/性别在捕获时随机，闪光沿用野生个体的闪光
+            this.catchPokemonWithIvs(wildPokemon.id, 1, wildPokemon.ivs, {
+                shiny: !!wildPokemon.isShiny,
+                traits: rollTraits(wildPokemon.id, this.rng),
+            });
             
             // 检查是否因此次捕获解锁了城都地区
             if (!wasJohtoUnlocked && this.isRegionUnlocked('johto')) {
@@ -2177,7 +2260,7 @@ class GameCore {
                 }
             }
         } else {
-            // 已捕获过，只比较并更新个体值（取高的），不更新等级
+            // 已捕获过：先按旧规则比较并更新主个体（或图鉴存档）的个体值（取高的），不更新等级
             let updated = false;
             const updatedStats = [];
             
@@ -2198,13 +2281,24 @@ class GameCore {
             }
 
 
-            if (updated && this.onCatch) {
-                this.onCatch({ 
-                    id: wildPokemon.id, 
-                    name: POKEMON_DATA[wildPokemon.id].name, 
-                    level: stored.level, 
+            // 再决定要不要把这只收为一只新的独立个体。
+            // 物种只剩图鉴存档（没有活着的个体）时，除非策略为 off，都会收下它作为新的个体。
+            const hasLive = !!this.roster.primaryOf(wildPokemon.id);
+            const wantsNew = hasLive
+                ? this._shouldCaptureDuplicate(wildPokemon)
+                : this.getCaptureDuplicatePolicy() !== 'off';
+            const captured = wantsNew ? this._captureDuplicate(wildPokemon) : null;
+
+            if ((updated || captured) && this.onCatch) {
+                this.onCatch({
+                    id: wildPokemon.id,
+                    uid: captured ? captured.uid : null,
+                    name: POKEMON_DATA[wildPokemon.id].name,
+                    level: captured ? captured.level : stored.level,
                     updatedStats,
-                    isFirstCatch: false
+                    isFirstCatch: false,
+                    isDuplicate: !!captured,
+                    shiny: !!(captured && captured.shiny),
                 });
             }
         }

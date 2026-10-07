@@ -36,6 +36,20 @@ function sanitizeInstance(raw, key) {
     });
 }
 
+// 图鉴存档记录：只保留旧结构需要的几项
+function sanitizeArchivedRecord(raw, speciesId) {
+    if (!_isObj(raw)) return null;
+    const data = POKEMON_DATA[speciesId];
+    const level = _int(raw.level, 1, MAX_POKEMON_LEVEL, 1);
+    return {
+        speciesId,
+        level,
+        exp: _num(raw.exp, 0, getExpForLevel(data.expGroup, level)),
+        ivs: normalizeIvs(raw.ivs),
+        skillLevel: _int(raw.skillLevel, 0, MAX_SKILL_LEVEL, 0),
+    };
+}
+
 function sanitizeReleasedRecord(raw, ownedUids) {
     if (!_isObj(raw) || !isValidInstanceUid(raw.uid) || ownedUids.has(raw.uid)) return null;
     const speciesId = _validPokemonId(raw.speciesId);
@@ -99,11 +113,25 @@ function sanitizeRosterSection(raw, out) {
         primary[sp] = hinted || PokemonRoster.chooseBest(list);
     }
 
+    // ---- 图鉴存档：物种的最后一只个体进化走之后留下的记录 ----
+    const rawArchived = _isObj(raw.archivedSpecies) ? raw.archivedSpecies : {};
+    const archived = {};
+    for (const key of Object.keys(rawArchived)) {
+        const sp = _validPokemonId(key);
+        if (sp === null || primary[sp]) continue;           // 有活的个体就不需要存档
+        const rec = sanitizeArchivedRecord(rawArchived[key], sp);
+        if (rec) archived[sp] = rec;
+    }
+
     // ---- 旧结构覆盖/补全 ----
     for (const idStr of Object.keys(out.caughtPokemon)) {
         const sp = Number(idStr);
         const legacy = out.caughtPokemon[sp];
         let p = primary[sp];
+        if (!p && archived[sp]) {          // 旧镜像里的数值覆盖存档
+            Object.assign(archived[sp], { level: legacy.level, exp: legacy.exp, ivs: { ...legacy.ivs }, skillLevel: legacy.skillLevel });
+            continue;
+        }
         if (p) {
             p.level = legacy.level;
             p.exp = legacy.exp;
@@ -222,8 +250,10 @@ function sanitizeRosterSection(raw, out) {
     out.released = released;
     out.speciesPrimary = Object.fromEntries(Object.entries(primary).map(([sp, p]) => [sp, p.uid]));
     out.nextPokemonSeq = seq;
+    out.archivedSpecies = archived;
     out.caughtPokemon = {};
     for (const [sp, p] of Object.entries(primary)) out.caughtPokemon[sp] = p;   // 同一个对象引用
+    for (const [sp, rec] of Object.entries(archived)) out.caughtPokemon[sp] = rec;
     out.team = party.map(u => instances[u].speciesId);
 
     if (dropped) warnings.push(`已忽略 ${dropped} 只无效的个体`);
@@ -283,6 +313,12 @@ function validateRosterIntegrity(state) {
 
     // 3. 主个体与旧兼容视图
     const speciesWithInstances = new Set(ownedUids.map(u => owned[u].speciesId));
+    const archivedMap = _isObj(state.archivedSpecies) ? state.archivedSpecies : {};
+    for (const sp of Object.keys(archivedMap)) {
+        if (speciesWithInstances.has(Number(sp))) problems.push(`物种 #${sp} 已有个体，不应再有图鉴存档`);
+        if (state.caughtPokemon[sp] !== archivedMap[sp]) problems.push(`caughtPokemon[#${sp}] 不是图鉴存档本身`);
+        if (state.pokedex[sp] !== 'caught') problems.push(`图鉴存档物种 #${sp} 的图鉴不是 caught`);
+    }
     for (const sp of speciesWithInstances) {
         const uid = state.speciesPrimary && state.speciesPrimary[sp];
         const p = uid ? owned[uid] : null;
@@ -292,7 +328,7 @@ function validateRosterIntegrity(state) {
         if (p.shiny && !state.shinyDex[sp]) problems.push(`物种 #${sp} 的主个体闪光但 shinyDex 未记录`);
     }
     for (const sp of Object.keys(state.caughtPokemon || {})) {
-        if (!speciesWithInstances.has(Number(sp))) problems.push(`caughtPokemon[#${sp}] 没有对应个体`);
+        if (!speciesWithInstances.has(Number(sp)) && !_has(archivedMap, sp)) problems.push(`caughtPokemon[#${sp}] 没有对应个体或图鉴存档`);
     }
     for (const sp of Object.keys(state.speciesPrimary || {})) {
         if (!speciesWithInstances.has(Number(sp))) problems.push(`speciesPrimary[#${sp}] 指向没有个体的物种`);

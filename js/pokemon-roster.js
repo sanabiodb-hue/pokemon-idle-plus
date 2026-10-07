@@ -7,16 +7,20 @@
 //   state.pc             { boxes: [...] }               箱子
 //   state.released       [记录, ...]                    放生/转移的历史
 //   state.speciesPrimary { 物种ID: uid }                每个物种的“主个体”
+//   state.archivedSpecies{ 物种ID: 记录 }               图鉴存档：某物种的最后一只个体进化走了之后，
+//                                                       旧结构仍需要的那份数据（等级/个体值/…）会留在这里
 //   state.nextPokemonSeq 下一个 uid 序号
 //
 // 兼容视图（旧代码仍在读写，存档里也保留一份镜像）：
-//   state.caughtPokemon[物种ID]  === 该物种“主个体”对象本身（同一个引用）
+//   state.caughtPokemon[物种ID]  === 该物种“主个体”对象本身（同一个引用）；
+//        物种暂时没有任何个体时（进化走了）则 === archivedSpecies[物种ID]（图鉴存档）
 //        → 旧代码修改 level/exp/ivs/skillLevel 时，个体自动同步，无需拷贝。
 //   state.team                   物种ID数组，与 party 同下标（由 PartyManager 就地同步）
 //   state.pokedex / shinyDex     图鉴记录（拥有任一个体 ⇒ pokedex 为 caught；主个体闪光 ⇒ shinyDex 为 true）
 //
 // 不变量（由 pokemon-validation.js 的 validateRosterIntegrity 检查）：
-//   每只个体恰好在一个位置（队伍 或 某个箱子的某一格）；每个有个体的物种恰有一个主个体。
+//   每只个体恰好在一个位置（队伍 或 某个箱子的某一格）；每个有个体的物种恰有一个主个体；
+//   没有个体的“已收集”物种必须有图鉴存档。
 // 本类不依赖 GameCore，传入 getState 即可单独使用和测试。
 // ============================================================
 const RELEASED_LOG_MAX = 500;
@@ -44,6 +48,7 @@ class PokemonRoster {
         if (!state.pc || !Array.isArray(state.pc.boxes)) state.pc = PCStorage.createEmpty();
         if (!Array.isArray(state.released)) state.released = [];
         if (!state.speciesPrimary || typeof state.speciesPrimary !== 'object') state.speciesPrimary = {};
+        if (!state.archivedSpecies || typeof state.archivedSpecies !== 'object') state.archivedSpecies = {};
         if (!Number.isInteger(state.nextPokemonSeq) || state.nextPokemonSeq < 1) state.nextPokemonSeq = 1;
         if (!state.caughtPokemon) state.caughtPokemon = {};
         if (!Array.isArray(state.team)) state.team = [];
@@ -194,17 +199,22 @@ class PokemonRoster {
         st.caughtPokemon[speciesId] = inst;
         st.pokedex[speciesId] = 'caught';
         if (inst.shiny) st.shinyDex[speciesId] = true;
+        delete st.archivedSpecies[speciesId];   // 有活的个体了，图鉴存档不再需要
     }
 
+    // 没有任何个体时：旧视图指向图鉴存档（如果有），否则删除
     _unlinkLegacy(speciesId) {
-        delete this.state.caughtPokemon[speciesId];
+        const st = this.state;
+        const archived = _has(st.archivedSpecies, speciesId) ? st.archivedSpecies[speciesId] : null;
+        if (archived) st.caughtPokemon[speciesId] = archived;
+        else delete st.caughtPokemon[speciesId];
     }
 
     rebuildLegacyViews() {
         const st = this.state;
         for (const id of this._ensureIndex().keys()) this.primaryOf(id);
         for (const id of Object.keys(st.caughtPokemon)) {
-            if (!this.countOfSpecies(id)) delete st.caughtPokemon[id];
+            if (!this.countOfSpecies(id)) this._unlinkLegacy(Number(id));
         }
         this.party.syncTeamMirror();
         this._notify(null);
@@ -219,6 +229,74 @@ class PokemonRoster {
             if (i !== -1) list.splice(i, 1);
             if (list.length === 0) this._ensureIndex().delete(inst.speciesId);
         }
+    }
+
+    // PC 还放得下新个体吗（队伍之外的个体都住在 PC 里）
+    hasRoom() {
+        const st = this.state;
+        return this.pc.count() < this.pc.totalCapacity() || st.pc.boxes.length < PC_MAX_BOXES;
+    }
+
+    // ---------- 进化：个体自己变成另一个物种（uid 与全部个体数据保持不变）----------
+    // opts.resetProgress：true = 等级/经验/技能等级归零（首次登记图鉴的进化，旧规则）；false = 保留。
+    // 兼容旧结构：如果这是该物种“最后一只”个体，原物种的数据快照进入图鉴存档（旧视图仍然可读）。
+    // 返回 { ok, fromSpecies, toSpecies, archived }
+    evolveInstance(uid, targetId, { resetProgress = false } = {}) {
+        const st = this.state;
+        const inst = this.get(uid);
+        if (!inst) return { ok: false, code: 'unknown_pokemon' };
+        const to = Number(targetId);
+        if (!_has(POKEMON_DATA, to)) return { ok: false, code: 'unknown_species' };
+        const from = inst.speciesId;
+        if (from === to) return { ok: false, code: 'same_species' };
+
+        // 1. 原物种的最后一只 → 留下图鉴存档
+        let archived = false;
+        if (this.countOfSpecies(from) === 1) {
+            st.archivedSpecies[from] = {
+                speciesId: from,
+                level: inst.level,
+                exp: inst.exp,
+                ivs: { ...inst.ivs },
+                skillLevel: inst.skillLevel,
+            };
+            archived = true;
+        }
+
+        // 2. 从原物种的索引/主个体中移出
+        const index = this._ensureIndex();
+        const list = index.get(from);
+        if (list) {
+            const i = list.indexOf(uid);
+            if (i !== -1) list.splice(i, 1);
+            if (list.length === 0) index.delete(from);
+        }
+        const wasPrimary = st.speciesPrimary[from] === uid;
+        if (wasPrimary) delete st.speciesPrimary[from];
+
+        // 3. 变身
+        inst.speciesId = to;
+        if (resetProgress) {
+            inst.level = 1;
+            inst.exp = 0;
+            inst.skillLevel = 0;
+        } else {
+            // 保留等级；经验不低于新物种经验曲线下该等级的起点
+            inst.exp = Math.max(inst.exp, getExpForLevel(POKEMON_DATA[to].expGroup, inst.level));
+        }
+        if (!index.has(to)) index.set(to, []);
+        index.get(to).push(uid);
+
+        // 4. 新物种还没有主个体 → 它就是；旧物种若还有别的个体 → 重新选主
+        if (!st.speciesPrimary[to] || !ownedLookup(st.ownedPokemon, st.speciesPrimary[to])) this._setPrimaryInternal(uid);
+        else st.pokedex[to] = 'caught';
+        if (wasPrimary) this.primaryOf(from);     // 有别的个体则选出新主个体；没有则回退到图鉴存档
+        if (archived) this._unlinkLegacy(from);   // 旧视图指向图鉴存档
+
+        this.party.syncTeamMirror();   // team 是 party 的“物种视图”：队伍里的这只个体换了物种
+        this._notify(from);
+        this._notify(to);
+        return { ok: true, fromSpecies: from, toSpecies: to, archived };
     }
 
     // ---------- 放生 / 转移 ----------
