@@ -273,6 +273,77 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
             await context.close();
         }
 
+        // ---------- G. 第 3 阶段：捕获同种 → PC 界面 → 队伍界面 → 保存刷新 ----------
+        {
+            const { page, context } = await newPage(`localStorage.setItem('pokemon_idle_tutorial_done', '1');`);
+            await page.goto(base);
+            await page.waitForFunction(() => typeof game !== 'undefined' && game.currentBattle, null, { timeout: 15000 });
+
+            // 设置里的“重复捕获”策略：默认 all；改成 better 后写入存档
+            await page.click('[data-tab="tab-settings"]');
+            check('设置：重复捕获策略默认选中“有几率收为新个体”', await page.locator('input[name="capture-duplicates"][value="all"]').isChecked());
+            await page.locator('input[name="capture-duplicates"][value="better"]').check();
+            check('设置：切换为“只收更高的”后写入游戏状态', await page.evaluate(() => game.gameState.settings.captureDuplicates === 'better'));
+
+            // 走真实的击败流程：同一物种连续遇到两只，第二只个体值更高 → 收为新的个体
+            await page.evaluate(() => {
+                game.stopBattle();
+                const mk = (v) => { const w = game.createWildPokemon(16, 5, 0); w.isShiny = false; w.ivs = { hp: v, atk: v, def: v, spAtk: v, spDef: v, speed: v }; return w; };
+                game.processDefeat(mk(5));
+                game.processDefeat(mk(25));
+                game.startBattle();
+            });
+            await page.click('[data-tab="tab-pc"]');
+            await sleep(300);
+            const pc1 = await page.evaluate(() => ({
+                cards: [...document.querySelectorAll('#pc-grid .pc-card[data-uid]')].map(c => c.dataset.uid),
+                badges: [...document.querySelectorAll('#pc-grid .pc-same-badge')].map(b => b.textContent.trim()),
+                summary: document.getElementById('pc-summary').textContent,
+                partyCards: document.querySelectorAll('#pc-party .pc-card').length,
+            }));
+            check('PC 界面列出同一物种的两只个体，并标出 ×2', pc1.cards.length === 2 && new Set(pc1.cards).size === 2 && pc1.badges.length === 2 && pc1.badges.every(b => b === '×2') && pc1.partyCards === 1, JSON.stringify(pc1));
+
+            // 点第二张卡片 → 详情显示它自己的编号与个体值 → 加入队伍
+            const target = pc1.cards[1];
+            await page.click(`#pc-grid .pc-card[data-uid="${target}"]`);
+            const detail = await page.locator('#pc-detail').innerText();
+            check('详情显示编号、个体值、性格', detail.includes('#' + target) && /合计/.test(detail) && /性格/.test(detail), detail.slice(0, 120));
+            await page.click('#pc-detail [data-pc-action="to-party"]');
+            await sleep(200);
+            const afterAdd = await page.evaluate((uid) => ({
+                party: game.gameState.party.slice(), where: game.roster.locate(uid).where,
+                slots: document.querySelectorAll('#team-list .team-slot').length, pcParty: document.querySelectorAll('#pc-party .pc-card').length,
+            }), target);
+            check('从 PC 加入队伍：名册、队伍面板、PC 页面一致', afterAdd.party.length === 2 && afterAdd.where === 'party' && afterAdd.pcParty === 2, JSON.stringify(afterAdd));
+
+            // 队伍面板里的 ▲▼ 调整顺序、放回 PC
+            await page.click('[data-tab="tab-battle"]');
+            await sleep(200);
+            const snap = () => page.evaluate(() => ({ party: game.gameState.party.slice(), active: game.gameState.party[game.gameState.activePokemonIndex] }));
+            const orderBefore = await snap();
+            await page.click('#team-list .team-slot:nth-of-type(2) .team-slot-actions button[title="上移"]');
+            const orderAfter = await snap();
+            check('队伍面板 ▲：顺序交换，出战者仍是同一只',
+                orderAfter.party[0] === orderBefore.party[1] && orderAfter.party[1] === orderBefore.party[0] && orderAfter.active === orderBefore.active,
+                JSON.stringify({ orderBefore, orderAfter }));
+            await page.evaluate(() => { game.setActivePokemon(game.gameState.party.indexOf(game.roster.primaryOf(25).uid)); gameUI.renderTeam(); });
+            const removeIdx = await page.evaluate(() => game.gameState.party.findIndex((u, i) => i !== game.gameState.activePokemonIndex));
+            await page.evaluate((i) => gameUI.removeFromTeam(i), removeIdx);
+            const afterRemove = await page.evaluate(() => ({ party: game.gameState.party.length, problems: game.roster.checkIntegrity() }));
+            check('队伍面板“放回PC”：个体回到 PC，不变量成立', afterRemove.party === 1 && afterRemove.problems.length === 0, JSON.stringify(afterRemove));
+
+            // 保存并刷新：两只同种个体仍在，策略仍是 better
+            const snapshot = await page.evaluate(() => { game.saveNow(); return { uids: game.roster.ofSpecies(16).map(i => i.uid).sort(), ivs: game.roster.ofSpecies(16).map(i => i.ivs.hp).sort() }; });
+            await page.reload();
+            await page.waitForFunction(() => typeof game !== 'undefined' && game.currentBattle, null, { timeout: 15000 });
+            const reloaded2 = await page.evaluate(() => ({
+                uids: game.roster.ofSpecies(16).map(i => i.uid).sort(), ivs: game.roster.ofSpecies(16).map(i => i.ivs.hp).sort(),
+                policy: game.gameState.settings.captureDuplicates, problems: game.roster.checkIntegrity(),
+            }));
+            check('刷新后同种的两只个体、策略设置都在', JSON.stringify(reloaded2.uids) === JSON.stringify(snapshot.uids) && JSON.stringify(reloaded2.ivs) === JSON.stringify(snapshot.ivs) && reloaded2.policy === 'better' && reloaded2.problems.length === 0, JSON.stringify({ reloaded2, snapshot }));
+            await context.close();
+        }
+
         check('整个过程中没有页面错误或 console.error', errors.length === 0, errors.slice(0, 5).join(' | '));
     } catch (e) {
         check('冒烟测试流程', false, e.stack || String(e));

@@ -13,6 +13,8 @@ const MAX_POKEMON_LEVEL = 9999; // 宝可梦等级上限
 const CAPTURE_DUPLICATE_POLICIES = ['all', 'better', 'off'];
 const DEFAULT_CAPTURE_DUPLICATE_POLICY = 'all';
 const DUPLICATE_CAPTURE_RATE = 0.05;
+// 同一物种最多这么多只个体时，不再自动收普通（非闪光）重复，避免长时间挂机把 PC 塞满。闪光不受限制。
+const DUPLICATE_SPECIES_CAP = 20;
 
 // ===================== 徽章配置 =====================
 const BADGE_DATA = {

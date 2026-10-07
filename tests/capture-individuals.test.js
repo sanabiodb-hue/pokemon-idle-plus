@@ -173,6 +173,23 @@ test('已有闪光主个体时，再遇到闪光：额外收下一只闪光个�
     assert.ok(game.roster.ofSpecies(16).every(i => i.shiny));
 });
 
+test('同物种已有 20 只：不再自动收普通重复（不消耗随机数），闪光不受限制', () => {
+    const { game, ctx } = newGame();
+    own(game, 16, 10);
+    while (game.roster.countOfSpecies(16) < ctx.DUPLICATE_SPECIES_CAP) game.roster.create({ speciesId: 16, rng: () => 0.5 });
+    let draws = 0;
+    game.rng = () => { draws++; return 0.0; };
+    game.processDefeat(wild(game, 16, { ivs: ivs(30) }));
+    assert.equal(game.roster.countOfSpecies(16), ctx.DUPLICATE_SPECIES_CAP);
+    assert.equal(draws, 0);
+    game.gameState.settings = { captureDuplicates: 'better' };
+    game.processDefeat(wild(game, 16, { ivs: ivs(31) }));
+    assert.equal(game.roster.countOfSpecies(16), ctx.DUPLICATE_SPECIES_CAP, 'better 也受上限限制');
+    game.processDefeat(wild(game, 16, { shiny: true }));
+    assert.equal(game.roster.countOfSpecies(16), ctx.DUPLICATE_SPECIES_CAP + 1, '闪光不受上限限制');
+    healthy(game);
+});
+
 test('PC 放不下：不收重复；闪光会发出 captureBlocked 事件，名册不变', () => {
     const { game } = newGame();
     own(game, 16, 10);

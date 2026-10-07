@@ -929,6 +929,7 @@ class GameCore {
         const policy = this.getCaptureDuplicatePolicy();
         if (policy === 'off') return false;
         if (wild.isShiny) return true;
+        if (this.roster.countOfSpecies(wild.id) >= DUPLICATE_SPECIES_CAP) return false;
         if (policy === 'better') {
             const total = ivTotal(wild.ivs);
             return this.roster.ofSpecies(wild.id).every(i => total > ivTotal(i.ivs));

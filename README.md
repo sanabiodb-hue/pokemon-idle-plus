@@ -67,6 +67,7 @@ pokemon-idle-plus/
 │   ├── route-data.js       # 地区与道路数据（10 地区 / 192 条道路）
 │   ├── game-config.js      # 配置与常量：徽章/宝石/树果/技能/天赋/挑战塔/存档/战斗公共常量
 │   ├── pokemon-instance.js # 个体（instance）：规范形状、性格表、昵称净化（纯函数）
+│   ├── species-traits.js   # 物种特质：捕获时随机性格/性别/特性槽位（纯函数）
 │   ├── party.js            # 队伍（PartyManager）：≤6 只个体，team 视图原地同步
 │   ├── pc.js               # PC / 箱子（PCStorage）：多箱子、按格子存放个体
 │   ├── pokemon-validation.js  # 个体名册的清洗（读档/导入）与不变量检查
@@ -74,6 +75,7 @@ pokemon-idle-plus/
 │   ├── pokemon-roster.js   # 名册（PokemonRoster）：个体/队伍/PC/放生 + 旧结构兼容视图
 │   ├── save-manager.js     # 存档：编解码、schemaVersion、迁移、校验清洗、备份轮转、防抖写入
 │   ├── game-core.js        # 游戏核心逻辑（战斗、升级、捕获、离线结算等）
+│   ├── pc-view.js          # PC / 个体详情界面（PCView）：只调用 GameCore 的队伍/PC 服务
 │   ├── ui.js               # UI 渲染与交互
 │   └── main.js             # 入口：加载存档、离线结算、启动
 ├── tools/
@@ -136,7 +138,7 @@ Requer apenas Node.js ≥ 20 (nenhuma dependência para instalar).
 
 ```bash
 npm run validate   # valida Pokémon, rotas, regiões e configs (exit 1 se houver erro)
-npm test           # 199 testes automatizados (node:test)
+npm test           # 270 testes automatizados (node:test)
 npm run smoke      # teste de "build": abre o jogo num Chromium headless (precisa do pacote playwright;
                    #   se não estiver instalado, o teste é ignorado)
 npm run check      # os três acima em sequência
@@ -249,10 +251,12 @@ sanitizado, ≤ 12 caracteres), `origin` (`starter`/`wild`/`evolution`/`legacy_m
 3. **Combate usa indivíduos**: stats de batalha, bônus de 20% dos colegas, XP (100% do ativo / 50% de cada colega),
    golpes e estatísticas individuais são calculados por indivíduo. Duas Pikachus na equipe têm níveis/IVs/shiny/XP independentes.
 4. **Regras de espécie preservadas** (para não alterar o balanceamento): o bônus de 1% da Pokédex e o XP de reserva
-   valem para o *primário* de cada espécie que não está na equipe; indivíduos extras não os multiplicam. Capturar de novo
-   uma espécie já possuída ainda só melhora os IVs do primário (captura avançada fica para a próxima fase).
-5. `shinyDex` continua sendo o registro por espécie: o primário é shiny ⇔ `shinyDex[espécie]`. Um indivíduo extra shiny
-   não altera o registro antigo.
+   valem para o *primário* de cada espécie que não está na equipe; indivíduos extras não os multiplicam. A "maestria de
+   IV" (derrotar de novo uma espécie já possuída sobe os IVs do primário) continua só no primário — veja a Fase 3 para
+   a captura de duplicatas, que cria indivíduos novos independentes.
+5. `shinyDex` continua sendo o registro por espécie: o primário é shiny ⇔ `shinyDex[espécie]`. Na Fase 3, um shiny
+   capturado quando o primário não é shiny passa a ser o novo primário (o shiny extra de uma espécie que já tem primário
+   shiny não altera o registro).
 6. **Invariantes** (checados por `validateRosterIntegrity`): cada indivíduo está em exatamente um lugar (equipe ou uma
    caixa); toda espécie com indivíduos tem um primário; `caughtPokemon[e] === ownedPokemon[primário]`; `team` bate com `party`.
 7. Limitação intencional: o último indivíduo de uma espécie não pode ser liberado (o jogo antigo trata "tem indivíduo"
@@ -278,6 +282,68 @@ XP, soma de níveis e Pokédex — idênticos.
 1. Acrescente o campo em `buildInstance` (valor padrão seguro) e em `sanitizeInstance` (validação).
 2. Se precisar migrar dados antigos, faça-o em `migrateLegacyToInstances` ou crie `SAVE_MIGRATIONS[3]` (e suba `SAVE_SCHEMA_VERSION`).
 3. Teste em `tests/pokemon-instance.test.js` e `tests/roster-save.test.js`.
+
+## 🎒 Fase 3: loop principal jogável (v2.72, schema v3)
+
+Fecha o fluxo **explorar → capturar → montar equipe → batalhar → ganhar XP → evoluir → mover PC/equipe → salvar → recarregar**
+sem refatoração estrutural: tudo usa a arquitetura da Fase 2 (sem mudança de schema; `archivedSpecies` é um campo novo
+opcional — saves da Fase 2 carregam normalmente).
+
+### Captura real (fluxo normal de gameplay)
+- `processDefeat` decide o que fazer ao derrotar um selvagem:
+  - **espécie nova** → cria o primeiro indivíduo (como antes), agora com natureza/sexo/habilidade sorteados e shiny herdado do selvagem;
+  - **espécie já possuída** → primeiro aplica a regra antiga (IVs do primário sobem para o máximo) e depois, conforme a
+    política `captureDuplicates`, pode criar **um novo indivíduo** (uid próprio, Lv1, IVs/natureza/habilidade/sexo/shiny
+    próprios, vai para o PC, `origin: wild`). Duplicatas não dependem de nenhuma API interna.
+- Política (Configurações → "Ao encontrar um Pokémon que já possui"): `all` (padrão: 5% de chance, `DUPLICATE_CAPTURE_RATE`),
+  `better` (só se a soma de IVs superar todos os indivíduos da espécie) ou `off` (comportamento anterior). **Shiny sempre
+  é capturado** (exceto em `off` ou PC lotado — nesse caso o evento `captureBlocked` avisa). Não-shiny deixam de ser
+  capturados automaticamente com 20 indivíduos da espécie (`DUPLICATE_SPECIES_CAP`), para a pesca offline de 24 h não
+  lotar o PC (sem o teto, 24 h offline numa rota de 3 espécies geravam ~1600 indivíduos).
+- Sem dados de proporção de sexo/habilidades na tabela de espécies: `species-traits.js` usa 50/50 (com uma lista de
+  exceções aproximada: sem sexo/só macho/só fêmea) e guarda o **slot** de habilidade (`a1`/`a2`/`ha`, oculta ≈ 1/64).
+  Natureza, sexo e habilidade ainda **não afetam** o combate (balanceamento intocado).
+- Capturas offline entram no relatório (`duplicateCatches`).
+
+### Evolução individual
+`PokemonRoster.evolveInstance(uid, alvo, {resetProgress})`: o próprio indivíduo muda de espécie (Pikachu A → Raichu A),
+mantendo uid, IVs, natureza, habilidade, sexo, shiny, apelido, estatísticas e posição (equipe/PC).
+- **Alvo ainda não registrado na Pokédex** → regra antiga: Lv1/XP 0/skill 0 (nova entrada na Pokédex). Se era o último da
+  espécie, a espécie original fica como **registro de Pokédex** (`archivedSpecies`, formato antigo
+  `{speciesId, level, exp, ivs, skillLevel}`): continua contando para o bônus de 1%, recebe XP de reserva e pode ser
+  recapturada (a captura substitui o registro).
+- **Alvo já registrado** (você já tem outro Raichu) → evolui igual e **mantém o nível**. Evoluções que ficam disponíveis em
+  cadeia (nível já acima do próximo requisito) acontecem em sequência.
+- Ramificações: prefere o alvo ainda não registrado; senão, o primeiro elegível da tabela.
+- Mudança deliberada em relação à Fase 2: antes a evolução criava um indivíduo *novo* e deixava o antigo; os testes
+  `roster-compat` 13–15 foram reescritos para a nova regra.
+
+### Equipe e PC pela interface
+- Novos serviços em `GameCore` (retornam `{ok, code}`; bloqueados na Torre e durante o offline): `partyAdd`, `partyRemove`,
+  `partySwapWithPc`, `partyReorder`, `pcMoveToBox`, `renamePokemon`, `releasePokemon`, `describeInstance`. Máx. 6, o ativo
+  nunca sai, a equipe não fica vazia, o `team` continua apenas como visão de compatibilidade.
+- Aba **PC** (`pc-view.js`): equipe com ▲▼/ativo/"Voltar ao PC", caixas paginadas (renomear/nova caixa/busca), detalhe do
+  indivíduo (uid `#pN`, IVs, natureza, habilidade, sexo, origem, data) e ações (equipe, trocar por um membro, mover de
+  caixa, apelido, soltar). Dois indivíduos da mesma espécie aparecem como `×N` e com `#uid · sexo · natureza · IV%`.
+- O painel de batalha mostra a equipe **na ordem da equipe** (antes era por nível) com ▲▼ e a mesma linha de identificação.
+
+### Combate: auditoria
+Tudo já usava o indivíduo da posição ativa (`battle.derived.activeInst`); dois pontos eram por espécie e foram corrigidos:
+a recompensa de vitória procurava o ativo *pela espécie* (quebraria após evoluir no meio da simulação offline) e o cache
+offline da equipe só invalidava por nível. `tests/combat-individuals.test.js` cobre dano, habilidade/skill, XP, auto-troca,
+offline e Torre com duas Pikachu de atributos diferentes.
+
+### Testes novos (fase 3)
+`species-traits`, `capture-individuals`, `evolution-individual`, `party-pc-services`, `combat-individuals`,
+`archived-species` e `main-loop` (capturar → duplicata → equipe/PC → batalha → XP → evoluir → salvar → recarregar),
+mais 8 verificações de navegador (aba PC, política de captura, ▲▼, persistência).
+
+### Limitações conhecidas (fase 3)
+- IV/maestria continuam por espécie no primário; um shiny que vira primário não herda os IVs do antigo (podem cair até
+  subirem de novo por maestria).
+- Pokédex, habilidades (skill), frutas e "layout de equipe por espécie" ainda operam sobre o primário da espécie.
+- Natureza, sexo e habilidade ainda não têm efeito; o sexo usa uma tabela aproximada.
+- Capturar duplicatas enche o PC (até 200 caixas × 30); não há "soltar em lote" nem ordenação automática.
 
 ### Problemas conhecidos / ainda não tratados (fases 1 e 2)
 - A UI continua sendo `innerHTML` em muitos lugares (os dados vindos do save já são sanitizados, mas a camada de
