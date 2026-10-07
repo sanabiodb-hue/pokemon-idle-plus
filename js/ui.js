@@ -347,7 +347,7 @@ class GameUI {
         document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
         document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
         document.getElementById(tabId).classList.add('active');
-        document.querySelector(`[data-tab="${tabId}"]`).classList.add('active');
+        document.querySelector(`#tab-nav [data-tab="${tabId}"]`).classList.add('active');
 
         // 切换时刷新对应内容
         if (tabId === 'tab-map') this.renderMap();
@@ -2310,6 +2310,9 @@ class GameUI {
             addLine(`🎒 新增个体：${summary.duplicateCatches.length} 只已放入 PC${shinyCount ? `（其中闪光 ${shinyCount} 只）` : ''}`, 'highlight');
         }
         if (summary.ivUpgrades > 0) addLine(`💎 个体值提升：${summary.ivUpgrades} 次`);
+        // 回来之后最想知道的：接下来做什么
+        const next = this.game.getNextAction();
+        if (next) addLine(`👉 下一步：${next.title}`, 'highlight');
         if (summary.levelUps.length > 0) {
             const top = summary.levelUps.slice(0, 5).map(l => `${l.name} Lv.${l.from}→${l.to}`).join('；');
             addLine(`⬆️ 升级最多：${top}`);
@@ -2523,6 +2526,9 @@ class GameUI {
     }
 
     showLevelUpNotification(pokemon) {
+        // 出战的宝可梦升级：在战斗场景里飘一行“升级”，比日志里的一行更容易注意到
+        const active = this.game.getPartyInstance(this.game.gameState.activePokemonIndex);
+        if (active && pokemon.uid === active.uid) this._floatText(`⬆️ Lv.${pokemon.level}`, 'levelup');
         // 改为显示在战斗日志中，连续升级合并为一条
         if (pokemon.startLevel && pokemon.level - pokemon.startLevel > 1) {
             this.addBattleLog(`${pokemon.name} Lv.${pokemon.startLevel} → Lv.${pokemon.level}！`, 'levelup');

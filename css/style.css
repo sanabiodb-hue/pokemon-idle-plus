@@ -4795,3 +4795,8 @@ body {
 .goal-desc { font-size: 11px; color: var(--text-secondary); margin: 2px 0 4px; }
 .route-progress-line { margin: 2px 0 4px; }
 .route-progress-line .route-new-chip, .route-progress-line .route-done-chip { margin-left: 0; }
+
+.dex-add-btn, .dex-remove-btn { min-height: 32px; }
+.stat-iv, .slot-traits, .log-time { font-size: 11px; }
+.pc-search { min-height: 36px; }
+.guide-btn.ghost { min-height: 32px; }

@@ -42,7 +42,7 @@ class GuideView {
         if (a.cta) {
             if (a.cta.route) cta = `<button class="guide-btn primary" data-guide-action="go-route" data-route="${escapeHtml(a.cta.route)}">${escapeHtml(a.cta.label)}</button>`;
             else if (a.cta.goals) cta = `<button class="guide-btn" data-guide-action="goals">${escapeHtml(a.cta.label)}</button>`;
-            else if (a.cta.tab) cta = `<button class="guide-btn primary" data-guide-action="open-tab" data-tab="${escapeHtml(a.cta.tab)}">${escapeHtml(a.cta.label)}</button>`;
+            else if (a.cta.tab) cta = `<button class="guide-btn primary" data-guide-action="open-tab" data-target="${escapeHtml(a.cta.tab)}">${escapeHtml(a.cta.label)}</button>`;
         }
         const skip = a.skippable ? '<button class="guide-btn ghost" data-guide-action="skip" title="跳过新手引导">跳过</button>' : '';
         const html = `
@@ -110,7 +110,12 @@ class GuideView {
             <button class="event-card-close" data-guide-action="close-card" aria-label="关闭">✕</button>`;
         this._positionCards();
         this.cards.appendChild(card);
-        while (this.cards.children.length > EVENT_CARD_MAX) this.cards.firstElementChild.remove();
+        if (opts.keep) card.dataset.keep = '1';
+        // 超出数量时先去掉“步骤完成”这类次要卡片，保留发现/进化/闪光等重要卡片
+        while (this.cards.children.length > EVENT_CARD_MAX) {
+            const minor = [...this.cards.children].find(c => !c.dataset.keep);
+            (minor || this.cards.firstElementChild).remove();
+        }
         const ttl = opts.ttl || EVENT_CARD_TTL_MS;
         setTimeout(() => card.remove(), ttl);
         return card;
@@ -144,7 +149,7 @@ class GuideView {
         const rec = this.game.getNextAction();
         const tip = rec && rec.type === 'route' ? '' : '新伙伴已放入 PC，可以把它加入队伍。';
         this.showCard({
-            icon: info.shiny ? '✨' : '🆕', tone: info.shiny ? 'shiny' : '',
+            icon: info.shiny ? '✨' : '🆕', tone: info.shiny ? 'shiny' : '', keep: true,
             title: `捕获了新宝可梦：${info.name}${info.shiny ? '（闪光！）' : ''}`,
             text: `图鉴 ${stats.caught}/${stats.total}。${tip}`,
             actions: info.uid ? [{ label: '去 PC 看看', action: 'open-pc', uid: info.uid }] : [],
@@ -154,7 +159,7 @@ class GuideView {
 
     onShiny(name) {
         this.showCard({
-            icon: '✨', tone: 'shiny', title: `发现闪光 ${name}！`,
+            icon: '✨', tone: 'shiny', keep: true, title: `发现闪光 ${name}！`,
             text: '闪光宝可梦出现概率只有约 1/4096，已记入图鉴；它拥有更高的属性。可以在图鉴里切换显示。',
             ttl: 12000,
         });
@@ -165,16 +170,16 @@ class GuideView {
             ? `${data.oldName} 变成了 ${data.newName}，等级保持 Lv.${data.pokemon.level}。个体值、性格都和原来一样。`
             : `${data.oldName} 变成了 ${data.newName}！这是你图鉴里新登记的形态，从 Lv.1 重新成长${data.archivedOld ? `；${data.oldName} 仍保留在图鉴里，继续提供图鉴加成` : ''}。`;
         this.showCard({
-            icon: '🌟', tone: 'evolution', title: `${data.oldName} 进化了！`, text,
-            actions: [{ label: '看看队伍', action: 'open-tab', tab: 'tab-battle' }], ttl: 12000,
+            icon: '🌟', tone: 'evolution', keep: true, title: `${data.oldName} 进化了！`, text,
+            actions: [{ label: '看看队伍', action: 'open-tab', target: 'tab-battle' }], ttl: 12000,
         });
     }
 
     onRegionUnlocked(data) {
         this.showCard({
-            icon: '🎉', tone: 'success', title: `${data.regionName}已解锁！`,
+            icon: '🎉', tone: 'success', keep: true, title: `${data.regionName}已解锁！`,
             text: '那里有全新的宝可梦等你收集，去地图选一条道路吧。',
-            actions: [{ label: '打开地图', action: 'open-tab', tab: 'tab-map' }], ttl: 12000,
+            actions: [{ label: '打开地图', action: 'open-tab', target: 'tab-map' }], ttl: 12000,
         });
     }
 
@@ -210,7 +215,7 @@ class GuideView {
         const g = this.game;
         switch (action) {
             case 'open-tab':
-                this.ui.switchTab(data.tab);
+                this.ui.switchTab(data.target);
                 break;
             case 'open-pc':
                 this.ui.switchTab('tab-pc');

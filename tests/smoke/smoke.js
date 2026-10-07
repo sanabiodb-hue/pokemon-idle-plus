@@ -56,8 +56,8 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
     const browser = await pw.chromium.launch();
     const errors = [];
 
-    async function newPage(initScript) {
-        const context = await browser.newContext({ viewport: { width: 480, height: 900 } });
+    async function newPage(initScript, ctxOpts = {}) {
+        const context = await browser.newContext({ viewport: { width: 480, height: 900 }, ...ctxOpts });
         const page = await context.newPage();
         page.on('pageerror', (e) => errors.push('pageerror: ' + e.message));
         page.on('console', (m) => { if (m.type() === 'error') errors.push('console.error: ' + m.text()); });
@@ -342,6 +342,152 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
             }));
             check('刷新后同种的两只个体、策略设置都在', JSON.stringify(reloaded2.uids) === JSON.stringify(snapshot.uids) && JSON.stringify(reloaded2.ivs) === JSON.stringify(snapshot.ivs) && reloaded2.policy === 'better' && reloaded2.problems.length === 0, JSON.stringify({ reloaded2, snapshot }));
             await context.close();
+        }
+
+        // ---------- H. 第 4 阶段：新玩家的第一次游玩（手机视口）----------
+        {
+            const { page, context } = await newPage(null, { viewport: { width: 390, height: 780 }, isMobile: true, hasTouch: true });
+            await page.goto(base);
+            await page.waitForFunction(() => typeof game !== 'undefined' && game.currentBattle, null, { timeout: 15000 });
+            await page.waitForSelector('.tutorial-modal', { timeout: 5000 });
+
+            // 手机视口：页面没有被 initial-scale 放大裁切，也没有横向滚动
+            const vp = await page.evaluate(() => ({ vv: window.visualViewport.width, iw: window.innerWidth, sw: document.documentElement.scrollWidth, scale: window.visualViewport.scale }));
+            check('手机视口：没有被放大裁切，没有横向滚动', vp.scale === 1 && vp.sw <= vp.iw + 1 && vp.vv >= vp.iw - 1, JSON.stringify(vp));
+
+            const welcome = await page.locator('.tutorial-modal').innerText();
+            check('欢迎页只有三件事，并提示跟着任务条走', /收集全部宝可梦/.test(welcome) && /自动/.test(welcome) && /任务条/.test(welcome) && welcome.length < 160, welcome);
+            await page.click('.tutorial-start-btn');
+            await sleep(500);
+            const bar1 = await page.locator('#guide-bar').innerText();
+            check('下一步条：显示步骤 1/5 与进度', /1\/5/.test(bar1) && /战斗/.test(bar1) && await page.locator('#guide-bar .guide-progress').count() === 1, bar1);
+
+            const teamHint = await page.locator('#team-list .team-empty-slots').innerText();
+            check('队伍没满：提示还有几个空位以及怎么补', /还有 5 个空位/.test(teamHint), teamHint);
+
+            // 统计：打开/会话已记录；第一次操作（上面的点击）已记录
+            const an0 = await page.evaluate(() => JSON.parse(localStorage.getItem('pokemon_idle_analytics')).queue.map(e => e.n));
+            check('统计：game_open / session_start / first_action 已记录', ['game_open', 'session_start', 'first_action', 'battle_start'].every(n => an0.includes(n)), JSON.stringify(an0));
+
+            // PC 空状态
+            await page.evaluate(() => game.stopBattle());
+            await page.click('[data-tab="tab-pc"]');
+            const pcEmpty = await page.locator('#pc-grid').innerText();
+            check('PC 空状态：说明新宝可梦会送到这里', /PC 还是空的/.test(pcEmpty), pcEmpty);
+            await page.click('[data-tab="tab-battle"]');
+            await page.evaluate(() => { game.gameState.guide.flags.pcOpened = false; });   // 上面只是看了一眼空 PC，下面重新走“打开 PC”这一步
+
+            // 走真实的胜利流程：看战斗 + 捕获新伙伴 → 事件卡片、PC 页签红点、引导进入第 3 步
+            await page.evaluate(() => {
+                for (let i = 0; i < 8 && game.getPokedexStats().caught < 2; i++) {
+                    const w = game.createWildPokemon(19, 3, 0); w.isShiny = false;
+                    game._processVictoryRewards(w, 25, 100, 100);
+                }
+                game._guideLastUpdate = 0; game.guideUpdate({ force: true });
+            });
+            await sleep(400);
+            const afterCapture = await page.evaluate(() => ({
+                cards: [...document.querySelectorAll('#event-cards .event-card-title')].map(e => e.textContent),
+                dot: (document.querySelector('.tab-btn[data-tab="tab-pc"] .tab-dot') || {}).textContent || '',
+                bar: document.getElementById('guide-bar').innerText,
+            }));
+            check('捕获新宝可梦：弹出事件卡片（发生了什么 + 去哪看），PC 页签出现红点', afterCapture.cards.some(t => /捕获了新宝可梦/.test(t)) && afterCapture.dot === '1', JSON.stringify(afterCapture));
+            check('引导推进到“打开 PC”，并给出一键入口', /3\/5/.test(afterCapture.bar) && /打开 PC/.test(afterCapture.bar));
+
+            // 打开 PC → 红点消失 → 引导进入“组建队伍” → 在 PC 里加入队伍 → 进入“探索”
+            await page.click('#guide-bar [data-guide-action="open-tab"]');
+            await sleep(300);
+            check('打开 PC：红点消失，进入第 4 步，PC 页签是当前页签（导航高亮没有被引导按钮抢走）',
+                await page.locator('.tab-btn[data-tab="tab-pc"] .tab-dot').count() === 0 && /4\/5/.test(await page.locator('#guide-bar').innerText())
+                && await page.evaluate(() => document.querySelector('#tab-nav .tab-btn.active').dataset.tab === 'tab-pc' && document.querySelectorAll('[data-tab].active').length === 1));
+            await page.click('#pc-grid .pc-card[data-uid]');
+            await page.click('#pc-detail [data-pc-action="to-party"]');
+            await sleep(300);
+            await page.click('[data-tab="tab-battle"]');
+            const bar5 = await page.locator('#guide-bar').innerText();
+            check('加入队伍后进入第 5 步“探索新道路”', /5\/5/.test(bar5) && /地图/.test(bar5), bar5);
+
+            // 抓齐一号道路 → 地图上有“推荐”的新道路，并显示每条道路还有几种没抓到
+            await page.evaluate(() => { for (const id of [16, 19]) if (game.gameState.pokedex[id] !== 'caught') game.catchPokemonWithIvs(id, 1, { hp: 5, atk: 5, def: 5, spAtk: 5, spDef: 5, speed: 5 }); });
+            await page.click('[data-tab="tab-map"]');
+            await sleep(300);
+            const map = await page.evaluate(() => ({
+                rec: [...document.querySelectorAll('.route-card.recommended h3')].map(h => h.textContent),
+                chips: [...document.querySelectorAll('.route-progress-line')].map(c => c.textContent.trim()),
+            }));
+            check('地图：被推荐的新道路高亮，每条道路显示还有几种没抓到', map.rec.length === 1 && /2号道路/.test(map.rec[0]) && /推荐/.test(map.rec[0]) && map.chips.some(c => /已抓齐/.test(c)) && map.chips.some(c => /还有 \d+ 种没抓到/.test(c)), JSON.stringify(map));
+            await page.click('.route-card.recommended');
+            await sleep(300);
+            await page.click('[data-tab="tab-battle"]');
+            const done = await page.evaluate(() => ({ onboarding: game.gameState.guide.onboarding, bar: document.getElementById('guide-bar').className, steps: Object.keys(game.gameState.guide.steps).length }));
+            check('换到新道路后引导完成，下一步条切换为目标/建议', done.onboarding === 'done' && done.steps === 5 && !/guide-onboarding/.test(done.bar), JSON.stringify(done));
+
+            // 目标面板与空状态
+            await page.evaluate(() => gameUI.guideView.showGoals());
+            const goals = await page.locator('.goals-modal').innerText();
+            check('目标面板：列出目标和进度', /目标（\d+\/\d+）/.test(goals) && /收集 10 种宝可梦/.test(goals) && /解锁城都地区/.test(goals), goals.slice(0, 80));
+            await page.click('.goals-close');
+            await page.click('[data-tab="tab-pokedex"]');
+            await page.evaluate(() => { const i = document.getElementById('pokedex-search-input'); i.value = '不存在的名字'; i.dispatchEvent(new Event('input')); });
+            await sleep(300);
+            check('图鉴：搜索无结果有说明和返回按钮', /没有找到/.test(await page.locator('#pokedex-grid').innerText()));
+            await page.evaluate(() => { const i = document.getElementById('pokedex-search-input'); i.value = ''; i.dispatchEvent(new Event('input')); });
+            await page.click('.filter-btn[data-filter="shiny"]');
+            await sleep(200);
+            check('图鉴：没有闪光时说明获得方式', /1\/4096/.test(await page.locator('#pokedex-grid').innerText()));
+
+            // 各页签：手机上没有横向滚动
+            const overflows = [];
+            for (const t of ['tab-battle', 'tab-map', 'tab-pokedex', 'tab-pc', 'tab-settings']) {
+                await page.click(`[data-tab="${t}"]`);
+                await sleep(150);
+                if (await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1)) overflows.push(t);
+            }
+            check('手机上所有主要页签都没有横向滚动', overflows.length === 0, overflows.join());
+
+            // 设置：匿名统计开关 / 测试报告 / 目标入口
+            const rep = await page.evaluate(() => JSON.parse(gameUI.buildBetaReport()));
+            check('测试报告：包含进度与统计摘要，不含存档内容', rep.progress.species >= 3 && rep.analytics && rep.analytics.sessions === 1 && !JSON.stringify(rep).includes('ownedPokemon'), JSON.stringify(rep).slice(0, 120));
+            await page.click('[data-tab="tab-settings"]');
+            await page.click('label.setting-toggle:has(#setting-analytics)');
+            const off = await page.evaluate(() => ({ q: JSON.parse(localStorage.getItem('pokemon_idle_analytics')).queue.length, on: game.analytics.isEnabled() }));
+            check('关闭匿名统计：不再记录并清空队列', off.q === 0 && off.on === false, JSON.stringify(off));
+            await page.click('label.setting-toggle:has(#setting-analytics)');
+
+            // 刷新回来：不再弹欢迎页，统计记为回访（第 2 次会话）
+            await page.evaluate(() => game.saveNow());
+            await page.reload();
+            await page.waitForFunction(() => typeof game !== 'undefined' && game.currentBattle, null, { timeout: 15000 });
+            const back = await page.evaluate(() => {
+                const q = JSON.parse(localStorage.getItem('pokemon_idle_analytics')).queue;
+                const open = q.filter(e => e.n === 'game_open').pop();
+                return { modal: document.querySelectorAll('.tutorial-modal').length, open: open && open.p, ended: q.filter(e => e.n === 'session_end').length };
+            });
+            check('刷新回来：没有欢迎页，game_open 标记为回访', back.modal === 0 && back.open && back.open.returning === true && back.open.sessions === 2, JSON.stringify(back));
+            await context.close();
+        }
+
+        // ---------- I. 跳过引导 / 老玩家 ----------
+        {
+            const { page, context } = await newPage(null, { viewport: { width: 390, height: 780 }, isMobile: true, hasTouch: true });
+            await page.goto(base);
+            await page.waitForSelector('.tutorial-modal', { timeout: 15000 });
+            await page.click('.tutorial-skip-btn');
+            await sleep(500);
+            const sk = await page.evaluate(() => ({ s: game.gameState.guide.onboarding, bar: document.getElementById('guide-bar').className }));
+            check('欢迎页“跳过引导”：引导标记为已跳过，下一步条不再是引导', sk.s === 'skipped' && !/guide-onboarding/.test(sk.bar), JSON.stringify(sk));
+            await context.close();
+
+            const v2 = fs.readFileSync(path.join(ROOT, 'tests/fixtures/legacy-v2-localstorage.txt'), 'utf8');
+            const vet = await newPage(`
+                localStorage.setItem('pokemon_idle_save', ${JSON.stringify(v2)});
+            `, { viewport: { width: 390, height: 780 }, isMobile: true, hasTouch: true });
+            await vet.page.goto(base);
+            await vet.page.waitForFunction(() => typeof game !== 'undefined' && game.currentBattle, null, { timeout: 15000 });
+            await sleep(500);
+            const vs = await vet.page.evaluate(() => ({ modal: document.querySelectorAll('.tutorial-modal').length, ob: game.gameState.guide.onboarding, bar: document.getElementById('guide-bar').className, hidden: document.getElementById('guide-bar').classList.contains('hidden') }));
+            check('老存档：没有欢迎页、没有新手引导，下一步条给出建议/目标', vs.modal === 0 && vs.ob === 'done' && !/guide-onboarding/.test(vs.bar) && !vs.hidden, JSON.stringify(vs));
+            await vet.context.close();
         }
 
         check('整个过程中没有页面错误或 console.error', errors.length === 0, errors.slice(0, 5).join(' | '));

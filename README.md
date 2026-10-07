@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-v2.72-blue" alt="version">
+  <img src="https://img.shields.io/badge/version-v2.73-blue" alt="version">
   <img src="https://img.shields.io/badge/license-AGPL--3.0-green" alt="license">
   <img src="https://img.shields.io/badge/platform-Web-orange" alt="platform">
   <img src="https://img.shields.io/badge/made_with-HTML%2FCSS%2FJS-yellow" alt="tech">
@@ -76,6 +76,9 @@ pokemon-idle-plus/
 │   ├── save-manager.js     # 存档：编解码、schemaVersion、迁移、校验清洗、备份轮转、防抖写入
 │   ├── game-core.js        # 游戏核心逻辑（战斗、升级、捕获、离线结算等）
 │   ├── pc-view.js          # PC / 个体详情界面（PCView）：只调用 GameCore 的队伍/PC 服务
+│   ├── guide-view.js       # 下一步条、事件卡片、目标面板（GuideView）
+│   ├── guidance.js         # 新手引导 / 下一步建议 / 目标 / 道路进度（以 mixin 装进 GameCore，无 DOM）
+│   ├── analytics.js        # 测试期匿名统计（本地缓冲 + gtag/endpoint，可关闭）
 │   ├── ui.js               # UI 渲染与交互
 │   └── main.js             # 入口：加载存档、离线结算、启动
 ├── tools/
@@ -138,7 +141,7 @@ Requer apenas Node.js ≥ 20 (nenhuma dependência para instalar).
 
 ```bash
 npm run validate   # valida Pokémon, rotas, regiões e configs (exit 1 se houver erro)
-npm test           # 270 testes automatizados (node:test)
+npm test           # 308 testes automatizados (node:test)
 npm run smoke      # teste de "build": abre o jogo num Chromium headless (precisa do pacote playwright;
                    #   se não estiver instalado, o teste é ignorado)
 npm run check      # os três acima em sequência
@@ -344,6 +347,64 @@ mais 8 verificações de navegador (aba PC, política de captura, ▲▼, persis
 - Pokédex, habilidades (skill), frutas e "layout de equipe por espécie" ainda operam sobre o primário da espécie.
 - Natureza, sexo e habilidade ainda não têm efeito; o sexo usa uma tabela aproximada.
 - Capturar duplicatas enche o PC (até 200 caixas × 30); não há "soltar em lote" nem ordenação automática.
+
+## 🧪 Fase 4: beta / experiência do jogador (v2.73, sem mudança de schema)
+
+Objetivo: uma pessoa que nunca viu o jogo consegue abrir, entender o objetivo, jogar e perceber que está progredindo.
+Sem refatoração estrutural: tudo é incremental sobre as fases anteriores. **Todo o texto do jogo continua em chinês**
+(i18n fica para outra fase).
+
+### Auditoria da experiência (o que foi encontrado → o que foi feito)
+| Problema encontrado | Correção |
+|---|---|
+| `viewport` com `initial-scale=1.5`: no celular 1/3 da tela ficava cortada (visual 260px sobre layout de 392px) | `initial-scale=1`; ícone 🔒 das abas não estoura mais; alvos de toque ≥ 36px; contraste dos botões desabilitados |
+| Jogador fica **preso na Rota 1** (só 2 espécies; a troca automática exige 6V+shiny) e nada avisa | Barra "próximo passo" detecta "rota completa" e oferece **Ir** (1 toque); cards do mapa mostram "ainda faltam N" / "✓ completa" e a rota **recomendada** |
+| Nenhuma tela dizia "o que faço agora / o que ganho" | Barra de próximo passo + 15 metas com progresso (painel 🏆) + próxima região como meta |
+| Feedback só no log (2 linhas) | Cartões de evento (o que aconteceu + por que importa + o que fazer) para espécie nova, shiny, evolução, região desbloqueada, meta; "+EXP" e "⬆️ Lv" flutuantes; bolinha de novidades na aba PC |
+| Tutorial em texto, desatualizado, sem PC | Boas-vindas de 3 linhas + **5 passos guiados** (mostrar → fazer → recompensar), pulável |
+| 1ª evolução reinicia para Lv1 sem aviso | Aviso **antes** (barra "faltam N níveis… a nova forma recomeça no Lv.1") e explicação **depois** (nova entrada na Pokédex; a espécie antiga continua contando) — a regra em si não foi alterada |
+| PC enche de duplicatas | 🧹 "Organizar duplicatas" (mantém o mais forte; shiny, com apelido e da equipe ficam) |
+| Pokédex abria em "Todos" (1073 linhas "???") | Abre em "Capturados"; estados vazios com explicação |
+
+### Onboarding e metas (`guidance.js`)
+- 5 passos derivados do **estado do jogo** (não de cliques): primeira batalha → primeira captura → abrir o PC → montar equipe →
+  explorar outra rota. Cada passo dá uma pequena recompensa de XP (nunca mais que subir 1 nível do ativo; sem economia nova).
+  Pulável (boas-vindas ou barra), reiniciável em Configurações; saves antigos com progresso **pulam** o onboarding e as
+  metas já cumpridas não são pagas retroativamente.
+- `getNextAction()` escolhe uma única sugestão: passo do onboarding > rota completa (com botão de ir) > evolução próxima >
+  meta mais próxima. Estado em `gameState.guide` (whitelist em `sanitizeSave`; campo opcional, sem bump de schema).
+- Metas usam sistemas existentes: espécies, vitórias, níveis, 1ª evolução, 2º indivíduo da mesma espécie, equipe cheia,
+  1º shiny, 6V e desbloqueio da próxima região.
+
+### Analytics para o beta (`analytics.js`)
+- Eventos: `game_open`, `session_start`, `session_end`, `first_action`, `first_capture`, `battle_start`, `battle_complete`,
+  `level_up`, `evolution`, `pc_open`, `route_unlock`, `shiny_found` (+ `capture`, `route_change`, `onboarding_step`,
+  `onboarding_skip`, `goal_complete`, `offline_return`). Parâmetros pequenos e sanitizados; sem dados pessoais.
+- Para não inundar: `battle_start` 1×/sessão, `battle_complete` na 1ª vitória e a cada 25, `level_up` só ≤Lv10 ou múltiplos de 5,
+  `pc_open` 1×/sessão. Os **contadores são exatos** (`counters.battles`, `captures`, `evolutions`…). Offline vira um único `offline_return`.
+- Retenção: `installId` aleatório, `days_since_first`, `returning`, `hours_since_last`, `returnedNextDay`, sessões por dia jogado,
+  duração **ativa** (aba oculta não conta), `last_step` no `session_end` = ponto de abandono; sessões mortas pelo navegador são
+  recuperadas (`reason: recovered`).
+- Destinos: buffer local (`localStorage pokemon_idle_analytics`, ≤300 eventos, fora do save), `gtag` (reaproveitado) e
+  `ANALYTICS_ENDPOINT` opcional (`sendBeacon`). **Atenção:** o ID do GA em `index.html` (`G-JR8QR87EH2`) é do autor original —
+  troque pelo seu (ou `ANALYTICS_GTAG_SINK = false`) antes de publicar.
+- Privacidade: opt-out em Configurações (apaga a fila), respeita Do Not Track por padrão.
+- Sem backend: Configurações → **Copiar relatório de teste** gera um JSON (`getSummary()`) com funil (segundos até a 1ª ação/
+  batalha/captura/PC/evolução), sessões, D1, duração média, contadores e pontos de abandono.
+- Perguntas → onde ler: quantos começam (`game_open` com `new_player`), 1ª captura/batalha/evolução (`secondsToFirst`),
+  voltam no dia seguinte (`returnedNextDay`), duração (`avgSessionSeconds`), média de capturas/batalhas (`counters` por instalação),
+  abandono (`sessionEndsByLastStep`).
+
+### Testes (fase 4)
+`analytics`, `guidance`, `first-session` (jornada completa com funil de eventos, rota completa, limpeza de duplicatas) e
+20 verificações novas no navegador em viewport de celular (`isMobile`): sem corte/rolagem horizontal, boas-vindas, barra de passo,
+cartões, bolinha do PC, mapa recomendado, estados vazios, metas, opt-out de analytics, retorno marcado como `returning`,
+pular onboarding e save antigo sem onboarding.
+
+### Limitações (fase 4)
+- Texto só em chinês. Recompensas são só XP; metas de longo prazo (6V/shiny de região) ainda dependem do que já existe.
+- O funil é local por dispositivo: sem backend, o relatório precisa ser copiado pelo jogador.
+- Cartões de evento são informativos (não há histórico); a primeira evolução continua reiniciando o nível (decisão de design anterior).
 
 ### Problemas conhecidos / ainda não tratados (fases 1 e 2)
 - A UI continua sendo `innerHTML` em muitos lugares (os dados vindos do save já são sanitizados, mas a camada de
