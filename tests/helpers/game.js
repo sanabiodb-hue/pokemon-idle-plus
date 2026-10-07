@@ -38,6 +38,7 @@ function newGame(opts = {}) {
     const game = new ctx.GameCore();
     liveGames.push(game);
     game.rng = mulberry32(opts.seed ?? 1);
+    game.guideAutoUpdate = opts.guide === true;   // 引导奖励会给出战宝可梦加经验，默认关闭以免干扰其他测试的精确断言
     if (opts.load) {
         if (!game.load()) game.initNewGame();
     } else {

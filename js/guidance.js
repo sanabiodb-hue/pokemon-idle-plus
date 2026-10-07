@@ -1,0 +1,381 @@
+// ============================================================
+// 新手引导与目标（Guidance）：回答玩家两个问题——“我现在该做什么？”和“继续玩能得到什么？”
+//
+//   1. 新手引导：5 个很短的步骤（战斗 → 捕获 → PC → 组队 → 探索），每一步都由“游戏状态”判定完成，
+//      所以玩家按自己的节奏玩也会被正确识别；完成一步给一点经验奖励；随时可以跳过；老存档自动跳过。
+//   2. 下一步建议（getNextAction）：永远给出一条最该做的事——引导步骤 > 当前道路已抓齐则推荐新道路 >
+//      即将进化 > 最接近完成的目标。
+//   3. 目标（GUIDE_GOALS）：用现有系统（图鉴/战斗数/等级/进化/闪光/地区解锁）派生的里程碑，达成自动发奖励。
+//   4. 道路进度（getRouteProgress / getRecommendedRoute）：每条道路还有几种没抓到。
+//
+// 不含任何 DOM，状态存在 gameState.guide（随存档保存），所以可以在 Node 里完整测试。
+// 奖励只有“少量经验”（不是新的经济系统）：不超过出战宝可梦当前等级升一级所需经验。
+// ============================================================
+const GUIDE_REWARD_MIN_EXP = 10;
+const GUIDE_EVOLUTION_NEAR_LEVELS = 6;      // 距离进化等级不超过这么多级时，提示“即将进化”
+const GUIDE_UPDATE_MIN_INTERVAL_MS = 1000;  // 由战斗胜利触发的检查最多每秒一次
+
+// 新手引导步骤。done(game)：由状态判定；cta：可点的快捷入口
+const GUIDE_ONBOARDING_STEPS = [
+    {
+        id: 'battle', icon: '⚔️', title: '看第一场战斗',
+        text: '战斗是自动进行的——你的皮卡丘正在战斗，等它击败第一只野生宝可梦吧。',
+        done: (g) => g.gameState.stats.totalBattles >= 1,
+        progress: (g) => ({ current: Math.min(1, g.gameState.stats.totalBattles), total: 1 }),
+        reward: 0.3,
+        doneText: '漂亮！击败野生宝可梦会给你经验，皮卡丘会越来越强。',
+    },
+    {
+        id: 'capture', icon: '🎯', title: '捕获新伙伴',
+        text: '击败野生宝可梦会自动捕获它。再赢几场，收下你的第一个新伙伴！',
+        done: (g) => g.getPokedexStats().caught >= 2,
+        progress: (g) => ({ current: Math.min(2, g.getPokedexStats().caught), total: 2, label: '已收集' }),
+        reward: 0.4,
+        doneText: '你有了第一个新伙伴！它已经被送到 PC。',
+    },
+    {
+        id: 'pc', icon: '🖥️', title: '打开 PC',
+        text: '新伙伴在 PC 里。点底部的「PC」看看它。',
+        done: (g) => !!g.gameState.guide.flags.pcOpened,
+        cta: { label: '打开 PC', tab: 'tab-pc' },
+        reward: 0.2,
+        doneText: '这里存放所有没上场的宝可梦，同一种捕获多只也会分开显示。',
+    },
+    {
+        id: 'party', icon: '👥', title: '组建队伍',
+        text: '在 PC 里点中新伙伴，再点「加入队伍」。队伍里的伙伴会一起获得经验。',
+        done: (g) => g.gameState.party.length >= 2,
+        progress: (g) => ({ current: Math.min(2, g.gameState.party.length), total: 2, label: '队伍' }),
+        cta: { label: '去 PC', tab: 'tab-pc' },
+        reward: 0.5,
+        doneText: '队伍最多 6 只。没上场的宝可梦还会按比例给队伍加成。',
+    },
+    {
+        id: 'explore', icon: '🗺️', title: '探索新道路',
+        text: '这条道路上的宝可梦快抓齐了。去「地图」选一条新道路，发现更多种类！',
+        done: (g) => !!g.gameState.guide.flags.routeChanged,
+        cta: { label: '打开地图', tab: 'tab-map' },
+        reward: 0.6,
+        doneText: '每条道路有不同的宝可梦和等级。集齐一个地区的图鉴就能解锁下一个地区！',
+    },
+];
+
+// 目标（里程碑）。current(game) → 当前进度；达成后自动发奖励（reward 是“占升一级所需经验的比例”）
+const GUIDE_GOALS = [
+    { id: 'evolve_first', title: '见证第一次进化', desc: '让一只宝可梦进化', target: 1, reward: 1, current: (g) => g.guideCounters().evolved ? 1 : 0 },
+    { id: 'catch_10', title: '收集 10 种宝可梦', desc: '图鉴里有 10 种', target: 10, reward: 0.6, current: (g) => g.getPokedexStats().caught },
+    { id: 'win_50', title: '打赢 50 场战斗', desc: '累计胜利 50 场', target: 50, reward: 0.6, current: (g) => g.gameState.stats.totalBattles },
+    { id: 'level_10', title: '培养一只 Lv.10', desc: '拥有一只 10 级的宝可梦', target: 10, reward: 0.6, current: (g) => g.guideMaxLevel() },
+    { id: 'duplicate_2', title: '收下同一种的第二只', desc: '同一种宝可梦拥有 2 只（每只的个体值、性格都不同）', target: 2, reward: 0.8, current: (g) => g.guideMostOfOneSpecies() },
+    { id: 'catch_25', title: '收集 25 种宝可梦', desc: '图鉴里有 25 种', target: 25, reward: 0.8, current: (g) => g.getPokedexStats().caught },
+    { id: 'party_6', title: '组满 6 只队伍', desc: '队伍里有 6 只宝可梦', target: 6, reward: 0.8, current: (g) => g.gameState.party.length },
+    { id: 'level_25', title: '培养一只 Lv.25', desc: '拥有一只 25 级的宝可梦', target: 25, reward: 0.8, current: (g) => g.guideMaxLevel() },
+    { id: 'win_200', title: '打赢 200 场战斗', desc: '累计胜利 200 场', target: 200, reward: 0.8, current: (g) => g.gameState.stats.totalBattles },
+    { id: 'shiny_first', title: '发现一只闪光', desc: '遇到并击败一只闪光宝可梦（概率约 1/4096）', target: 1, reward: 1, current: (g) => Math.min(1, g.getShinyStats()) },
+    { id: 'catch_50', title: '收集 50 种宝可梦', desc: '图鉴里有 50 种', target: 50, reward: 1, current: (g) => g.getPokedexStats().caught },
+    { id: 'perfect_iv', title: '拥有一只 6V', desc: '一只六项个体值都是 31 的宝可梦', target: 1, reward: 1, current: (g) => g.guideHasPerfectIv() ? 1 : 0 },
+    { id: 'level_50', title: '培养一只 Lv.50', desc: '拥有一只 50 级的宝可梦', target: 50, reward: 1, current: (g) => g.guideMaxLevel() },
+    { id: 'win_1000', title: '打赢 1000 场战斗', desc: '累计胜利 1000 场', target: 1000, reward: 1, current: (g) => g.gameState.stats.totalBattles },
+    { id: 'catch_100', title: '收集 100 种宝可梦', desc: '图鉴里有 100 种', target: 100, reward: 1, current: (g) => g.getPokedexStats().caught },
+];
+
+function guideDefaultState(onboarding) {
+    return { onboarding, steps: {}, flags: { pcOpened: false, routeChanged: false }, claimed: {}, counters: { evolutions: 0 } };
+}
+
+// 读档/导入时的清洗（白名单重建）。raw 可以是任何东西
+function sanitizeGuideState(raw) {
+    const out = guideDefaultState('active');
+    if (!_isObj(raw)) return null;
+    out.onboarding = ['active', 'done', 'skipped'].includes(raw.onboarding) ? raw.onboarding : 'active';
+    const stepIds = GUIDE_ONBOARDING_STEPS.map(s => s.id);
+    if (_isObj(raw.steps)) for (const id of stepIds) if (_has(raw.steps, id)) out.steps[id] = _num(raw.steps[id], 0, 0);
+    if (_isObj(raw.flags)) {
+        out.flags.pcOpened = raw.flags.pcOpened === true;
+        out.flags.routeChanged = raw.flags.routeChanged === true;
+    }
+    const goalIds = GUIDE_GOALS.map(x => x.id);
+    if (_isObj(raw.claimed)) for (const id of goalIds) if (_has(raw.claimed, id)) out.claimed[id] = _num(raw.claimed[id], 0, 0);
+    if (_isObj(raw.counters)) out.counters.evolutions = _int(raw.counters.evolutions, 0, 1e9, 0);
+    return out;
+}
+
+// 以 mixin 的方式给 GameCore 增加引导能力（见文件末尾 installGuidance），这样引导逻辑和战斗核心放在不同文件里。
+const GuidanceMethods = {
+    // ---------- 状态 ----------
+    // 老存档（没有 guide 字段）：有一定进度就视为已经会玩，直接跳过引导；全新存档从第一步开始
+    ensureGuide() {
+        const gs = this.gameState;
+        if (!gs) return null;
+        if (!_isObj(gs.guide)) {
+            const veteran = (gs.stats && gs.stats.totalBattles >= 20) || this.getPokedexStats().caught > 3 || this.roster.count() > 3;
+            gs.guide = guideDefaultState(veteran ? 'done' : 'active');
+            // 老存档里已经满足的目标不发奖励（视为已领取），避免读档就弹一堆
+            if (veteran) this._guideClaimSilently();
+        }
+        return gs.guide;
+    },
+
+    // 进化过没有：计数器，或者留下的痕迹（图鉴存档 = 最后一只进化走了；origin=evolution 是第 2 阶段的旧规则）
+    guideCounters() {
+        const g = this.ensureGuide();
+        const gs = this.gameState;
+        let evolved = g.counters.evolutions > 0 || Object.keys(gs.archivedSpecies || {}).length > 0;
+        if (!evolved) evolved = this.roster.all().some(inst => inst.origin === 'evolution');
+        return { evolved };
+    },
+
+    guideMaxLevel() {
+        let max = 0;
+        for (const inst of this.roster.all()) if (inst.level > max) max = inst.level;
+        return max;
+    },
+
+    guideMostOfOneSpecies() {
+        const counts = new Map();
+        let max = 0;
+        for (const inst of this.roster.all()) {
+            const n = (counts.get(inst.speciesId) || 0) + 1;
+            counts.set(inst.speciesId, n);
+            if (n > max) max = n;
+        }
+        return max;
+    },
+
+    guideHasPerfectIv() {
+        return this.roster.all().some(inst => isPerfectIvs(inst.ivs));
+    },
+
+    _guideClaimSilently() {
+        const g = this.gameState.guide;
+        const now = Date.now();
+        for (const goal of GUIDE_GOALS) if (goal.current(this) >= goal.target) g.claimed[goal.id] = now;
+    },
+
+    // 玩家做了某件“引导关心”的事（打开 PC / 换了道路）
+    guideNote(flag) {
+        const g = this.ensureGuide();
+        if (!g || !_has(g.flags, flag) || g.flags[flag]) return;
+        g.flags[flag] = true;
+        if (this.guideAutoUpdate) this.guideUpdate({ force: true });
+    },
+
+    guideSkipOnboarding() {
+        const g = this.ensureGuide();
+        if (g.onboarding !== 'active') return false;
+        g.onboarding = 'skipped';
+        this._track('onboarding_skip', { step: (this.guideCurrentStep() || {}).id || 'none' });
+        this.save();
+        return true;
+    },
+
+    // 重新打开引导（设置里的“重新查看新手引导”）：只重置引导进度，不动游戏数据
+    guideRestartOnboarding() {
+        const g = this.ensureGuide();
+        g.onboarding = 'active';
+        g.steps = {};
+        g.flags = { pcOpened: false, routeChanged: false };
+        this.save();
+    },
+
+    guideCurrentStep() {
+        const g = this.ensureGuide();
+        if (!g || g.onboarding !== 'active') return null;
+        return GUIDE_ONBOARDING_STEPS.find(s => !g.steps[s.id]) || null;
+    },
+
+    // 奖励：给出战宝可梦一点经验（上限：升一级所需经验）
+    _guideReward(ratio) {
+        const inst = this._partyInstance(this.gameState.activePokemonIndex);
+        if (!inst || inst.level >= MAX_POKEMON_LEVEL) return 0;
+        const data = POKEMON_DATA[inst.speciesId];
+        const need = getExpForLevel(data.expGroup, inst.level + 1) - getExpForLevel(data.expGroup, inst.level);
+        const amount = Math.max(GUIDE_REWARD_MIN_EXP, Math.floor(need * ratio));
+        this.addExpToInstance(inst, amount);
+        return amount;
+    },
+
+    // 检查并发放：新手引导步骤完成、目标达成。返回本次新完成的列表
+    guideUpdate(opts = {}) {
+        if (!this.gameState || this._isOfflineSimulating || this._guideBusy) return [];
+        const now = Date.now();
+        if (!opts.force && now - (this._guideLastUpdate || 0) < GUIDE_UPDATE_MIN_INTERVAL_MS) return [];
+        this._guideLastUpdate = now;
+        const g = this.ensureGuide();
+        this._guideBusy = true;
+        const done = [];
+        try {
+            if (g.onboarding === 'active') {
+                for (const step of GUIDE_ONBOARDING_STEPS) {
+                    if (g.steps[step.id]) continue;
+                    if (!step.done(this)) break;           // 一步一步来：当前步没完成，后面的不检查
+                    g.steps[step.id] = now;
+                    const exp = this._guideReward(step.reward);
+                    const last = GUIDE_ONBOARDING_STEPS.every(s => g.steps[s.id]);
+                    if (last) g.onboarding = 'done';
+                    done.push({ kind: 'step', id: step.id, icon: step.icon, title: step.title, text: step.doneText, exp, last });
+                    this._track('onboarding_step', { step: step.id });
+                }
+            }
+            for (const goal of GUIDE_GOALS) {
+                if (g.claimed[goal.id]) continue;
+                if (g.onboarding === 'active') break;      // 引导期间只专注引导，目标在引导结束后统一结算
+                if (goal.current(this) < goal.target) continue;
+                g.claimed[goal.id] = now;
+                const exp = this._guideReward(goal.reward);
+                done.push({ kind: 'goal', id: goal.id, icon: '🏆', title: goal.title, text: goal.desc, exp });
+                this._track('goal_complete', { goal: goal.id });
+            }
+        } finally {
+            this._guideBusy = false;
+        }
+        if (done.length) {
+            this.save();
+            for (const d of done) if (this.onGuideEvent) this.onGuideEvent(d);
+        }
+        return done;
+    },
+
+    // ---------- 道路进度 ----------
+    // 一条道路上：一共几种、已抓到几种、还没抓到的是哪些
+    getRouteProgress(route) {
+        const seen = new Set();
+        const missing = [];
+        let caught = 0;
+        for (const p of route.pokemon) {
+            if (seen.has(p.id)) continue;
+            seen.add(p.id);
+            if (this.gameState.pokedex[p.id] === 'caught') caught++;
+            else missing.push(p.id);
+        }
+        return { total: seen.size, caught, missing, newCount: missing.length };
+    },
+
+    _guideActiveLevel() {
+        const inst = this._partyInstance(this.gameState.activePokemonIndex);
+        return inst ? inst.level : 1;
+    },
+
+    // 推荐去的下一条道路：已解锁地区里，第一条“有没抓到的宝可梦、等级也打得过”的道路
+    getRecommendedRoute() {
+        const current = this.gameState.currentRoute;
+        const level = this._guideActiveLevel();
+        let fallback = null;
+        for (const regionId in REGIONS) {
+            if (!this.isRegionUnlocked(regionId)) continue;
+            for (const route of REGIONS[regionId].routes) {
+                if (route.id === current) continue;
+                const prog = this.getRouteProgress(route);
+                if (prog.newCount === 0) continue;
+                const entry = { regionId, route, progress: prog };
+                if (route.levelRange[0] <= level * 1.5 + 5) return entry;   // 等级差不多：第一条就是它
+                if (!fallback || route.levelRange[0] < fallback.route.levelRange[0]) fallback = entry;
+            }
+        }
+        return fallback;
+    },
+
+    // 距离进化最近的队伍成员
+    _guideNearestEvolution() {
+        let best = null;
+        for (let i = 0; i < this.gameState.party.length; i++) {
+            const inst = this._partyInstance(i);
+            const data = inst && POKEMON_DATA[inst.speciesId];
+            if (!data || !data.evolvesTo) continue;
+            const evos = Array.isArray(data.evolvesTo) ? data.evolvesTo : [data.evolvesTo];
+            const open = evos.filter(e => this._isEvolutionRegionUnlocked(e.id) && POKEMON_DATA[e.id]);
+            if (!open.length) continue;
+            const evo = open.reduce((a, b) => (a.level <= b.level ? a : b));
+            const left = evo.level - inst.level;
+            if (left <= 0 || left > GUIDE_EVOLUTION_NEAR_LEVELS) continue;
+            if (!best || left < best.left) best = { inst, evo, left, resets: this.gameState.pokedex[evo.id] !== 'caught' };
+        }
+        return best;
+    },
+
+    // 正在追的目标：未达成里完成度最高的（引导期间不显示目标）
+    getGoals() {
+        const g = this.ensureGuide();
+        const list = GUIDE_GOALS.map(goal => {
+            const cur = goal.current(this);
+            return { id: goal.id, title: goal.title, desc: goal.desc, current: Math.min(cur, goal.target), target: goal.target, done: !!g.claimed[goal.id], ratio: Math.min(1, cur / goal.target) };
+        });
+        // 地区解锁：下一个还没解锁的地区，进度 = 上一个地区的图鉴
+        for (const regionId in REGIONS) {
+            if (this.isRegionUnlocked(regionId)) continue;
+            const prog = this.getRegionUnlockProgress(regionId);
+            list.push({
+                id: 'unlock_' + regionId, title: `解锁${REGIONS[regionId].name}`, desc: REGIONS[regionId].description,
+                current: prog.current, target: prog.total, done: false, ratio: prog.total ? prog.current / prog.total : 0, region: true,
+            });
+            break;
+        }
+        return list;
+    },
+
+    // 此刻最该做的一件事。返回 { type, icon, title, text, progress?, cta? }
+    // cta：{ label, tab? , route? }（界面据此生成按钮）
+    getNextAction() {
+        const g = this.ensureGuide();
+        if (!g) return null;
+        const step = this.guideCurrentStep();
+        const route = this.getRoute(this.gameState.currentRoute);
+        const here = route ? this.getRouteProgress(route) : null;
+
+        if (step) {
+            const idx = GUIDE_ONBOARDING_STEPS.indexOf(step);
+            const action = {
+                type: 'onboarding', id: step.id, icon: step.icon, title: step.title, text: step.text,
+                stepNo: idx + 1, stepTotal: GUIDE_ONBOARDING_STEPS.length, progress: step.progress ? step.progress(this) : null,
+                cta: step.cta || null, skippable: true,
+            };
+            // 探索这一步：当前道路确实还有没抓到的，就先别催着换路
+            if (step.id === 'explore' && here && here.newCount > 0) {
+                action.text = `这条道路还有 ${here.newCount} 种没抓到，也可以直接去「地图」看看新道路。`;
+            }
+            return action;
+        }
+
+        // 当前道路已经抓齐：这是最常见的“卡住”，给一键前往
+        if (here && here.total > 0 && here.newCount === 0) {
+            const rec = this.getRecommendedRoute();
+            if (rec) {
+                return {
+                    type: 'route', icon: '🗺️', title: '这条道路已经抓齐了',
+                    text: `去「${rec.route.name}」（Lv.${rec.route.levelRange[0]}~${rec.route.levelRange[1]}），那里有 ${rec.progress.newCount} 种你还没有的宝可梦。`,
+                    cta: { label: '前往', route: rec.route.id, tab: 'tab-map' },
+                };
+            }
+        }
+
+        const evo = this._guideNearestEvolution();
+        if (evo) {
+            const name = POKEMON_DATA[evo.inst.speciesId].name;
+            const target = POKEMON_DATA[evo.evo.id].name;
+            return {
+                type: 'evolution', icon: '🌟', title: `${name} 快要进化了`,
+                text: evo.resets
+                    ? `再升 ${evo.left} 级就会变成${target}（新登记的形态从 Lv.1 重新成长，${name}会留在图鉴里）。`
+                    : `再升 ${evo.left} 级就会变成${target}，等级保持不变。`,
+                progress: { current: evo.inst.level, total: evo.evo.level, label: '等级' },
+            };
+        }
+
+        const goals = this.getGoals().filter(x => !x.done).sort((a, b) => b.ratio - a.ratio);
+        if (goals.length) {
+            const goal = goals[0];
+            return {
+                type: 'goal', icon: '🏆', title: goal.title, text: goal.desc,
+                progress: { current: goal.current, total: goal.target }, cta: { label: '全部目标', goals: true },
+            };
+        }
+        return { type: 'idle', icon: '✨', title: '继续挂机吧', text: '更多宝可梦和道路等你发现。', cta: { label: '全部目标', goals: true } };
+    },
+};
+
+// 把引导能力装进 GameCore（game-core.js 之后加载）
+function installGuidance(GameCoreClass) {
+    for (const key of Object.keys(GuidanceMethods)) GameCoreClass.prototype[key] = GuidanceMethods[key];
+}
+
+installGuidance(GameCore);

@@ -14,7 +14,7 @@ const GAME_FILES = [
     'js/lzstring.min.js', 'js/util.js', 'js/pokemon-data.js', 'js/route-data.js',
     'js/game-config.js', 'js/analytics.js', 'js/pokemon-instance.js', 'js/species-traits.js', 'js/party.js', 'js/pc.js',
     'js/pokemon-validation.js', 'js/pokemon-migration.js', 'js/pokemon-roster.js',
-    'js/save-manager.js', 'js/game-core.js',
+    'js/save-manager.js', 'js/game-core.js', 'js/guidance.js',
 ];
 
 // 内存版 localStorage，可模拟容量上限与异常
@@ -111,6 +111,7 @@ function loadGameContext(opts = {}) {
   SAVE_KEY, SAVE_SCHEMA_VERSION, SAVE_BACKUP_KEYS, SAVE_CORRUPT_KEY, SAVE_META_KEY, SAVE_PREMIGRATION_PREFIX,
   SAVE_DEBOUNCE_MS, SAVE_MAX_WAIT_MS, SAVE_BACKUP_INTERVAL_MS, SAVE_BACKUP_COUNT, SAVE_IMPORT_MAX_CHARS,
   BASE_CRIT_RATE, BASE_CRIT_MULTIPLIER, BASE_SHINY_RATE, DEFEAT_HEAL_MS, MAX_OFFLINE_TIME,
+  GUIDE_ONBOARDING_STEPS, GUIDE_GOALS, guideDefaultState, sanitizeGuideState,
   Analytics, ANALYTICS_STORAGE_KEY, ANALYTICS_QUEUE_MAX, ANALYTICS_EVENT_NAMES, ANALYTICS_SESSION_GAP_MS,
   CAPTURE_DUPLICATE_POLICIES, DEFAULT_CAPTURE_DUPLICATE_POLICY, DUPLICATE_CAPTURE_RATE, DUPLICATE_SPECIES_CAP,
   MAX_POKEMON_LEVEL, MAX_SKILL_LEVEL, TOWER_MAX_FLOOR, GEM_BAG_MAX, BERRY_STAT_CAP

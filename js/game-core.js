@@ -12,6 +12,8 @@ class GameCore {
         this.onBattleEvent = null; // UI回调
         this.onCatch = null;
         this.analytics = null;         // 测试期统计（见 analytics.js）；main.js 注入，测试里为空
+        this.onGuideEvent = null;      // 引导步骤/目标完成时的回调（界面据此弹出奖励卡片）
+        this.guideAutoUpdate = true;   // 战斗/队伍/路线变化后是否自动检查引导与目标（测试可关闭，避免奖励经验干扰精确断言）
         this.onLevelUp = null;
         this._nextBattleTimeout = null; // 下一场战斗延迟计时器
         this._nextBattleScheduledAt = null; // 下一场战斗计划开始的时间戳
@@ -719,6 +721,7 @@ class GameCore {
         this._log(`⚡ 离线结算: 模拟了 ${battlesSimulated} 场战斗`);
 
         const summary = this._endOfflineSilence(battlesSimulated);
+        if (this.guideAutoUpdate) this.guideUpdate({ force: true });
         if (summary) {
             this._track('offline_return', {
                 minutes: Math.round(totalMs / 60000), battles: battlesSimulated,
@@ -793,6 +796,7 @@ class GameCore {
                 playTime: 0,
             },
             settings: {},
+            guide: guideDefaultState('active'),   // 新手引导与目标进度（见 guidance.js）
             // 树果系统
             berryPlots: [],         // 种植槽 [{ berryId, plantedAt }]  成熟判定: Date.now() - plantedAt >= BERRY_GROW_TIME
             berryBag: {},           // 树果背包 { berryId: count }
@@ -1557,6 +1561,9 @@ class GameCore {
         // 自动切换地图
         const autoSwitchResult = this.tryAutoRouteSwitch();
 
+        // 新手引导 / 目标：检查是否有新完成的（离线时在结算结束后统一检查）
+        if (!sim && this.guideAutoUpdate) this.guideUpdate();
+
         return { expGained, goldGained, healAmount, newPlayerHp, autoSwitchResult, anyLevelUp };
     }
 
@@ -2181,6 +2188,7 @@ class GameCore {
         if (shinyRecorded) this._syncShinyInFamily(evo.id);
 
         this._count('evolutions');
+        if (this.gameState.guide) this.gameState.guide.counters.evolutions++;
         this._track('evolution', { from: baseId, to: evo.id, kept_level: !firstRegistration, level: inst.level });
 
         if (this.onBattleEvent) {
@@ -2548,6 +2556,7 @@ class GameCore {
         this.roster.reconcile();
         if (this.currentBattle && !this._towerMode) this.setActivePokemon(this.gameState.activePokemonIndex);
         this.save();
+        if (this.guideAutoUpdate) this.guideUpdate({ force: true });
     }
 
     // 把 PC 里的某只个体加入队伍（队尾）。同物种可以有多只同时在队伍里
@@ -2677,7 +2686,10 @@ class GameCore {
         }
         const changed = this.gameState.currentRoute !== routeId;
         this.gameState.currentRoute = routeId;
-        if (changed) this._track('route_change', { route: routeId });
+        if (changed) {
+            this._track('route_change', { route: routeId });
+            this.guideNote('routeChanged');
+        }
         // 不立即刷新敌方，当前战斗继续，下一场战斗将生成新路线的宝可梦
         this.resetRateTracker(); // 切换地图时重置速率统计
         this.save();
@@ -2936,6 +2948,7 @@ class GameCore {
         this.gameState = r.state;
         this.currentBattle = null;
         this._invalidateAllCaches();
+        this.ensureGuide();
         return true;
     }
 
@@ -2960,6 +2973,7 @@ class GameCore {
         this._offlineSimState = null;
         this.gameState = r.state;
         this._invalidateAllCaches();
+        this.ensureGuide();
         // 记录导入存档的 lastSave，用于离线结算
         this._importedLastSave = this.gameState.lastSave || null;
         this.saveNow();

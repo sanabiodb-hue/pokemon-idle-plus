@@ -296,6 +296,10 @@ function sanitizeSave(raw, now = Date.now()) {
 
     // ---- 设置 ----
     const se = _isObj(raw.settings) ? raw.settings : {};
+    // ---- 新手引导 / 目标进度（没有这个字段 = 老存档，由 GameCore.ensureGuide 判断是否老玩家）----
+    const guide = typeof sanitizeGuideState === 'function' ? sanitizeGuideState(raw.guide) : null;
+    if (guide) out.guide = guide;
+
     out.settings = {};
     if (typeof se.autoSwitchBest === 'boolean') out.settings.autoSwitchBest = se.autoSwitchBest;
     if (SAVE_ONESHOT_STRATEGIES.includes(se.oneShotStrategy)) out.settings.oneShotStrategy = se.oneShotStrategy;
