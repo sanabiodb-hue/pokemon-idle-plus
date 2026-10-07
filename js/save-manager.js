@@ -24,17 +24,17 @@ const SaveCodec = {
 
     // 还原 payload → 对象。失败时抛出带 code 的 Error
     decodePayload(raw) {
-        if (typeof raw !== 'string' || raw.length === 0) throw SaveCodec._err('empty', '存档为空');
+        if (typeof raw !== 'string' || raw.length === 0) throw SaveCodec._err('empty', 'O save está vazio.');
         let json = raw;
         if (raw.startsWith('LZ:')) {
-            if (typeof LZString === 'undefined') throw SaveCodec._err('no_lz', 'LZString 库未加载，无法读取压缩存档');
+            if (typeof LZString === 'undefined') throw SaveCodec._err('no_lz', 'A biblioteca LZString não foi carregada. Não é possível ler o save compactado.');
             json = LZString.decompressFromUTF16(raw.slice(3));
-            if (!json) throw SaveCodec._err('decompress', '存档解压失败，数据可能已损坏');
+            if (!json) throw SaveCodec._err('decompress', 'Falha ao descompactar o save. Os dados podem estar corrompidos.');
         }
         try {
             return JSON.parse(json);
         } catch (e) {
-            throw SaveCodec._err('parse', '存档不是有效的 JSON');
+            throw SaveCodec._err('parse', 'O save não é um JSON válido.');
         }
     },
 
@@ -51,10 +51,10 @@ const SaveCodec = {
 
     // 导入文本：兼容 Base64 / 直接粘贴的 LZ: payload / 纯 JSON
     decodeExport(text) {
-        if (typeof text !== 'string') throw SaveCodec._err('empty', '存档为空');
+        if (typeof text !== 'string') throw SaveCodec._err('empty', 'O save está vazio.');
         const trimmed = text.trim();
-        if (!trimmed) throw SaveCodec._err('empty', '存档为空');
-        if (trimmed.length > SAVE_IMPORT_MAX_CHARS) throw SaveCodec._err('too_large', '存档文本过大');
+        if (!trimmed) throw SaveCodec._err('empty', 'O save está vazio.');
+        if (trimmed.length > SAVE_IMPORT_MAX_CHARS) throw SaveCodec._err('too_large', 'O texto do save é grande demais.');
         if (trimmed.startsWith('{') || trimmed.startsWith('[') || trimmed.startsWith('LZ:')) {
             return SaveCodec.decodePayload(trimmed);
         }
@@ -62,7 +62,7 @@ const SaveCodec = {
         try {
             bin = atob(trimmed.replace(/\s+/g, ''));
         } catch (e) {
-            throw SaveCodec._err('base64', '存档格式无法识别（不是有效的 Base64）');
+            throw SaveCodec._err('base64', 'Formato de save não reconhecido (não é um Base64 válido).');
         }
         const bytes = new Uint8Array(bin.length);
         for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
@@ -116,7 +116,7 @@ function _hasTeamData(obj) {
 function migrateSave(data) {
     const detected = Number.isInteger(data.schemaVersion) && data.schemaVersion >= 1 ? data.schemaVersion : 1;
     if (detected > SAVE_SCHEMA_VERSION) {
-        const e = new Error(`存档来自更新版本 (v${detected})，当前游戏仅支持到 v${SAVE_SCHEMA_VERSION}`);
+        const e = new Error(`O save é de uma versão mais nova (v${detected}). Este jogo só suporta até a v${SAVE_SCHEMA_VERSION}.`);
         e.code = 'newer_version';
         throw e;
     }
@@ -124,7 +124,7 @@ function migrateSave(data) {
     while (version < SAVE_SCHEMA_VERSION) {
         const step = SAVE_MIGRATIONS[version];
         if (typeof step !== 'function') {
-            const e = new Error(`缺少 v${version} → v${version + 1} 的迁移`);
+            const e = new Error(`Falta a migração de v${version} para v${version + 1}.`);
             e.code = 'no_migration';
             throw e;
         }
@@ -207,9 +207,9 @@ function sanitizeSave(raw, now = Date.now()) {
     const warnings = [];
     const dropped = { pokemon: 0, gems: 0, other: 0 };
 
-    if (!_isObj(raw)) return { ok: false, state: null, errors: ['存档不是对象'], warnings };
+    if (!_isObj(raw)) return { ok: false, state: null, errors: ['O save não é um objeto válido.'], warnings };
     if (!_hasTeamData(raw)) {
-        return { ok: false, state: null, errors: ['存档缺少队伍数据'], warnings };
+        return { ok: false, state: null, errors: ['O save não tem dados da equipe.'], warnings };
     }
 
     const out = {};
@@ -431,9 +431,9 @@ function sanitizeSave(raw, now = Date.now()) {
 
 // 完整流水线：已解码的对象 → { ok, state, fromVersion, warnings, error, code }
 function processSaveObject(obj, now = Date.now()) {
-    if (!_isObj(obj)) return { ok: false, error: '存档不是对象', code: 'shape' };
+    if (!_isObj(obj)) return { ok: false, error: 'O save não é um objeto válido.', code: 'shape' };
     if (!_hasTeamData(obj)) {
-        return { ok: false, error: '存档缺少队伍数据', code: 'shape' };
+        return { ok: false, error: 'O save não tem dados da equipe.', code: 'shape' };
     }
     let migrated;
     try {
@@ -442,7 +442,7 @@ function processSaveObject(obj, now = Date.now()) {
         return { ok: false, error: e.message, code: e.code || 'migrate' };
     }
     const result = sanitizeSave(migrated.data, now);
-    if (!result.ok) return { ok: false, error: result.errors.join('；'), code: 'invalid' };
+    if (!result.ok) return { ok: false, error: result.errors.join('; '), code: 'invalid' };
     return {
         ok: true,
         state: result.state,
@@ -521,7 +521,7 @@ class SaveManager {
 
     // 返回 { ok, state?, source, warnings, fromVersion, recovered, failures, empty, error }
     load() {
-        if (!this.storage) return { ok: false, empty: true, error: '存储不可用', failures: [] };
+        if (!this.storage) return { ok: false, empty: true, error: 'Armazenamento indisponível.', failures: [] };
         const sources = [{ name: 'main', key: SAVE_KEY }]
             .concat(SAVE_BACKUP_KEYS.map((key, i) => ({ name: `backup${i + 1}`, key })));
         const failures = [];
@@ -551,7 +551,7 @@ class SaveManager {
         }
         if (!anyRaw) return { ok: false, empty: true, failures };
         if (mainRaw) this._preserveCorrupt(mainRaw);
-        return { ok: false, empty: false, failures, error: failures.map(f => `${f.source}: ${f.error}`).join('；') };
+        return { ok: false, empty: false, failures, error: failures.map(f => `${f.source}: ${f.error}`).join('; ') };
     }
 
     // 导入文本（不触碰存储）
@@ -631,12 +631,12 @@ class SaveManager {
 
     // 立即写入。返回 { ok, error?, code? }
     write(state) {
-        if (!this.storage) return this._fail('storage_unavailable', '浏览器存储不可用（可能处于隐私模式）');
+        if (!this.storage) return this._fail('storage_unavailable', 'O armazenamento do navegador está indisponível (talvez em modo privado).');
         let payload;
         try {
             payload = SaveCodec.encodePayload(JSON.stringify(state));
         } catch (e) {
-            return this._fail('serialize', '存档序列化失败：' + e.message);
+            return this._fail('serialize', 'Falha ao serializar o save: ' + e.message);
         }
 
         this.backupNow(false);
@@ -655,7 +655,7 @@ class SaveManager {
         if (lastErr) {
             const quota = lastErr && (lastErr.name === 'QuotaExceededError' || lastErr.code === 22 || lastErr.code === 1014);
             return this._fail(quota ? 'quota' : 'write',
-                quota ? '浏览器存储空间已满，存档未能保存！请立即导出存档文件备份' : '存档写入失败：' + lastErr.message);
+                quota ? 'O armazenamento do navegador está cheio e o save não foi gravado! Exporte o save agora para fazer backup.' : 'Falha ao gravar o save: ' + lastErr.message);
         }
         this.stats.writes++;
         if (this._failing) {
@@ -692,12 +692,12 @@ class SaveManager {
     // force=true：即使没有挂起请求也写入（手动保存、导出、退出）
     flush(force = false) {
         if (this._timer) { this.clearTimer(this._timer); this._timer = null; }
-        if (this.paused) return { ok: false, code: 'paused', error: '其他标签页正在使用存档' };
+        if (this.paused) return { ok: false, code: 'paused', error: 'Outra aba está usando o save.' };
         if (!this._dirty && !force) { this.stats.skipped++; return { ok: true, skipped: true }; }
         this._firstRequestAt = null;
         let state;
         try { state = this.getState(); } catch (e) { return this._fail('serialize', e.message); }
-        if (!state) return { ok: false, code: 'no_state', error: '没有可保存的状态' };
+        if (!state) return { ok: false, code: 'no_state', error: 'Não há estado para salvar.' };
         const r = this.write(state);
         this._dirty = !r.ok; // 失败则保持脏标记，下次自动保存重试
         return r;

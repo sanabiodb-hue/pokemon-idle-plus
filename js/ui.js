@@ -26,14 +26,14 @@ class GameUI {
         overlay.innerHTML = `
             <div class="offline-overlay-content">
                 <div class="offline-overlay-icon">⚡</div>
-                <div class="offline-overlay-title">离线结算中...</div>
+                <div class="offline-overlay-title">Calculando progresso offline...</div>
                 <div class="offline-overlay-time" id="offline-time-text"></div>
                 <div class="offline-progress-bar-wrapper">
                     <div class="offline-progress-bar" id="offline-progress-bar"></div>
                 </div>
                 <div class="offline-overlay-info">
                     <span id="offline-percent-text">0%</span>
-                    <span id="offline-battles-text">已完成 0 场战斗</span>
+                    <span id="offline-battles-text">0 batalhas concluídas</span>
                 </div>
                 <div id="offline-report" class="offline-report hidden"></div>
             </div>
@@ -121,33 +121,33 @@ class GameUI {
         // 设置按钮
         document.getElementById('btn-save').addEventListener('click', () => {
             const r = this.game.saveNow();
-            if (r && r.ok) this.showToast('💾 游戏已保存！');
-            else this.showToast('❌ 保存失败：' + ((r && r.error) || '未知错误'));
+            if (r && r.ok) this.showToast('💾 Jogo salvo!');
+            else this.showToast('❌ Falha ao salvar: ' + ((r && r.error) || 'erro desconhecido'));
         });
 
         document.getElementById('btn-export').addEventListener('click', () => {
             const data = this.game.exportSave();
             document.getElementById('save-data-area').value = data;
-            this.showToast('📋 存档已导出！请复制上方文本。');
+            this.showToast('📋 Save exportado! Copie o texto acima.');
         });
 
         document.getElementById('btn-import').addEventListener('click', () => {
             const data = document.getElementById('save-data-area').value.trim();
             if (!data) {
-                this.showToast('⚠️ 请先在文本框中粘贴存档数据！');
+                this.showToast('⚠️ Cole os dados do save na caixa de texto primeiro!');
                 return;
             }
-            this._handleImportResult(this.game.importSave(data), '✅ 存档导入成功！', '❌ 存档导入失败');
+            this._handleImportResult(this.game.importSave(data), '✅ Save importado com sucesso!', '❌ Falha ao importar o save');
         });
 
         document.getElementById('btn-delete').addEventListener('click', () => {
-            this.showConfirmDialog('确定删除存档？', '此操作不可恢复，所有游戏数据将被清除。', () => {
+            this.showConfirmDialog('Excluir o save?', 'Esta ação não pode ser desfeita. Todos os dados do jogo serão apagados.', () => {
                 this.game.stopBattle();
                 this.game.deleteSave();
                 this.game.initNewGame();
                 this.refreshAll();
                 this.game.startBattle();
-                this.showToast('🗑️ 存档已删除，游戏重新开始。');
+                this.showToast('🗑️ Save excluído. O jogo recomeçou.');
             });
         });
 
@@ -165,7 +165,7 @@ class GameUI {
             a.click();
             document.body.removeChild(a);
             URL.revokeObjectURL(url);
-            this.showToast('📁 存档文件已导出！');
+            this.showToast('📁 Arquivo de save exportado!');
         });
 
         // 加载存档文件
@@ -181,10 +181,10 @@ class GameUI {
             reader.onload = (evt) => {
                 const data = evt.target.result.trim();
                 if (!data) {
-                    this.showToast('⚠️ 文件内容为空！');
+                    this.showToast('⚠️ O arquivo está vazio!');
                     return;
                 }
-                this._handleImportResult(this.game.importSave(data), '📂 存档文件加载成功！', '❌ 存档文件导入失败');
+                this._handleImportResult(this.game.importSave(data), '📂 Arquivo de save carregado!', '❌ Falha ao importar o arquivo de save');
             };
             reader.readAsText(file);
         });
@@ -206,7 +206,7 @@ class GameUI {
                 this.game.gameState.settings = this.game.gameState.settings || {};
                 this.game.gameState.settings.autoSwitchBest = autoSwitchCheckbox.checked;
                 this.game.save();
-                this.showToast(autoSwitchCheckbox.checked ? '✅ 已开启自动更换最优宝可梦' : '❌ 已关闭自动更换最优宝可梦');
+                this.showToast(autoSwitchCheckbox.checked ? '✅ Troca automática do melhor Pokémon ativada' : '❌ Troca automática do melhor Pokémon desativada');
                 // 联动显示/隐藏一击必杀策略
                 this._syncOneShotStrategyVisibility();
             });
@@ -237,7 +237,7 @@ class GameUI {
                 this.game.gameState.settings = this.game.gameState.settings || {};
                 this.game.gameState.settings.theme = theme;
                 this.game.save();
-                this.showToast(`🎨 主题已切换为「${btn.title}」`);
+                this.showToast(`🎨 Tema alterado: ${btn.title}`);
             });
         });
 
@@ -307,7 +307,7 @@ class GameUI {
         if (tabId === 'tab-badge') {
             const badgeTabBtn = document.querySelector('.badge-tab-btn');
             if (badgeTabBtn && badgeTabBtn.classList.contains('locked')) {
-                this.showToast('🔒 通关关都地区后解锁徽章系统');
+                this.showToast('🔒 Complete Kanto para desbloquear as Insígnias');
                 return;
             }
         }
@@ -315,7 +315,7 @@ class GameUI {
         if (tabId === 'tab-berry') {
             const berryTabBtn = document.querySelector('.berry-tab-btn');
             if (berryTabBtn && berryTabBtn.classList.contains('locked')) {
-                this.showToast('🔒 完成丰缘图鉴后解锁树果系统');
+                this.showToast('🔒 Complete a Pokédex de Hoenn para desbloquear as Frutas');
                 return;
             }
         }
@@ -323,7 +323,7 @@ class GameUI {
         if (tabId === 'tab-skill') {
             const skillTabBtn = document.querySelector('.skill-tab-btn');
             if (skillTabBtn && skillTabBtn.classList.contains('locked')) {
-                this.showToast('🔒 完成合众地区图鉴后解锁技能系统');
+                this.showToast('🔒 Complete a Pokédex de Unova para desbloquear as Técnicas');
                 return;
             }
         }
@@ -331,7 +331,7 @@ class GameUI {
         if (tabId === 'tab-talent') {
             const talentTabBtn = document.querySelector('.talent-tab-btn');
             if (talentTabBtn && talentTabBtn.classList.contains('locked')) {
-                this.showToast('🔒 完成阿罗拉地区图鉴后解锁天赋系统');
+                this.showToast('🔒 Complete a Pokédex de Alola para desbloquear os Talentos');
                 return;
             }
         }
@@ -339,7 +339,7 @@ class GameUI {
         if (tabId === 'tab-tower') {
             const towerTabBtn = document.querySelector('.tower-tab-btn');
             if (towerTabBtn && towerTabBtn.classList.contains('locked')) {
-                this.showToast('🔒 完成帕底亚地区图鉴后解锁挑战岛');
+                this.showToast('🔒 Complete a Pokédex de Paldea para desbloquear a Torre');
                 return;
             }
         }
@@ -389,9 +389,9 @@ class GameUI {
                 break;
             case 'playerFainted':
                 if (this.game._towerMode) {
-                    this.addBattleLog('我方宝可梦倒下了... 挑战失败', 'defeat');
+                    this.addBattleLog('Seu Pokémon caiu... Desafio fracassado', 'defeat');
                 } else {
-                    this.addBattleLog('我方宝可梦倒下了... 正在回复生命值', 'defeat');
+                    this.addBattleLog('Seu Pokémon caiu... Recuperando HP', 'defeat');
                 }
                 break;
             case 'healing':
@@ -401,35 +401,35 @@ class GameUI {
                     enemyHp: 0,
                     enemyMaxHp: 1,
                 });
-                this.addBattleLog(`💚 生命值回复中... ${Math.floor(data.hp / data.maxHp * 100)}%`, 'normal');
+                this.addBattleLog(`💚 Recuperando HP... ${Math.floor(data.hp / data.maxHp * 100)}%`, 'normal');
                 break;
             case 'evolved':
                 this.showEvolutionNotification(data);
                 break;
             case 'captureBlocked':
-                this.addBattleLog(`⚠️ PC 已满，错过了一只闪光 ${data.name}！`, 'shiny');
-                this.showToast('⚠️ PC 已满，无法收下闪光宝可梦');
+                this.addBattleLog(`⚠️ PC cheio! Shiny perdido: ${data.name}`, 'shiny');
+                this.showToast('⚠️ PC cheio! Não foi possível guardar o Pokémon Shiny');
                 break;
             case 'shinyEvolved':
-                this.addBattleLog(`✨ ${data.oldName} 的闪光形态传递给了 ${data.newName}！`, 'shiny');
-                this.showToast(`✨ ${data.newName} 获得了闪光形态！`);
+                this.addBattleLog(`✨ A forma Shiny de ${data.oldName} passou para ${data.newName}!`, 'shiny');
+                this.showToast(`✨ ${data.newName} ganhou a forma Shiny!`);
                 break;
             case 'shinySpread':
-                this.addBattleLog(`✨ ${data.sourceName} 的闪光传播给了 ${data.targetName}！`, 'shiny');
+                this.addBattleLog(`✨ O Shiny de ${data.sourceName} se espalhou para ${data.targetName}!`, 'shiny');
                 break;
             case 'shinyDefeated':
-                this.addBattleLog(`✨ 获得了 ${data.name} 的闪光形态！可在图鉴中切换展示`, 'shiny');
+                this.addBattleLog(`✨ Forma Shiny de ${data.name} obtida! Alterne na Pokédex`, 'shiny');
                 this.guideView.onShiny(data.name);
                 break;
             case 'badgeUnlocked':
                 this._handleBadgeUnlocked(data, false);
                 break;
             case 'regionUnlocked':
-                this.addBattleLog(`🎉 恭喜！${data.regionName}已解锁！`, 'evolution');
+                this.addBattleLog(`🎉 Parabéns! Região desbloqueada: ${data.regionName}!`, 'evolution');
                 this.guideView.onRegionUnlocked(data);
                 break;
             case 'playerDodge':
-                this.addBattleLog(`💫 闪避了敌方的攻击！`, 'attack');
+                this.addBattleLog(`💫 Você esquivou do ataque inimigo!`, 'attack');
                 break;
             case 'towerEnemyDefeated':
                 // 将敌方HP条动画归零
@@ -439,11 +439,11 @@ class GameUI {
                     enemyHp: 0,
                     enemyMaxHp: 1,
                 });
-                this.addBattleLog(`🏝️ 挑战塔：击败了第 ${data.floorIndex}/${data.totalEnemies} 只敌人！`, 'evolution');
+                this.addBattleLog(`🏝️ Torre: inimigo ${data.floorIndex}/${data.totalEnemies} derrotado!`, 'evolution');
                 break;
             case 'towerFloorCleared':
-                this.addBattleLog(`🎉 挑战塔：第 ${data.floor} 层通关！历史最高：${data.highestFloor} 层`, 'shiny');
-                this.showToast(`🏝️ 挑战塔第 ${data.floor} 层通关！`);
+                this.addBattleLog(`🎉 Torre: andar ${data.floor} concluído! Recorde: andar ${data.highestFloor}`, 'shiny');
+                this.showToast(`🏝️ Torre: andar ${data.floor} concluído!`);
                 // 通关后切回挑战岛页面并恢复主线战斗
                 setTimeout(() => {
                     this.switchTab('tab-tower');
@@ -451,8 +451,8 @@ class GameUI {
                 }, 500);
                 break;
             case 'towerPlayerFainted':
-                this.addBattleLog(`💀 挑战塔第 ${data.floor} 层挑战失败...`, 'defeat');
-                this.showToast(`💀 挑战失败！可以重新挑战第 ${data.floor} 层`);
+                this.addBattleLog(`💀 Torre: falha no andar ${data.floor}...`, 'defeat');
+                this.showToast(`💀 Desafio fracassado! Tente o andar ${data.floor} de novo`);
                 // 失败后切回挑战岛页面并恢复主线战斗
                 setTimeout(() => {
                     this.switchTab('tab-tower');
@@ -472,16 +472,16 @@ class GameUI {
                 const pokemonId = this.game.gameState.team[data.newIndex];
                 const pokemonData = POKEMON_DATA[pokemonId];
                 if (pokemonData) {
-                    this.addBattleLog(`🔄 自动切换出战：${pokemonData.name}`, 'normal');
+                    this.addBattleLog(`🔄 Troca automática: ${pokemonData.name}`, 'normal');
                 }
                 this.scheduleRenderTeam();
                 break;
             }
             case 'autoRouteSwitch': {
                 const condition = this.game.gameState.settings?.routeSwitchCondition || '6v_shiny';
-                const condText = condition === '6v_only' ? '全部6V' : '全部6V+闪光';
-                this.addBattleLog(`💎 当前地图已${condText}！自动前往 ${data.regionName} · ${data.routeName}`, 'evolution');
-                this.showToast(`💎 自动切换到 ${data.routeName}`);
+                const condText = condition === '6v_only' ? 'tudo 6V' : 'tudo 6V + Shiny';
+                this.addBattleLog(`💎 Mapa completo (${condText})! Indo para ${data.regionName} · ${data.routeName}`, 'evolution');
+                this.showToast(`💎 Troca automática: ${data.routeName}`);
                 break;
             }
         }
@@ -490,8 +490,8 @@ class GameUI {
     // 徽章解锁后的界面联动。silent=true 用于回放离线期间的事件（不弹 toast/日志）
     _handleBadgeUnlocked(data, silent) {
         if (!silent) {
-            this.addBattleLog(`🏅 恭喜！获得了 ${data.badgeName}！`, 'evolution');
-            this.showToast(`🏅 恭喜！获得了 ${data.badgeName}！`);
+            this.addBattleLog(`🏅 Parabéns! Insígnia obtida: ${data.badgeName}!`, 'evolution');
+            this.showToast(`🏅 Parabéns! Insígnia obtida: ${data.badgeName}!`);
         }
         const later = (fn, ms) => { if (!silent) setTimeout(fn, ms); };
         this.updateBadgeTabVisibility();
@@ -499,25 +499,25 @@ class GameUI {
         if (data.regionId === 'hoenn') {
             this.updateBerryTabVisibility();
             this._initBerrySystem();
-            later(() => this.showToast('🌱 树果系统已解锁！可以种植树果增强宝可梦了'), 2000);
+            later(() => this.showToast('🌱 Frutas desbloqueadas! Plante para fortalecer seus Pokémon'), 2000);
         }
         // 合众徽章解锁时同步解锁技能系统
         if (data.regionId === 'unova') {
             this.updateSkillTabVisibility();
-            later(() => this.showToast('⚡ 技能系统已解锁！1000级以上宝可梦可升级技能'), 2000);
+            later(() => this.showToast('⚡ Técnicas desbloqueadas! Pokémon acima do Lv.1000 podem subir de técnica'), 2000);
         }
         // 阿罗拉徽章解锁时同步解锁天赋系统
         if (data.regionId === 'alola') {
             this.updateTalentTabVisibility();
-            later(() => this.showToast('🌟 天赋系统已解锁！消耗天赋点强化各项能力'), 2000);
+            later(() => this.showToast('🌟 Talentos desbloqueados! Gaste pontos para ganhar bônus'), 2000);
         }
         // 帕底亚徽章解锁时显示自动切换地图设置 + 解锁挑战塔
         if (data.regionId === 'paldea') {
             this.updateAutoRouteSettingVisibility();
             this._initAutoRouteSetting();
             this.updateTowerTabVisibility();
-            later(() => this.showToast('💎 自动切换地图已解锁！可在设置中开启'), 2000);
-            later(() => this.showToast('🏝️ 挑战岛已解锁！挑战获取全局加成'), 4000);
+            later(() => this.showToast('💎 Troca automática de mapa desbloqueada! Ative em Configurações'), 2000);
+            later(() => this.showToast('🏝️ Torre de Desafio desbloqueada! Ganhe bônus globais'), 4000);
         }
     }
 
@@ -550,9 +550,9 @@ class GameUI {
         // 敌方属性 + 对我方克制图标
         let enemyTypeIcon = '';
         if (enemyEffectiveness > 1) {
-            enemyTypeIcon = `<span class="matchup-icon matchup-up" title="克制我方">🔥</span>`;
+            enemyTypeIcon = `<span class="matchup-icon matchup-up" title="Vantagem sobre o seu Pokémon">🔥</span>`;
         } else if (enemyEffectiveness < 1) {
-            enemyTypeIcon = `<span class="matchup-icon matchup-down" title="被我方抵抗">🛡️</span>`;
+            enemyTypeIcon = `<span class="matchup-icon matchup-down" title="Seu Pokémon resiste">🛡️</span>`;
         }
         const enemyTypesHtml = wildTypes.map(t =>
             `<span class="type-badge ${t}">${TYPE_NAMES[t]}</span>`
@@ -583,9 +583,9 @@ class GameUI {
         // 玩家属性 + 对敌方克制图标
         let playerTypeIcon = '';
         if (playerEffectiveness > 1) {
-            playerTypeIcon = `<span class="matchup-icon matchup-up" title="克制敌方">⚔️</span>`;
+            playerTypeIcon = `<span class="matchup-icon matchup-up" title="Vantagem sobre o inimigo">⚔️</span>`;
         } else if (playerEffectiveness < 1) {
-            playerTypeIcon = `<span class="matchup-icon matchup-down" title="被敌方抵抗">🛡️</span>`;
+            playerTypeIcon = `<span class="matchup-icon matchup-down" title="O inimigo resiste">🛡️</span>`;
         }
         const playerTypesHtml = playerTypes.map(t =>
             `<span class="type-badge ${t}">${TYPE_NAMES[t]}</span>`
@@ -607,7 +607,7 @@ class GameUI {
         document.getElementById('enemy-matchup').innerHTML = '';
         document.getElementById('type-matchup').innerHTML = '';
 
-        this.addBattleLog(`野生的 ${shinyPrefix}${wild.name} 出现了！${wild.isShiny ? '（闪光！）' : ''}`, wild.isShiny ? 'shiny' : 'normal');
+        this.addBattleLog(`${shinyPrefix}${wild.name} selvagem apareceu!${wild.isShiny ? ' (Shiny!)' : ''}`, wild.isShiny ? 'shiny' : 'normal');
 
         // 重置攻击进度条
         document.getElementById('player-atk-bar').style.width = '0%';
@@ -624,10 +624,10 @@ class GameUI {
             setTimeout(() => enemySprite.classList.remove('hit'), 300);
         }, 150);
         // 显示伤害信息
-        const critText = data.critical ? '💥会心一击！' : '';
+        const critText = data.critical ? '💥Golpe crítico! ' : '';
         const effectText = data.effectivenessText || '';
-        const skillText = data.skillName ? `使用【${data.skillName}】` : '';
-        this.addBattleLog(`${skillText}${critText}造成 ${data.damage} 点伤害 ${effectText}`, 'attack');
+        const skillText = data.skillName ? `Usou ${data.skillName}! ` : '';
+        this.addBattleLog(`${skillText}${critText}Causou ${data.damage} de dano ${effectText}`, 'attack');
     }
 
     onEnemyAttack(data) {
@@ -640,9 +640,9 @@ class GameUI {
             setTimeout(() => playerSprite.classList.remove('hit'), 300);
         }, 150);
         // 显示伤害信息
-        const critText = data.critical ? '💥会心一击！' : '';
+        const critText = data.critical ? '💥Golpe crítico! ' : '';
         const effectText = data.effectivenessText || '';
-        this.addBattleLog(`${critText}受到 ${data.damage} 点伤害 ${effectText}`, 'attack');
+        this.addBattleLog(`${critText}Recebeu ${data.damage} de dano ${effectText}`, 'attack');
     }
 
     // 缓存 DOM 引用 / 避免重复写入相同的值（tick 每 50ms 触发一次）
@@ -693,12 +693,12 @@ class GameUI {
             enemyMaxHp: data.enemyMaxHp,
         });
 
-        let message = `击败了 ${data.pokemon.name}！获得 ${data.exp} 经验值`;
+        let message = `${data.pokemon.name} derrotado! +${data.exp} EXP`;
         if (data.gold && data.gold > 0) {
             message += ` 🪙 +${data.gold}`;
         }
         if (data.healed && data.healed > 0) {
-            message += ` 💚 回复 ${data.healed} HP`;
+            message += ` 💚 Recuperou ${data.healed} HP`;
         }
         this.addBattleLog(message, 'defeat');
         this._floatText(`+${data.exp} EXP`, 'exp');
@@ -788,16 +788,16 @@ class GameUI {
         if (rates) {
             const parts = [];
             if (rates.expPerMin > 0) {
-                parts.push(`<span class="rate-exp">📊 ${this._formatRate(rates.expPerMin)} 经验/分钟</span>`);
+                parts.push(`<span class="rate-exp">📊 ${this._formatRate(rates.expPerMin)} EXP/min</span>`);
             }
             if (rates.goldPerMin > 0) {
-                parts.push(`<span class="rate-gold">🪙 ${this._formatRate(rates.goldPerMin)} 金币/分钟</span>`);
+                parts.push(`<span class="rate-gold">🪙 ${this._formatRate(rates.goldPerMin)} moedas/min</span>`);
             }
             if (parts.length > 0) {
                 rateHtml = `<span class="team-rate-info">${parts.join(' ')}</span>`;
             }
         }
-        teamList.innerHTML = '<h3 style="font-size:14px;margin-bottom:4px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap"><span>⚔️ 战斗队伍 (' + this.game.gameState.team.length + '/6)</span>' + rateHtml + '</h3>';
+        teamList.innerHTML = '<h3 style="font-size:14px;margin-bottom:4px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap"><span>⚔️ Equipe de batalha (' + this.game.gameState.team.length + '/6)</span>' + rateHtml + '</h3>';
 
         // 按队伍顺序显示（可以用 ▲▼ 调整顺序），出战者高亮
         const activeIdx = this.game.gameState.activePokemonIndex;
@@ -849,40 +849,40 @@ class GameUI {
                     <div class="slot-info">
                         <div class="slot-name">${shinyNamePrefix}${escapeHtml(pokemon.name)} ${isActive ? '⚔️' : ''} <small style="color:var(--text-secondary);font-weight:normal">Lv.${pokemon.level}</small>${skillBadgeHtml}</div>
                         <div class="slot-type-nature">${typeBadges}</div>
-                        <div class="slot-traits" title="个体编号 · 性别 · 性格 · 个体值">#${escapeHtml(inst.uid)} ${genderSymbol(inst.gender)} ${escapeHtml(getNature(inst.nature).name)} · IV ${Math.round(ivTotal(inst.ivs) / (IV_KEYS.length * 31) * 100)}%</div>
+                        <div class="slot-traits" title="ID · Gênero · Natureza · IVs">#${escapeHtml(inst.uid)} ${genderSymbol(inst.gender)} ${escapeHtml(getNature(inst.nature).name)} · IV ${Math.round(ivTotal(inst.ivs) / (IV_KEYS.length * 31) * 100)}%</div>
                     </div>
                     <div class="team-slot-actions">
-                        ${partySize > 1 ? `<button ${index === 0 ? 'disabled' : ''} onclick="gameUI.moveTeamMember(${index}, -1)" title="上移">▲</button><button ${index === partySize - 1 ? 'disabled' : ''} onclick="gameUI.moveTeamMember(${index}, 1)" title="下移">▼</button>` : ''}
-                        ${!isActive ? `<button onclick="gameUI.setActive(${index})">出战</button>` : ''}
-                        ${!isActive && partySize > 1 ? `<button class="remove-btn" onclick="gameUI.removeFromTeam(${index})">放回PC</button>` : ''}
+                        ${partySize > 1 ? `<button ${index === 0 ? 'disabled' : ''} onclick="gameUI.moveTeamMember(${index}, -1)" title="Subir">▲</button><button ${index === partySize - 1 ? 'disabled' : ''} onclick="gameUI.moveTeamMember(${index}, 1)" title="Descer">▼</button>` : ''}
+                        ${!isActive ? `<button onclick="gameUI.setActive(${index})">Ativar</button>` : ''}
+                        ${!isActive && partySize > 1 ? `<button class="remove-btn" onclick="gameUI.removeFromTeam(${index})">Mover para o PC</button>` : ''}
                     </div>
                 </div>
                 <div class="team-stats-wrapper">
                     <div class="team-stats-compact">
                         <div class="team-stat-line">
-                            <span class="stat-name">❤️ 生命值</span>
+                            <span class="stat-name">❤️ HP</span>
                             <span class="stat-value">${battleStats.hp}</span>
                             <span class="stat-iv">(IV:${pokemon.ivs.hp})</span>
                         </div>
                         <div class="team-stat-line">
-                            <span class="stat-name">⚔️ 攻击力</span>
+                            <span class="stat-name">⚔️ Ataque</span>
                             <span class="stat-value">${battleStats.attack}</span>
                             <span class="stat-iv">(IV:${pokemon.ivs.atk}+${pokemon.ivs.spAtk})</span>
                         </div>
                         <div class="team-stat-line">
-                            <span class="stat-name">🛡️ 防御力</span>
+                            <span class="stat-name">🛡️ Defesa</span>
                             <span class="stat-value">${battleStats.defense}</span>
                             <span class="stat-iv">(IV:${pokemon.ivs.def}+${pokemon.ivs.spDef})</span>
                         </div>
                         <div class="team-stat-line">
-                            <span class="stat-name">💨 速度</span>
+                            <span class="stat-name">💨 Veloc.</span>
                             <span class="stat-value">${battleStats.speed}</span>
                             <span class="stat-iv">(IV:${pokemon.ivs.speed})</span>
                         </div>
                     </div>
                     <div class="team-stats-right">
-                        <div class="right-stat power-stat" title="战力">⚔️ ${power}</div>
-                        <div class="right-stat potential-stat" title="潜力" style="color:${potentialColor}">💎 ${potential}%</div>
+                        <div class="right-stat power-stat" title="Poder">⚔️ ${power}</div>
+                        <div class="right-stat potential-stat" title="Potencial" style="color:${potentialColor}">💎 ${potential}%</div>
                     </div>
                 </div>
                 <div class="slot-exp-section">
@@ -906,8 +906,8 @@ class GameUI {
             const hint = document.createElement('div');
             hint.className = 'team-empty-slots';
             hint.innerHTML = spare > 0
-                ? `队伍还有 ${free} 个空位。PC 里有 ${spare} 只伙伴——加入队伍后会一起获得经验、提供队友加成。<br><button class="setting-btn" onclick="gameUI.switchTab('tab-pc')">🖥️ 去 PC 选伙伴</button>`
-                : `队伍还有 ${free} 个空位。继续战斗，捕获的新伙伴会出现在 PC，之后就能加入队伍。`;
+                ? `Sua equipe tem ${free} ${ptPlural(free,'vaga livre','vagas livres')}. Há ${spare} Pokémon no PC: na equipe, eles ganham EXP e dão bônus aos aliados.<br><button class="setting-btn" onclick="gameUI.switchTab('tab-pc')">🖥️ Escolher no PC</button>`
+                : `Sua equipe tem ${free} ${ptPlural(free,'vaga livre','vagas livres')}. Continue lutando: os Pokémon capturados vão para o PC e podem entrar na equipe.`;
             teamList.appendChild(hint);
         }
         this.guideView.renderBar();
@@ -934,7 +934,7 @@ class GameUI {
             toggle.disabled = !analytics;
             toggle.addEventListener('change', () => {
                 if (analytics) analytics.setEnabled(toggle.checked);
-                this.showToast(toggle.checked ? '✅ 已开启匿名统计' : '❌ 已关闭匿名统计');
+                this.showToast(toggle.checked ? '✅ Estatísticas anônimas ativadas' : '❌ Estatísticas anônimas desativadas');
             });
         }
         const copyBtn = document.getElementById('btn-copy-beta-report');
@@ -943,11 +943,11 @@ class GameUI {
                 const text = this.buildBetaReport();
                 try {
                     await navigator.clipboard.writeText(text);
-                    this.showToast('📋 测试报告已复制，可以发给开发者');
+                    this.showToast('📋 Relatório copiado! Envie ao desenvolvedor');
                 } catch (e) {
                     const area = document.getElementById('save-data-area');
                     if (area) { area.value = text; area.select(); }
-                    this.showToast('📋 报告已放进上方文本框，请手动复制');
+                    this.showToast('📋 Relatório na caixa acima. Copie manualmente');
                 }
             });
         }
@@ -958,7 +958,7 @@ class GameUI {
             restartBtn.addEventListener('click', () => {
                 this.game.guideRestartOnboarding();
                 this.switchTab('tab-battle');
-                this.showToast('🎓 新手引导已重新开始');
+                this.showToast('🎓 Tutorial reiniciado');
             });
         }
     }
@@ -991,7 +991,7 @@ class GameUI {
         if (r.ok) {
             this.renderTeam();
             if (this.currentTab === 'tab-pc') this.pcView.render();
-            this.showToast('宝可梦已放回 PC');
+            this.showToast('Pokémon movido para o PC');
         } else {
             this.showToast(rosterMessage(r.code));
         }
@@ -1006,31 +1006,31 @@ class GameUI {
 
     addToTeamFromPokedex(pokemonId) {
         if (this.game.gameState.team.length >= 6) {
-            this.showToast('⚠️ 队伍已满（最多6只）');
+            this.showToast('⚠️ Equipe cheia (máx. 6)');
             return;
         }
         const result = this.game.addToTeamFromPokedex(pokemonId);
         if (result) {
             this.renderTeam();
             this.renderPokedex();
-            this.showToast('宝可梦已加入队伍！');
+            this.showToast('Pokémon adicionado à equipe!');
         } else {
-            this.showToast('⚠️ 加入队伍失败');
+            this.showToast('⚠️ Falha ao adicionar à equipe');
         }
     }
 
     removeFromTeamByPokemonId(pokemonId) {
         if (this.game.gameState.team.length <= 1) {
-            this.showToast('⚠️ 队伍至少需要保留一只宝可梦');
+            this.showToast('⚠️ A equipe precisa ter ao menos 1 Pokémon');
             return;
         }
         const result = this.game.removeFromTeamByPokemonId(pokemonId);
         if (result) {
             this.renderTeam();
             this.renderPokedex();
-            this.showToast('宝可梦已离开队伍');
+            this.showToast('Pokémon saiu da equipe');
         } else {
-            this.showToast('⚠️ 无法移除出战宝可梦');
+            this.showToast('⚠️ Não é possível remover o Pokémon ativo');
         }
     }
 
@@ -1046,8 +1046,8 @@ class GameUI {
                 this.game.gameState.settings = this.game.gameState.settings || {};
                 this.game.gameState.settings.oneShotStrategy = radio.value;
                 this.game.save();
-                const labels = { fastest: '🏃 速度最快', lowest_level: '📈 等级最低', no_change: '🔒 不改变' };
-                this.showToast(`⚡ 一击必杀策略: ${labels[radio.value]}`);
+                const labels = { fastest: '🏃 Mais veloz', lowest_level: '📈 Menor nível', no_change: '🔒 Não trocar' };
+                this.showToast(`⚡ Estratégia de golpe fatal: ${labels[radio.value]}`);
             });
         });
     }
@@ -1062,8 +1062,8 @@ class GameUI {
                 this.game.gameState.settings = this.game.gameState.settings || {};
                 this.game.gameState.settings.captureDuplicates = radio.value;
                 this.game.save();
-                const labels = { all: '有几率收为新个体', better: '只收个体值更高的', off: '不收重复' };
-                this.showToast(`🎒 重复捕获: ${labels[radio.value]}`);
+                const labels = { all: 'Chance de guardar como novo', better: 'Só guardar IVs melhores', off: 'Não guardar duplicatas' };
+                this.showToast(`🎒 Capturas repetidas: ${labels[radio.value]}`);
             });
         });
         this._syncCaptureDuplicates();
@@ -1097,7 +1097,7 @@ class GameUI {
             this.game.gameState.settings = this.game.gameState.settings || {};
             this.game.gameState.settings.autoRouteSwitch = checkbox.checked;
             this.game.save();
-            this.showToast(checkbox.checked ? '✅ 已开启自动切换地图' : '❌ 已关闭自动切换地图');
+            this.showToast(checkbox.checked ? '✅ Troca automática de mapa ativada' : '❌ Troca automática de mapa desativada');
             // 联动显示/隐藏条件选项
             this._syncRouteSwitchConditionVisibility();
         });
@@ -1118,8 +1118,8 @@ class GameUI {
                 this.game.gameState.settings = this.game.gameState.settings || {};
                 this.game.gameState.settings.routeSwitchCondition = radio.value;
                 this.game.save();
-                const labels = { '6v_shiny': '✨ 6V且闪光后切换', '6v_only': '🎯 6V后切换' };
-                this.showToast(`📋 切换条件: ${labels[radio.value]}`);
+                const labels = { '6v_shiny': '✨ Trocar após 6V + Shiny', '6v_only': '🎯 Trocar após 6V' };
+                this.showToast(`📋 Condição de troca: ${labels[radio.value]}`);
             });
         });
     }
@@ -1138,14 +1138,14 @@ class GameUI {
         if (!btn) return;
         btn.addEventListener('click', () => {
             this.showConfirmDialog(
-                '一键升级技能',
-                '将遍历所有已捕获的宝可梦，把达到1000级且技能未满级的全部升级一次技能。<br>⚠️ 升级后等级将重置为1（超过1000级的经验会返还），确定继续吗？',
+                'Subir todas as técnicas',
+                'Todos os Pokémon capturados que estão no Lv.1000 ou mais e com técnica abaixo do máximo sobem 1 nível de técnica.<br>⚠️ O nível volta para 1 (o EXP acima do Lv.1000 é devolvido). Continuar?',
                 () => {
                     const result = this.game.upgradeAllSkills();
                     if (result.success) {
-                        const names = result.results.slice(0, 5).map(r => `${r.name}→Lv.${r.newSkillLevel}`).join('、');
-                        const more = result.count > 5 ? `…等${result.count}只` : '';
-                        this.showToast(`⚡ 成功升级 ${result.count} 只宝可梦的技能！\n${names}${more}`);
+                        const names = result.results.slice(0, 5).map(r => `${r.name}→Lv.${r.newSkillLevel}`).join(', ');
+                        const more = result.count > 5 ? `… e mais (${result.count} no total)` : '';
+                        this.showToast(`⚡ Técnicas de ${result.count} Pokémon subiram de nível!\n${names}${more}`);
                         this.renderPokedex();
                         this.renderTeam();
                     } else {
@@ -1208,7 +1208,7 @@ class GameUI {
                 card.innerHTML = `
                     <h3>${region.name}${regionBadges}</h3>
                     <p>${region.description}</p>
-                    <p style="font-size:11px;color:var(--warning);margin-top:4px">${region.routes.length} 个地点</p>
+                    <p style="font-size:11px;color:var(--warning);margin-top:4px">${region.routes.length} ${ptPlural(region.routes.length,'rota','rotas')}</p>
                 `;
                 card.addEventListener('click', () => {
                     this.game.changeRegion(key);
@@ -1220,14 +1220,14 @@ class GameUI {
                     <h3>🔒 ${region.name}</h3>
                     <p style="color:var(--text-secondary)">${region.description}</p>
                     <div class="unlock-progress">
-                        <div class="unlock-progress-text">解锁进度: ${progress.current}/${progress.total} (${progress.percent}%) · 还差 ${progress.total - progress.current} 种</div>
+                        <div class="unlock-progress-text">Progresso: ${progress.current}/${progress.total} (${progress.percent}%) · faltam ${progress.total - progress.current} ${ptPlural(progress.total - progress.current,'espécie','espécies')}</div>
                         <div class="unlock-progress-bar">
                             <div class="unlock-progress-fill" style="width:${progress.percent}%"></div>
                         </div>
                     </div>
                 `;
                 card.addEventListener('click', () => {
-                    this.showToast(`🔒 再收集 ${progress.total - progress.current} 种宝可梦（图鉴 ${progress.current}/${progress.total}）就能解锁${region.name}`);
+                    this.showToast(`🔒 Faltam ${progress.total - progress.current} ${ptPlural(progress.total - progress.current,'espécie','espécies')} (Pokédex ${progress.current}/${progress.total}) para desbloquear ${region.name}`);
                 });
             }
             regionList.appendChild(card);
@@ -1305,11 +1305,11 @@ class GameUI {
             const rec = this._recommendedRoute;
             const isRec = !isActive && rec && rec.route.id === route.id;
             const chip = prog.newCount > 0
-                ? `<span class="route-new-chip">还有 ${prog.newCount} 种没抓到</span>`
-                : '<span class="route-done-chip">✓ 已抓齐</span>';
+                ? `<span class="route-new-chip">Faltam ${prog.newCount} ${ptPlural(prog.newCount,'espécie','espécies')}</span>`
+                : '<span class="route-done-chip">✓ Completa</span>';
             if (isRec) card.classList.add('recommended');
             card.innerHTML = `
-                <h3>${route.name}${routeBadges} ${isActive ? '📍' : ''}${isRec ? '<span class="route-rec-tag">推荐</span>' : ''}</h3>
+                <h3>${route.name}${routeBadges} ${isActive ? '📍' : ''}${isRec ? '<span class="route-rec-tag">Sugerida</span>' : ''}</h3>
                 <p>${route.description}</p>
                 <div class="route-level-range">Lv.${route.levelRange[0]} ~ Lv.${route.levelRange[1]}</div>
                 <div class="route-progress-line">${chip}</div>
@@ -1320,7 +1320,7 @@ class GameUI {
                 this.game.changeRoute(route.id);
                 this._recommendedRoute = this.game.getRecommendedRoute();
                 this.showRoutes(regionId); // 刷新显示
-                this.showToast(`📍 移动到了 ${route.name}`);
+                this.showToast(`📍 Você foi para ${route.name}`);
                 this.guideView.renderBar();
             });
 
@@ -1336,25 +1336,25 @@ class GameUI {
         // 根据地区筛选更新统计数据显示
         const caughtEl = document.getElementById('pokedex-caught');
         if (this.pokedexRegionFilter === 'all') {
-            caughtEl.textContent = `已捕获: ${stats.caught}/${stats.total}`;
+            caughtEl.textContent = `Capturados: ${stats.caught}/${stats.total}`;
         } else {
             const regionStats = this.game.getPokedexStatsByRegion(this.pokedexRegionFilter);
-            const regionNames = { kanto: '关都', johto: '城都', hoenn: '丰缘', sinnoh: '神奥', unova: '合众', kalos: '卡洛斯', alola: '阿罗拉', galar: '伽勒尔', paldea: '帕底亚', mega: 'Mega' };
+            const regionNames = { kanto: 'Kanto', johto: 'Johto', hoenn: 'Hoenn', sinnoh: 'Sinnoh', unova: 'Unova', kalos: 'Kalos', alola: 'Alola', galar: 'Galar', paldea: 'Paldea', mega: 'Mega' };
             const regionName = regionNames[this.pokedexRegionFilter] || this.pokedexRegionFilter;
-            caughtEl.textContent = `${regionName}地区已捕获: ${regionStats.caught}/${regionStats.total}`;
+            caughtEl.textContent = `${regionName} — capturados: ${regionStats.caught}/${regionStats.total}`;
         }
         
         // 更新闪光按钮显示数量
         const shinyFilterBtn = document.querySelector('.filter-btn.shiny-filter');
         if (shinyFilterBtn) {
-            shinyFilterBtn.textContent = `✨ 闪光${shinyCount > 0 ? ' (' + shinyCount + ')' : ''}`;
+            shinyFilterBtn.textContent = `✨ Shiny${shinyCount > 0 ? ' (' + shinyCount + ')' : ''}`;
         }
 
         // 更新未闪光按钮显示数量
         const notShinyCount = stats.caught - shinyCount;
         const notShinyFilterBtn = document.querySelector('.filter-btn.not-shiny-filter');
         if (notShinyFilterBtn) {
-            notShinyFilterBtn.textContent = `未闪光${notShinyCount > 0 ? ' (' + notShinyCount + ')' : ''}`;
+            notShinyFilterBtn.textContent = `Não Shiny${notShinyCount > 0 ? ' (' + notShinyCount + ')' : ''}`;
         }
 
         const grid = document.getElementById('pokedex-grid');
@@ -1442,14 +1442,14 @@ class GameUI {
         if (allIds.length === 0) {
             const q = (document.getElementById('pokedex-search-input') || {}).value || '';
             let msg;
-            if (q.trim()) msg = `没有找到“${q.trim()}”。试试换个名字或编号。`;
-            else if (this.pokedexFilter === 'shiny') msg = '还没有闪光宝可梦。每次遇到都有约 1/4096 的概率，多战斗、多换道路就有机会！';
-            else if (this.pokedexFilter === 'not_shiny') msg = '这里还没有宝可梦——先去战斗，捕获的宝可梦会出现在这里。';
+            if (q.trim()) msg = `Nada encontrado para “${q.trim()}”. Tente outro nome ou número.`;
+            else if (this.pokedexFilter === 'shiny') msg = 'Nenhum Pokémon Shiny ainda. Cada encontro tem cerca de 1/4096 de chance. Lute mais e troque de rota!';
+            else if (this.pokedexFilter === 'not_shiny') msg = 'Nenhum Pokémon aqui ainda. Vá lutar: os capturados aparecem aqui.';
             else if (this.pokedexFilter === 'caught') msg = this.pokedexRegionFilter === 'all'
-                ? '还没有捕获任何宝可梦。击败野生宝可梦就会自动捕获它！'
-                : '这个地区还没有你捕获的宝可梦。去地图里解锁并探索它吧。';
-            else msg = '这个筛选条件下没有宝可梦。';
-            grid.innerHTML = `<div class="empty-state">${escapeHtml(msg)}<br><button class="setting-btn" onclick="gameUI.switchTab('tab-battle')">回到战斗</button></div>`;
+                ? 'Nenhum Pokémon capturado ainda. Derrote Pokémon selvagens para capturá-los!'
+                : 'Você ainda não capturou Pokémon desta região. Desbloqueie e explore no Mapa.';
+            else msg = 'Nenhum Pokémon com este filtro.';
+            grid.innerHTML = `<div class="empty-state">${escapeHtml(msg)}<br><button class="setting-btn" onclick="gameUI.switchTab('tab-battle')">Voltar à Batalha</button></div>`;
             this._pokedexAllIds = [];
             this._pokedexRendered = 0;
             return;
@@ -1548,30 +1548,30 @@ class GameUI {
                 const detailHtml = storedData ? `
                     <div class="dex-detail">
                         <div class="dex-detail-header">
-                            <span class="dex-level-badge">等级 ${storedData.level}</span>
-                            ${currentSkillLevel > 0 ? `<span class="dex-skill-badge">⚡ 技能 ${currentSkillLevel >= MAX_SKILL_LEVEL ? 'Max' : 'Lv.' + currentSkillLevel}</span>` : ''}
-                            ${inTeam ? `<span class="dex-in-team">在队伍中</span>` : '<span style="color:var(--text-secondary);font-size:12px">已捕获 · 不在队伍中</span>'}
+                            <span class="dex-level-badge">Lv.${storedData.level}</span>
+                            ${currentSkillLevel > 0 ? `<span class="dex-skill-badge">⚡ Técnica ${currentSkillLevel >= MAX_SKILL_LEVEL ? 'Max' : 'Lv.' + currentSkillLevel}</span>` : ''}
+                            ${inTeam ? `<span class="dex-in-team">Na equipe</span>` : '<span style="color:var(--text-secondary);font-size:12px">Capturado · Fora da equipe</span>'}
                         </div>
                         <div class="dex-power-potential">
                             <div class="dex-power">
-                                <span class="power-label">⚔️ 战力</span>
+                                <span class="power-label">⚔️ Poder</span>
                                 <span class="power-value">${power}</span>
                             </div>
-                            <div class="dex-potential" title="基于个体值、种族值、成长效率计算">
-                                <span class="potential-label">💎 潜力</span>
+                            <div class="dex-potential" title="Calculado com IVs, stats base e eficiência de crescimento">
+                                <span class="potential-label">💎 Potencial</span>
                                 <span class="potential-value" style="color:${potentialColor}">${potential}%</span>
                             </div>
                         </div>
                         <div class="dex-stats-section">
                             ${(() => { const ebs = this.game.getEffectiveBaseStats(id); const ebsTotal = ebs.hp + ebs.atk + ebs.def + ebs.spAtk + ebs.spDef + ebs.speed; return `
-                            <div class="dex-stats-title">种族值（总和：${ebsTotal}）</div>
+                            <div class="dex-stats-title">Stats base (total: ${ebsTotal})</div>
                             <div class="dex-stats-grid">
-                                <div class="dex-stat-item iv"><span>体力</span><span>${ebs.hp} <small style="opacity:0.6">(IV:${storedData.ivs.hp})</small></span></div>
-                                <div class="dex-stat-item iv"><span>攻击</span><span>${ebs.atk} <small style="opacity:0.6">(IV:${storedData.ivs.atk})</small></span></div>
-                                <div class="dex-stat-item iv"><span>防御</span><span>${ebs.def} <small style="opacity:0.6">(IV:${storedData.ivs.def})</small></span></div>
-                                <div class="dex-stat-item iv"><span>特攻</span><span>${ebs.spAtk} <small style="opacity:0.6">(IV:${storedData.ivs.spAtk})</small></span></div>
-                                <div class="dex-stat-item iv"><span>特防</span><span>${ebs.spDef} <small style="opacity:0.6">(IV:${storedData.ivs.spDef})</small></span></div>
-                                <div class="dex-stat-item iv"><span>速度</span><span>${ebs.speed} <small style="opacity:0.6">(IV:${storedData.ivs.speed})</small></span></div>
+                                <div class="dex-stat-item iv"><span>HP</span><span>${ebs.hp} <small style="opacity:0.6">(IV:${storedData.ivs.hp})</small></span></div>
+                                <div class="dex-stat-item iv"><span>Ataque</span><span>${ebs.atk} <small style="opacity:0.6">(IV:${storedData.ivs.atk})</small></span></div>
+                                <div class="dex-stat-item iv"><span>Defesa</span><span>${ebs.def} <small style="opacity:0.6">(IV:${storedData.ivs.def})</small></span></div>
+                                <div class="dex-stat-item iv"><span>Atq. Esp.</span><span>${ebs.spAtk} <small style="opacity:0.6">(IV:${storedData.ivs.spAtk})</small></span></div>
+                                <div class="dex-stat-item iv"><span>Def. Esp.</span><span>${ebs.spDef} <small style="opacity:0.6">(IV:${storedData.ivs.spDef})</small></span></div>
+                                <div class="dex-stat-item iv"><span>Veloc.</span><span>${ebs.speed} <small style="opacity:0.6">(IV:${storedData.ivs.speed})</small></span></div>
                             </div>`; })()}
                         </div>
                         ${berryHtml}
@@ -1581,17 +1581,17 @@ class GameUI {
                 // 按钮逻辑：在队伍中显示"离开队伍"，不在队伍中显示"加入队伍"
                 let buttonHtml = '';
                 if (inTeam) {
-                    buttonHtml = `<button class="dex-remove-btn" data-pokemon-id="${id}">- 离开队伍</button>`;
+                    buttonHtml = `<button class="dex-remove-btn" data-pokemon-id="${id}">- Sair da equipe</button>`;
                 } else if (!teamFull) {
-                    buttonHtml = `<button class="dex-add-btn" data-pokemon-id="${id}">+ 加入队伍</button>`;
+                    buttonHtml = `<button class="dex-add-btn" data-pokemon-id="${id}">+ Adicionar à equipe</button>`;
                 } else {
-                    buttonHtml = `<span style="color:var(--text-secondary);font-size:12px;white-space:nowrap">队伍已满</span>`;
+                    buttonHtml = `<span style="color:var(--text-secondary);font-size:12px;white-space:nowrap">Equipe cheia</span>`;
                 }
 
                 // 升级技能按钮（需要技能系统已解锁、等级>=1000、技能等级<8）
                 let skillBtnHtml = '';
                 if (skillUnlockedGlobal && storedData && storedData.level >= SKILL_LEVEL_REQUIREMENT && currentSkillLevel < MAX_SKILL_LEVEL) {
-                    skillBtnHtml = `<button class="dex-skill-btn" data-pokemon-id="${id}" title="等级重置为1，技能等级+1">⚡ 升级技能</button>`;
+                    skillBtnHtml = `<button class="dex-skill-btn" data-pokemon-id="${id}" title="O nível volta para 1 e a técnica sobe +1">⚡ Subir técnica</button>`;
                 }
 
                 entry.innerHTML = `
@@ -1603,7 +1603,7 @@ class GameUI {
                             <div class="dex-types">${typeBadges}</div>
                         </div>
                         <div class="dex-header-actions">
-                            ${hasShiny ? `<button class="shiny-toggle-btn${isShowingShiny ? ' active' : ''}" data-pokemon-id="${id}" title="${isShowingShiny ? '切换为原始' : '切换为闪光'}">✨</button>` : ''}
+                            ${hasShiny ? `<button class="shiny-toggle-btn${isShowingShiny ? ' active' : ''}" data-pokemon-id="${id}" title="${isShowingShiny ? 'Mostrar forma normal' : 'Mostrar forma Shiny'}">✨</button>` : ''}
                             ${buttonHtml}
                             ${skillBtnHtml}
                         </div>
@@ -1646,12 +1646,12 @@ class GameUI {
                         const pokemonName = data.name;
                         const sl = storedData.skillLevel || 0;
                         this.showConfirmDialog(
-                            '升级技能',
-                            `确定要升级 ${pokemonName} 的技能吗？<br>当前技能等级：${sl} → ${sl + 1}<br>⚠️ 等级将重置为 1，超过1000级的经验会返还。`,
+                            'Subir técnica',
+                            `Subir a técnica de ${pokemonName}?<br>Nível da técnica: ${sl} → ${sl + 1}<br>⚠️ O nível volta para 1 (o EXP acima do Lv.1000 é devolvido).`,
                             () => {
                                 const result = this.game.upgradeSkill(id);
                                 if (result.success) {
-                                    this.showToast(`⚡ ${pokemonName} 技能升至 Lv.${result.newSkillLevel}！等级重置为 Lv.${result.newLevel}`);
+                                    this.showToast(`⚡ Técnica de ${pokemonName} foi para Lv.${result.newSkillLevel}! Nível voltou para Lv.${result.newLevel}`);
                                     this.renderPokedex();
                                     this.renderTeam();
                                 } else {
@@ -1670,12 +1670,12 @@ class GameUI {
                         const select = entry.querySelector('.berry-feed-select');
                         const berryId = select?.value;
                         if (!berryId) {
-                            this.showToast('⚠️ 请选择要喂食的树果');
+                            this.showToast('⚠️ Escolha uma fruta para dar');
                             return;
                         }
                         const result = this.game.feedBerry(id, berryId);
                         if (result.success) {
-                            this.showToast(`${BERRY_DATA[berryId].icon} 喂食成功！(${result.fed}/${result.max})`);
+                            this.showToast(`${BERRY_DATA[berryId].icon} Fruta dada! (${result.fed}/${result.max})`);
                             // 局部更新树果区域，保留下拉选择
                             this._refreshBerrySectionForEntry(entry, id, berryId);
                             // 刷新战力和潜力值显示
@@ -1701,7 +1701,7 @@ class GameUI {
         if (end < allIds.length) {
             const loadMoreDiv = document.createElement('div');
             loadMoreDiv.className = 'pokedex-load-more';
-            loadMoreDiv.innerHTML = `<button class="load-more-btn">加载更多（还剩 ${allIds.length - end} 条）</button>`;
+            loadMoreDiv.innerHTML = `<button class="load-more-btn">Carregar mais (restam ${allIds.length - end})</button>`;
             loadMoreDiv.querySelector('button').addEventListener('click', () => {
                 this._renderPokedexBatch(grid, this._pokedexPageSize);
             });
@@ -1736,24 +1736,24 @@ class GameUI {
                 const fed = berryFed[berryId] || 0;
                 const maxForType = this.game.getBerryMaxForType(pokemonId, berryId);
                 if (count > 0 && fed < maxForType) {
-                    optionsHtml += `<option value="${berryId}">${berry.icon} ${berry.name} (库存:${count})</option>`;
+                    optionsHtml += `<option value="${berryId}">${berry.icon} ${berry.name} (estoque: ${count})</option>`;
                 }
             }
             if (optionsHtml) {
                 feedHtml = `
                     <div class="berry-feed-action">
                         <select class="berry-feed-select" data-pokemon-id="${pokemonId}">
-                            <option value="">选择树果喂食...</option>
+                            <option value="">Escolha uma fruta...</option>
                             ${optionsHtml}
                         </select>
-                        <button class="berry-feed-btn" data-pokemon-id="${pokemonId}">🍎 喂食</button>
+                        <button class="berry-feed-btn" data-pokemon-id="${pokemonId}">🍎 Dar fruta</button>
                     </div>`;
             }
         }
 
         return `
             <div class="dex-berry-section">
-                <div class="dex-stats-title">🌱 树果加成 (已喂${berryTotal}个)</div>
+                <div class="dex-stats-title">🌱 Bônus de frutas (dadas: ${berryTotal})</div>
                 <div class="dex-stats-grid berry-grid">${berryItemsHtml}</div>
                 ${feedHtml}
             </div>`;
@@ -1792,12 +1792,12 @@ class GameUI {
                 const select = newSection.querySelector('.berry-feed-select');
                 const berryId = select?.value;
                 if (!berryId) {
-                    this.showToast('⚠️ 请选择要喂食的树果');
+                    this.showToast('⚠️ Escolha uma fruta para dar');
                     return;
                 }
                 const result = this.game.feedBerry(pokemonId, berryId);
                 if (result.success) {
-                    this.showToast(`${BERRY_DATA[berryId].icon} 喂食成功！(${result.fed}/${result.max})`);
+                    this.showToast(`${BERRY_DATA[berryId].icon} Fruta dada! (${result.fed}/${result.max})`);
                     // 递归局部更新，继续保留选择
                     this._refreshBerrySectionForEntry(entry, pokemonId, berryId);
                     // 刷新战力和潜力值显示
@@ -1862,7 +1862,7 @@ class GameUI {
         const el = document.getElementById('berry-bag-summary');
         if (!el) return;
         const total = this.game.getBerryBagTotal();
-        el.textContent = `🎒 背包树果: ${total}`;
+        el.textContent = `🎒 Frutas na bolsa: ${total}`;
     }
 
     _renderBerryPlots() {
@@ -1889,8 +1889,8 @@ class GameUI {
                     cell.innerHTML = `
                         <div class="berry-plot-icon ripe">${berry.icon}</div>
                         <div class="berry-plot-name">${berry.name}</div>
-                        <div class="berry-plot-status ready">✅ 可采摘</div>
-                        <button class="berry-harvest-btn" data-plot-index="${i}">采摘</button>
+                        <div class="berry-plot-status ready">✅ Pronta</div>
+                        <button class="berry-harvest-btn" data-plot-index="${i}">Colher</button>
                     `;
                 } else {
                     const h = Math.floor(timeLeft / 3600000);
@@ -1899,15 +1899,15 @@ class GameUI {
                     cell.innerHTML = `
                         <div class="berry-plot-icon growing">${berry.icon}</div>
                         <div class="berry-plot-name">${berry.name}</div>
-                        <div class="berry-plot-status growing">🌱 生长中</div>
-                        <div class="berry-plot-timer">${h}时${m}分${s}秒</div>
+                        <div class="berry-plot-status growing">🌱 Crescendo</div>
+                        <div class="berry-plot-timer">${h}h ${m}min ${s}s</div>
                     `;
                 }
             } else {
                 cell.classList.add('empty');
                 cell.innerHTML = `
                     <div class="berry-plot-icon empty">🟫</div>
-                    <div class="berry-plot-name">空地</div>
+                    <div class="berry-plot-name">Canteiro vazio</div>
                 `;
             }
             grid.appendChild(cell);
@@ -1934,7 +1934,7 @@ class GameUI {
             grid.appendChild(item);
         }
         if (!hasAny) {
-            grid.innerHTML = '<div class="berry-bag-empty">背包为空，种植树果后采摘获得</div>';
+            grid.innerHTML = '<div class="berry-bag-empty">Bolsa vazia. Plante e colha frutas para obtê-las.</div>';
         }
     }
 
@@ -1954,18 +1954,18 @@ class GameUI {
             card.innerHTML = `
                 <div class="berry-plant-icon" style="background:${berry.color}20;border-color:${berry.color}">${berry.icon}</div>
                 <div class="berry-plant-info">
-                    <div class="berry-plant-name">${berry.name}种子</div>
-                    <div class="berry-plant-effect">提升${this._getStatName(berry.stat)} +${BERRY_STAT_BONUS}/个 (上限${BERRY_STAT_CAP})</div>
-                    <div class="berry-plant-stock">💰 ${BERRY_SEED_PRICE.toLocaleString()} 金币</div>
+                    <div class="berry-plant-name">Semente de ${berry.name}</div>
+                    <div class="berry-plant-effect">Aumenta ${this._getStatName(berry.stat)} +${BERRY_STAT_BONUS} por fruta (máx. ${BERRY_STAT_CAP})</div>
+                    <div class="berry-plant-stock">💰 ${BERRY_SEED_PRICE.toLocaleString('pt-BR')} moedas</div>
                 </div>
-                ${canPlant ? `<button class="berry-plant-btn" data-berry-id="${berryId}">购买种植</button>` : `<span class="berry-plant-disabled">${plotsFull ? '空地已满' : '金币不足'}</span>`}
+                ${canPlant ? `<button class="berry-plant-btn" data-berry-id="${berryId}">Comprar e plantar</button>` : `<span class="berry-plant-disabled">${plotsFull ? 'Sem canteiros livres' : 'Moedas insuficientes'}</span>`}
             `;
             grid.appendChild(card);
         }
     }
 
     _getStatName(stat) {
-        const names = { hp: '体力', atk: '攻击', def: '防御', spAtk: '特攻', spDef: '特防', speed: '速度' };
+        const names = { hp: 'HP', atk: 'Ataque', def: 'Defesa', spAtk: 'Atq. Esp.', spDef: 'Def. Esp.', speed: 'Veloc.' };
         return names[stat] || stat;
     }
 
@@ -1979,7 +1979,7 @@ class GameUI {
                 const index = parseInt(newBtn.dataset.plotIndex);
                 const result = this.game.harvestBerry(index);
                 if (result.success) {
-                    this.showToast(`🧺 采摘了 ${result.count} 个${result.berryName}！`);
+                    this.showToast(`🧺 Colhido: ${result.count} × ${result.berryName}!`);
                     this.renderBerryPage();
                 } else {
                     this.showToast('⚠️ ' + result.message);
@@ -2002,7 +2002,7 @@ class GameUI {
                 const result = this.game.harvestAllBerries();
                 if (result.success) {
                     const totalCount = result.results.reduce((s, r) => s + r.count, 0);
-                    this.showToast(`🧺 一键采摘了 ${totalCount} 个树果！`);
+                    this.showToast(`🧺 ${totalCount} ${ptPlural(totalCount,'fruta colhida','frutas colhidas')}!`);
                     this.renderBerryPage();
                 } else {
                     this.showToast('⚠️ ' + result.message);
@@ -2019,7 +2019,7 @@ class GameUI {
                 const berryId = newBtn.dataset.berryId;
                 const result = this.game.plantBerry(berryId);
                 if (result.success) {
-                    this.showToast(`🌱 已种植${BERRY_DATA[berryId].name}！`);
+                    this.showToast(`🌱 Plantado: ${BERRY_DATA[berryId].name}!`);
                     this.renderBerryPage();
                 } else {
                     this.showToast('⚠️ ' + result.message);
@@ -2068,21 +2068,21 @@ class GameUI {
         const paldeaStats = this.game.getPokedexStatsByRegion('paldea');
 
         document.getElementById('game-stats').innerHTML = `
-            <div class="game-stat-row"><span>总战斗次数</span><span>${stats.totalBattles}</span></div>
-            <div class="game-stat-row"><span>总获得经验</span><span>${stats.totalExp.toLocaleString()}</span></div>
-            ${this.game.isGoldUnlocked() ? `<div class="game-stat-row"><span>🪙 当前金币</span><span>${(this.game.gameState.gold || 0).toLocaleString()}</span></div>
-            <div class="game-stat-row"><span>🪙 累计金币</span><span>${(stats.totalGold || 0).toLocaleString()}</span></div>` : ''}
-            <div class="game-stat-row"><span>图鉴完成度</span><span>${dexStats.caught}/${dexStats.total}</span></div>
-            <div class="game-stat-row" style="padding-left:16px;font-size:12px"><span>├ 关都地区</span><span>${kantoStats.caught}/${kantoStats.total}</span></div>
-            <div class="game-stat-row" style="padding-left:16px;font-size:12px"><span>├ 城都地区</span><span>${johtoStats.caught}/${johtoStats.total}${!this.game.isRegionUnlocked('johto') ? ' 🔒' : ''}</span></div>
-            <div class="game-stat-row" style="padding-left:16px;font-size:12px"><span>├ 丰缘地区</span><span>${hoennStats.caught}/${hoennStats.total}${!this.game.isRegionUnlocked('hoenn') ? ' 🔒' : ''}</span></div>
-            <div class="game-stat-row" style="padding-left:16px;font-size:12px"><span>├ 神奥地区</span><span>${sinnohStats.caught}/${sinnohStats.total}${!this.game.isRegionUnlocked('sinnoh') ? ' 🔒' : ''}</span></div>
-            <div class="game-stat-row" style="padding-left:16px;font-size:12px"><span>├ 合众地区</span><span>${unovaStats.caught}/${unovaStats.total}${!this.game.isRegionUnlocked('unova') ? ' 🔒' : ''}</span></div>
-            <div class="game-stat-row" style="padding-left:16px;font-size:12px"><span>├ 卡洛斯地区</span><span>${kalosStats.caught}/${kalosStats.total}${!this.game.isRegionUnlocked('kalos') ? ' 🔒' : ''}</span></div>
-            <div class="game-stat-row" style="padding-left:16px;font-size:12px"><span>├ 阿罗拉地区</span><span>${alolaStats.caught}/${alolaStats.total}${!this.game.isRegionUnlocked('alola') ? ' 🔒' : ''}</span></div>
-            <div class="game-stat-row" style="padding-left:16px;font-size:12px"><span>├ 伽勒尔地区</span><span>${galarStats.caught}/${galarStats.total}${!this.game.isRegionUnlocked('galar') ? ' 🔒' : ''}</span></div>
-            <div class="game-stat-row" style="padding-left:16px;font-size:12px"><span>└ 帕底亚地区</span><span>${paldeaStats.caught}/${paldeaStats.total}${!this.game.isRegionUnlocked('paldea') ? ' 🔒' : ''}</span></div>
-            <div class="game-stat-row"><span>✨ 闪光图鉴</span><span>${this.game.getShinyStats()}</span></div>
+            <div class="game-stat-row"><span>Total de batalhas</span><span>${stats.totalBattles}</span></div>
+            <div class="game-stat-row"><span>EXP total ganho</span><span>${stats.totalExp.toLocaleString('pt-BR')}</span></div>
+            ${this.game.isGoldUnlocked() ? `<div class="game-stat-row"><span>🪙 Moedas atuais</span><span>${(this.game.gameState.gold || 0).toLocaleString('pt-BR')}</span></div>
+            <div class="game-stat-row"><span>🪙 Moedas acumuladas</span><span>${(stats.totalGold || 0).toLocaleString('pt-BR')}</span></div>` : ''}
+            <div class="game-stat-row"><span>Pokédex completa</span><span>${dexStats.caught}/${dexStats.total}</span></div>
+            <div class="game-stat-row" style="padding-left:16px;font-size:12px"><span>├ Kanto</span><span>${kantoStats.caught}/${kantoStats.total}</span></div>
+            <div class="game-stat-row" style="padding-left:16px;font-size:12px"><span>├ Johto</span><span>${johtoStats.caught}/${johtoStats.total}${!this.game.isRegionUnlocked('johto') ? ' 🔒' : ''}</span></div>
+            <div class="game-stat-row" style="padding-left:16px;font-size:12px"><span>├ Hoenn</span><span>${hoennStats.caught}/${hoennStats.total}${!this.game.isRegionUnlocked('hoenn') ? ' 🔒' : ''}</span></div>
+            <div class="game-stat-row" style="padding-left:16px;font-size:12px"><span>├ Sinnoh</span><span>${sinnohStats.caught}/${sinnohStats.total}${!this.game.isRegionUnlocked('sinnoh') ? ' 🔒' : ''}</span></div>
+            <div class="game-stat-row" style="padding-left:16px;font-size:12px"><span>├ Unova</span><span>${unovaStats.caught}/${unovaStats.total}${!this.game.isRegionUnlocked('unova') ? ' 🔒' : ''}</span></div>
+            <div class="game-stat-row" style="padding-left:16px;font-size:12px"><span>├ Kalos</span><span>${kalosStats.caught}/${kalosStats.total}${!this.game.isRegionUnlocked('kalos') ? ' 🔒' : ''}</span></div>
+            <div class="game-stat-row" style="padding-left:16px;font-size:12px"><span>├ Alola</span><span>${alolaStats.caught}/${alolaStats.total}${!this.game.isRegionUnlocked('alola') ? ' 🔒' : ''}</span></div>
+            <div class="game-stat-row" style="padding-left:16px;font-size:12px"><span>├ Galar</span><span>${galarStats.caught}/${galarStats.total}${!this.game.isRegionUnlocked('galar') ? ' 🔒' : ''}</span></div>
+            <div class="game-stat-row" style="padding-left:16px;font-size:12px"><span>└ Paldea</span><span>${paldeaStats.caught}/${paldeaStats.total}${!this.game.isRegionUnlocked('paldea') ? ' 🔒' : ''}</span></div>
+            <div class="game-stat-row"><span>✨ Pokédex Shiny</span><span>${this.game.getShinyStats()}</span></div>
             ${this._renderBattleStatSources()}
         `;
 
@@ -2124,13 +2124,13 @@ class GameUI {
         const src = { self: selfStat, team, pokedex, gem, talent };
 
         const stats = ['hp', 'attack', 'defense', 'speed'];
-        const statNames = { hp: '❤️ 生命值', attack: '⚔️ 攻击力', defense: '🛡️ 防御力', speed: '💨 速度' };
-        const sourceNames = { self: '自身属性', team: '队友加成', pokedex: '图鉴加成', gem: '宝石加成', talent: '天赋加成' };
+        const statNames = { hp: '❤️ HP', attack: '⚔️ Ataque', defense: '🛡️ Defesa', speed: '💨 Veloc.' };
+        const sourceNames = { self: 'Próprio', team: 'Equipe', pokedex: 'Pokédex', gem: 'Gemas', talent: 'Talentos' };
         const sourceIcons = { self: '🐾', team: '👥', pokedex: '📖', gem: '💎', talent: '🌟' };
         const sourceColors = { self: '#e94560', team: '#2ecc71', pokedex: '#3498db', gem: '#f39c12', talent: '#9b59b6' };
 
         let html = `<div class="stat-sources-section">
-            <div class="stat-sources-title">📊 出战宝可梦属性来源 — ${pokemonName} Lv.${level}</div>`;
+            <div class="stat-sources-title">📊 Origem dos atributos — ${pokemonName} Lv.${level}</div>`;
 
         for (const stat of stats) {
             const total = battleStats[stat];
@@ -2145,12 +2145,12 @@ class GameUI {
             ].filter(s => s.value > 0);
 
             html += `<div class="stat-source-row">
-                <div class="stat-source-label">${statNames[stat]} <span class="stat-source-total">${total.toLocaleString()}</span></div>
+                <div class="stat-source-label">${statNames[stat]} <span class="stat-source-total">${total.toLocaleString('pt-BR')}</span></div>
                 <div class="stat-source-bar-container">`;
 
             for (const s of sources) {
                 const pct = (s.value / total * 100).toFixed(1);
-                html += `<div class="stat-source-bar-segment" style="width:${pct}%;background:${sourceColors[s.key]}" title="${sourceNames[s.key]}: ${s.value.toLocaleString()} (${pct}%)"></div>`;
+                html += `<div class="stat-source-bar-segment" style="width:${pct}%;background:${sourceColors[s.key]}" title="${sourceNames[s.key]}: ${s.value.toLocaleString('pt-BR')} (${pct}%)"></div>`;
             }
 
             html += `</div><div class="stat-source-details">`;
@@ -2159,7 +2159,7 @@ class GameUI {
                 const pct = (s.value / total * 100).toFixed(1);
                 html += `<span class="stat-source-detail-item">
                     <span class="stat-source-dot" style="background:${sourceColors[s.key]}"></span>
-                    ${sourceIcons[s.key]} ${sourceNames[s.key]}: ${s.value.toLocaleString()} (${pct}%)
+                    ${sourceIcons[s.key]} ${sourceNames[s.key]}: ${s.value.toLocaleString('pt-BR')} (${pct}%)
                 </span>`;
             }
 
@@ -2177,12 +2177,12 @@ class GameUI {
         ].filter(s => s.value > 0);
 
         html += `<div class="stat-source-row stat-source-summary">
-            <div class="stat-source-label">📋 属性总计 <span class="stat-source-total">${totalAll.toLocaleString()}</span></div>
+            <div class="stat-source-label">📋 Total de atributos <span class="stat-source-total">${totalAll.toLocaleString('pt-BR')}</span></div>
             <div class="stat-source-bar-container">`;
 
         for (const s of summaryItems) {
             const pct = (s.value / totalAll * 100).toFixed(1);
-            html += `<div class="stat-source-bar-segment" style="width:${pct}%;background:${sourceColors[s.key]}" title="${sourceNames[s.key]}: ${s.value.toLocaleString()} (${pct}%)"></div>`;
+            html += `<div class="stat-source-bar-segment" style="width:${pct}%;background:${sourceColors[s.key]}" title="${sourceNames[s.key]}: ${s.value.toLocaleString('pt-BR')} (${pct}%)"></div>`;
         }
 
         html += `</div><div class="stat-source-details">`;
@@ -2191,7 +2191,7 @@ class GameUI {
             const pct = (s.value / totalAll * 100).toFixed(1);
             html += `<span class="stat-source-detail-item">
                 <span class="stat-source-dot" style="background:${sourceColors[s.key]}"></span>
-                ${sourceIcons[s.key]} ${sourceNames[s.key]}: ${s.value.toLocaleString()} (${pct}%)
+                ${sourceIcons[s.key]} ${sourceNames[s.key]}: ${s.value.toLocaleString('pt-BR')} (${pct}%)
             </span>`;
         }
 
@@ -2211,9 +2211,9 @@ class GameUI {
         const hours = Math.floor(totalSeconds / 3600);
         const minutes = Math.floor((totalSeconds % 3600) / 60);
         const seconds = totalSeconds % 60;
-        if (hours > 0) return `${hours}小时${minutes}分${seconds}秒`;
-        if (minutes > 0) return `${minutes}分${seconds}秒`;
-        return `${seconds}秒`;
+        if (hours > 0) return `${hours}h ${minutes}min ${seconds}s`;
+        if (minutes > 0) return `${minutes}min ${seconds}s`;
+        return `${seconds}s`;
     }
 
     _showOfflineOverlay(totalMs) {
@@ -2222,14 +2222,14 @@ class GameUI {
         this._setOfflineReportMode(false);
         // 显示离线时间
         const timeText = document.getElementById('offline-time-text');
-        if (timeText) timeText.textContent = `离线时间：${this._formatOfflineTime(totalMs)}`;
+        if (timeText) timeText.textContent = `Tempo offline: ${this._formatOfflineTime(totalMs)}`;
         // 重置进度
         const bar = document.getElementById('offline-progress-bar');
         if (bar) bar.style.width = '0%';
         const percentText = document.getElementById('offline-percent-text');
         if (percentText) percentText.textContent = '0%';
         const battlesText = document.getElementById('offline-battles-text');
-        if (battlesText) battlesText.textContent = '已完成 0 场战斗';
+        if (battlesText) battlesText.textContent = '0 batalhas concluídas';
         // 显示遮罩
         overlay.classList.remove('hidden');
     }
@@ -2240,7 +2240,7 @@ class GameUI {
         const percentText = document.getElementById('offline-percent-text');
         if (percentText) percentText.textContent = `${percent}%`;
         const battlesText = document.getElementById('offline-battles-text');
-        if (battlesText) battlesText.textContent = `已完成 ${battles.toLocaleString()} 场战斗`;
+        if (battlesText) battlesText.textContent = `${ptNumber(battles)} ${ptPlural(battles, 'batalha concluída', 'batalhas concluídas')}`;
     }
 
     // 切换遮罩内容：进度条 ↔ 结算报告
@@ -2258,20 +2258,20 @@ class GameUI {
         const icon = overlay.querySelector('.offline-overlay-icon');
         if (icon) icon.style.animation = on ? 'none' : '';
         const title = overlay.querySelector('.offline-overlay-title');
-        if (title) title.textContent = on ? '离线结算完成' : '离线结算中...';
+        if (title) title.textContent = on ? 'Progresso offline concluído' : 'Calculando progresso offline...';
     }
 
     // 把一条离线事件转成文字（只含游戏内置名称，全部以文本节点渲染）
     _describeOfflineEvent(ev) {
         const d = ev.data || {};
         switch (ev.event) {
-            case 'evolved': return `🌟 ${d.oldName} 进化成了 ${d.newName}${d.keptLevel ? '' : '（新登记，Lv.1）'}`;
-            case 'shinyEvolved': return `✨ ${d.newName} 获得了闪光形态`;
-            case 'shinySpread': return `✨ ${d.sourceName} 的闪光传播给了 ${d.targetName}`;
-            case 'shinyDefeated': return `✨ 获得了 ${d.name} 的闪光形态`;
-            case 'badgeUnlocked': return `🏅 获得了 ${d.badgeName}`;
-            case 'regionUnlocked': return `🎉 ${d.regionName}已解锁`;
-            case 'autoRouteSwitch': return `💎 自动前往 ${d.regionName} · ${d.routeName}`;
+            case 'evolved': return `🌟 ${d.oldName} evoluiu para ${d.newName}${d.keptLevel ? '' : ' (novo registro, Lv.1)'}`;
+            case 'shinyEvolved': return `✨ ${d.newName} ganhou a forma Shiny`;
+            case 'shinySpread': return `✨ O Shiny de ${d.sourceName} se espalhou para ${d.targetName}`;
+            case 'shinyDefeated': return `✨ Forma Shiny de ${d.name} obtida`;
+            case 'badgeUnlocked': return `🏅 Insígnia obtida: ${d.badgeName}`;
+            case 'regionUnlocked': return `🎉 Região desbloqueada: ${d.regionName}`;
+            case 'autoRouteSwitch': return `💎 Troca automática: ${d.regionName} · ${d.routeName}`;
             default: return null;
         }
     }
@@ -2296,37 +2296,37 @@ class GameUI {
             div.textContent = text;
             report.appendChild(div);
         };
-        addLine(`⏱ 离线时间：${this._formatOfflineTime(totalMs)}`);
-        addLine(`⚔️ 完成战斗：${summary.battles.toLocaleString()} 场`);
-        if (summary.expGained > 0) addLine(`📊 获得经验：${summary.expGained.toLocaleString()}`);
-        if (summary.goldGained > 0) addLine(`🪙 获得金币：${summary.goldGained.toLocaleString()}`);
+        addLine(`⏱ Tempo offline: ${this._formatOfflineTime(totalMs)}`);
+        addLine(`⚔️ Batalhas: ${ptNumber(summary.battles)}`);
+        if (summary.expGained > 0) addLine(`📊 EXP ganho: ${ptNumber(summary.expGained)}`);
+        if (summary.goldGained > 0) addLine(`🪙 Moedas ganhas: ${ptNumber(summary.goldGained)}`);
         if (summary.newCatches.length > 0) {
-            const names = summary.newCatches.slice(0, 12).map(c => c.name).join('、');
-            const more = summary.newCatches.length > 12 ? ` 等 ${summary.newCatches.length} 只` : '';
-            addLine(`🆕 新捕获：${names}${more}`, 'highlight');
+            const names = summary.newCatches.slice(0, 12).map(c => c.name).join(', ');
+            const more = summary.newCatches.length > 12 ? ` … (${summary.newCatches.length} no total)` : '';
+            addLine(`🆕 Novos capturados: ${names}${more}`, 'highlight');
         }
         if (summary.duplicateCatches && summary.duplicateCatches.length > 0) {
             const shinyCount = summary.duplicateCatches.filter(c => c.shiny).length;
-            addLine(`🎒 新增个体：${summary.duplicateCatches.length} 只已放入 PC${shinyCount ? `（其中闪光 ${shinyCount} 只）` : ''}`, 'highlight');
+            addLine(`🎒 Duplicatas: ${summary.duplicateCatches.length} ${ptPlural(summary.duplicateCatches.length, 'enviada', 'enviadas')} ao PC${shinyCount ? ` (${shinyCount} Shiny)` : ''}`, 'highlight');
         }
-        if (summary.ivUpgrades > 0) addLine(`💎 个体值提升：${summary.ivUpgrades} 次`);
+        if (summary.ivUpgrades > 0) addLine(`💎 IVs melhorados: ${summary.ivUpgrades} ${ptPlural(summary.ivUpgrades, 'vez', 'vezes')}`);
         // 回来之后最想知道的：接下来做什么
         const next = this.game.getNextAction();
-        if (next) addLine(`👉 下一步：${next.title}`, 'highlight');
+        if (next) addLine(`👉 Próximo passo: ${next.title}`, 'highlight');
         if (summary.levelUps.length > 0) {
-            const top = summary.levelUps.slice(0, 5).map(l => `${l.name} Lv.${l.from}→${l.to}`).join('；');
-            addLine(`⬆️ 升级最多：${top}`);
+            const top = summary.levelUps.slice(0, 5).map(l => `${l.name} Lv.${l.from}→${l.to}`).join('; ');
+            addLine(`⬆️ Maiores subidas: ${top}`);
         }
         const lines = summary.events.map(ev => this._describeOfflineEvent(ev)).filter(Boolean);
         if (lines.length > 0) {
-            addLine('📜 重要事件：', 'highlight');
+            addLine('📜 Eventos importantes:', 'highlight');
             lines.slice(0, 15).forEach(t => addLine(t, 'event'));
             const rest = lines.length - 15 + summary.eventsOverflow;
-            if (rest > 0) addLine(`……另有 ${rest} 条事件`, 'event');
+            if (rest > 0) addLine(`… e mais ${rest} ${ptPlural(rest, 'evento', 'eventos')}`, 'event');
         }
         const btn = document.createElement('button');
         btn.className = 'setting-btn offline-report-close';
-        btn.textContent = '确定';
+        btn.textContent = 'Confirmar';
         btn.addEventListener('click', () => {
             this._offlineOverlay.classList.add('hidden');
             this.renderTeam();
@@ -2343,12 +2343,12 @@ class GameUI {
         const percentText = document.getElementById('offline-percent-text');
         if (percentText) percentText.textContent = '100%';
         const battlesText = document.getElementById('offline-battles-text');
-        if (battlesText) battlesText.textContent = `完成 ${battles.toLocaleString()} 场战斗`;
+        if (battlesText) battlesText.textContent = `${ptNumber(battles)} ${ptPlural(battles, 'batalha concluída', 'batalhas concluídas')}`;
 
         // 事件不再丢失：同步解锁状态并写入日志
         this._applyOfflineEvents(summary);
         if (battles > 0) {
-            this.addBattleLog(`⚡ 离线 ${this._formatOfflineTime(totalMs)} 完成了 ${battles.toLocaleString()} 场战斗！`, 'evolution');
+            this.addBattleLog(`⚡ Offline por ${this._formatOfflineTime(totalMs)}: ${ptNumber(battles)} ${ptPlural(battles, 'batalha concluída', 'batalhas concluídas')}!`, 'evolution');
         }
 
         // 时间较长或有重要事件时，保留一份可阅读的结算报告
@@ -2366,7 +2366,7 @@ class GameUI {
         setTimeout(() => {
             overlay.classList.add('hidden');
             if (battles > 0) {
-                this.showToast(`⚡ 离线结算: 完成了 ${battles.toLocaleString()} 场战斗！`);
+                this.showToast(`⚡ Progresso offline: ${ptNumber(battles)} ${ptPlural(battles, 'batalha concluída', 'batalhas concluídas')}!`);
             }
             this.renderTeam();
         }, 600);
@@ -2391,12 +2391,12 @@ class GameUI {
     // 导入结果统一处理：失败给出具体原因；成功时提示被自动修正的内容
     _handleImportResult(result, okMessage, failMessage) {
         if (!result || !result.success) {
-            this.showToast(`${failMessage}：${(result && result.message) || '未知错误'}`);
+            this.showToast(`${failMessage}: ${(result && result.message) || 'erro desconhecido'}`);
             return;
         }
-        const warn = result.warnings && result.warnings.length ? `（已自动修正 ${result.warnings.length} 处）` : '';
+        const warn = result.warnings && result.warnings.length ? ` (${result.warnings.length} ${ptPlural(result.warnings.length, 'ajuste automático', 'ajustes automáticos')})` : '';
         this.showToast(okMessage + warn);
-        (result.warnings || []).slice(0, 5).forEach(w => this.addBattleLog(`⚠️ 导入存档：${w}`, 'normal'));
+        (result.warnings || []).slice(0, 5).forEach(w => this.addBattleLog(`⚠️ Importação do save: ${w}`, 'normal'));
         this.refreshAll();
         // 导入存档后检查是否需要离线结算
         this._checkOfflineAfterImport();
@@ -2422,7 +2422,7 @@ class GameUI {
         if (dismissible) {
             const x = document.createElement('button');
             x.textContent = '✕';
-            x.title = '关闭';
+            x.title = 'Fechar';
             x.addEventListener('click', () => this.hideSaveBanner(true));
             banner.appendChild(x);
         }
@@ -2437,31 +2437,31 @@ class GameUI {
         banner.className = 'save-banner hidden';
         banner.textContent = '';
         this._bannerKind = null;
-        if (!force) this.showToast('✅ 存档已恢复正常');
+        if (!force) this.showToast('✅ Save normalizado');
     }
 
     showSaveError(err) {
         this._showBanner('error', `⚠️ ${err.message}`, [
-            { label: '导出存档文件', onClick: () => document.getElementById('btn-export-file').click() },
-            { label: '重试保存', onClick: () => {
+            { label: 'Exportar arquivo', onClick: () => document.getElementById('btn-export-file').click() },
+            { label: 'Tentar salvar de novo', onClick: () => {
                 const r = this.game.saveNow();
-                if (r && r.ok) this.showToast('💾 保存成功');
+                if (r && r.ok) this.showToast('💾 Salvo com sucesso');
             } },
         ], false);
         // 避免连续失败时刷屏
         const now = Date.now();
         if (!this._lastSaveErrorToast || now - this._lastSaveErrorToast > 60000) {
             this._lastSaveErrorToast = now;
-            this.showToast('❌ 存档保存失败！请查看页面顶部提示');
+            this.showToast('❌ Falha ao salvar! Veja o aviso no topo da página');
         }
     }
 
     showSaveConflict() {
         this._showBanner('warn',
-            '⚠️ 检测到另一个标签页也在使用本游戏。为避免互相覆盖，本页已暂停自动保存。请关闭其他标签页后刷新，或点击“接管”让本页继续保存。',
-            [{ label: '接管', onClick: () => {
+            '⚠️ Outra aba também está usando o jogo. Para evitar sobrescrever o save, o salvamento automático desta aba foi pausado. Feche as outras abas e atualize a página, ou toque em “Assumir” para continuar salvando aqui.',
+            [{ label: 'Assumir', onClick: () => {
                 const r = this.game.takeOverSave();
-                if (r && r.ok) { this.hideSaveBanner(true); this.showToast('💾 已接管存档'); }
+                if (r && r.ok) { this.hideSaveBanner(true); this.showToast('💾 Save assumido'); }
             } }], false);
     }
 
@@ -2470,17 +2470,17 @@ class GameUI {
         if (!report) return;
         if (!report.ok && !report.empty) {
             this._showBanner('error',
-                `⚠️ 存档读取失败（${report.error || '未知原因'}），已开始新游戏。损坏的存档副本已保留在浏览器存储中，请先不要清除网站数据，并联系开发者协助恢复。`);
+                `⚠️ Falha ao ler o save (${report.error || 'causa desconhecida'}). Um novo jogo foi iniciado. Uma cópia do save danificado foi mantida no navegador: não limpe os dados do site e peça ajuda ao desenvolvedor.`);
             return;
         }
         if (report.ok && report.recovered) {
             this._showBanner('warn',
-                `⚠️ 主存档已损坏，已自动从备份（${report.source}）恢复，可能丢失最近一段时间的进度。`);
+                `⚠️ O save principal estava danificado e foi restaurado do backup (${report.source}). Parte do progresso recente pode ter sido perdida.`);
         } else if (report.ok && report.fromVersion && report.fromVersion < SAVE_SCHEMA_VERSION) {
-            this.showToast(`🔧 存档已升级到新版本（v${report.fromVersion} → v${SAVE_SCHEMA_VERSION}）`);
+            this.showToast(`🔧 Save atualizado para a nova versão (v${report.fromVersion} → v${SAVE_SCHEMA_VERSION})`);
         }
         if (report.ok && report.warnings && report.warnings.length) {
-            this.showToast(`⚠️ 读档时自动修正了 ${report.warnings.length} 处异常数据`);
+            this.showToast(`⚠️ ${report.warnings.length} ${ptPlural(report.warnings.length, 'dado anômalo corrigido', 'dados anômalos corrigidos')} ao carregar o save`);
             console.warn('[存档] 读档修正：', report.warnings);
         }
     }
@@ -2495,27 +2495,27 @@ class GameUI {
 
     showCatchNotification(pokemon) {
         // 构建捕获信息
-        let message = `捕获了 ${pokemon.shiny ? '✨闪光 ' : ''}${pokemon.name}`;
+        let message = `Capturado: ${pokemon.shiny ? '✨Shiny ' : ''}${pokemon.name}`;
 
         if (pokemon.isFirstCatch) {
-            message += ` (首次捕获！)`;
+            message += ` (primeira captura!)`;
             this.guideView.onNewSpecies(pokemon);
         } else if (pokemon.isDuplicate) {
             // 又收下一只同种：说清楚它和已有的有什么不同，而不是一个内部编号
             const d = pokemon.uid ? this.game.describeInstance(pokemon.uid) : null;
-            message = `又收下一只${pokemon.shiny ? '✨闪光 ' : ' '}${pokemon.name}` +
-                (d ? `（个体值 ${d.ivPercent}%，${d.natureName}）` : '') + ' · 已放入 PC';
+            message = `Mais um: ${pokemon.shiny ? '✨Shiny ' : ''}${pokemon.name}` +
+                (d ? ` (IVs ${d.ivPercent}%, ${d.natureName})` : '') + ' · Enviado ao PC';
             this.guideView.bumpPcBadge(1);
             if (pokemon.shiny) this.guideView.onShiny(pokemon.name);
         } else if (pokemon.updatedStats && pokemon.updatedStats.length > 0) {
             const statNames = {
-                hp: '体力', atk: '攻击', def: '防御', 
-                spAtk: '特攻', spDef: '特防', speed: '速度'
+                hp: 'HP', atk: 'Ataque', def: 'Defesa', 
+                spAtk: 'Atq. Esp.', spDef: 'Def. Esp.', speed: 'Veloc.'
             };
             const updates = pokemon.updatedStats.map(s => `${statNames[s.stat]} ${s.old}→${s.new}`).join(', ');
-            message += ` (个体值更新: ${updates})`;
+            message += ` (IVs atualizados: ${updates})`;
         } else if (pokemon.levelUp) {
-            message += ` (等级提升至 Lv.${pokemon.level})`;
+            message += ` (subiu para Lv.${pokemon.level})`;
         }
         
         this.addBattleLog(message, 'catch');
@@ -2531,16 +2531,16 @@ class GameUI {
         if (active && pokemon.uid === active.uid) this._floatText(`⬆️ Lv.${pokemon.level}`, 'levelup');
         // 改为显示在战斗日志中，连续升级合并为一条
         if (pokemon.startLevel && pokemon.level - pokemon.startLevel > 1) {
-            this.addBattleLog(`${pokemon.name} Lv.${pokemon.startLevel} → Lv.${pokemon.level}！`, 'levelup');
+            this.addBattleLog(`${pokemon.name} Lv.${pokemon.startLevel} → Lv.${pokemon.level}!`, 'levelup');
         } else {
-            this.addBattleLog(`${pokemon.name} 升到了 Lv.${pokemon.level}！`, 'levelup');
+            this.addBattleLog(`${pokemon.name} chegou ao Lv.${pokemon.level}!`, 'levelup');
         }
     }
 
     showEvolutionNotification(data) {
         // 改为显示在战斗日志中
-        const tail = data.keptLevel ? `保留等级 Lv.${data.pokemon.level}` : '新登记的形态，等级重置为 Lv.1';
-        this.addBattleLog(`🌟 ${data.oldName} 进化成了 ${data.newName}！${tail}`, 'evolution');
+        const tail = data.keptLevel ? `Mantém o Lv.${data.pokemon.level}.` : 'A nova forma volta para o Lv.1.';
+        this.addBattleLog(`🌟 ${data.oldName} evoluiu para ${data.newName}! ${tail}`, 'evolution');
         this.guideView.onEvolved(data);
         if (this.currentTab === 'tab-pc') this.pcView.render();
     }
@@ -2553,8 +2553,8 @@ class GameUI {
                 <h3>${title}</h3>
                 <p>${message}</p>
                 <div class="modal-buttons">
-                    <button class="cancel-btn">取消</button>
-                    <button class="confirm-btn">确认</button>
+                    <button class="cancel-btn">Cancelar</button>
+                    <button class="confirm-btn">Confirmar</button>
                 </div>
             </div>
         `;
@@ -2578,24 +2578,24 @@ class GameUI {
         overlay.innerHTML = `
             <div class="modal tutorial-modal">
                 <div class="tutorial-icon">🎉</div>
-                <h3>欢迎来到宝可梦世界！</h3>
+                <h3>Bem-vindo ao mundo Pokémon!</h3>
                 <div class="tutorial-body">
                     <div class="tutorial-item">
                         <span class="tutorial-emoji">🎯</span>
-                        <span>目标：<strong>收集全部宝可梦</strong>，解锁新的地区。</span>
+                        <span>Meta: <strong>capture todos os Pokémon</strong> e desbloqueie novas regiões.</span>
                     </div>
                     <div class="tutorial-item">
                         <span class="tutorial-emoji">⚔️</span>
-                        <span>战斗和捕获都是<strong>自动</strong>的，关掉页面它也会继续进行。</span>
+                        <span>Batalha e captura são <strong>automáticas</strong> e continuam mesmo com a página fechada.</span>
                     </div>
                     <div class="tutorial-item">
                         <span class="tutorial-emoji">👆</span>
-                        <span>跟着上方的<strong>任务条</strong>走，每完成一步都有奖励。</span>
+                        <span>Siga a <strong>barra de passos</strong> no topo: cada passo concluído dá recompensa.</span>
                     </div>
                 </div>
                 <div class="modal-buttons">
-                    <button class="confirm-btn tutorial-start-btn">开始冒险！</button>
-                    <button class="cancel-btn tutorial-skip-btn">我会玩，跳过引导</button>
+                    <button class="confirm-btn tutorial-start-btn">Começar aventura!</button>
+                    <button class="cancel-btn tutorial-skip-btn">Já sei jogar, pular tutorial</button>
                 </div>
             </div>
         `;
@@ -2622,43 +2622,43 @@ class GameUI {
         overlay.className = 'modal-overlay';
         overlay.innerHTML = `
             <div class="modal gameplay-modal">
-                <h3>📘 游戏玩法说明</h3>
+                <h3>📘 Como jogar</h3>
                 <div class="gameplay-modal-body">
-                    <p>核心目标：不断捕获、培养并集齐图鉴，解锁更多地区与系统。</p>
+                    <p>Meta: capturar, treinar e completar a Pokédex para desbloquear mais regiões e sistemas.</p>
 
                     <div class="help-group">
-                        <h4>📖 名词解释</h4>
+                        <h4>📖 Glossário</h4>
                         <ul>
-                            <li><strong>战力</strong>：当前属性综合强度，按（生命+攻击×技能威力系数+防御+速度）/10 计算。技能等级越高，攻击力在战力中的权重越大。</li>
-                            <li><strong>潜力</strong>：养成上限评估分，综合经验组与成长属性评分。</li>
-                            <li><strong>个体值（IV）</strong>：每只宝可梦的隐藏属性（0~31），影响最终属性。</li>
-                            <li><strong>图鉴</strong>：记录见过/捕获状态；地区解锁与徽章获取都依赖图鉴进度。</li>
-                            <li><strong>徽章与宝石</strong>：地区徽章提供功能与加成，宝石可进一步强化战斗词条。</li>
+                            <li><strong>Poder</strong>: força geral dos atributos, calculada como (HP + Ataque × coeficiente de poder da técnica + Defesa + Velocidade) / 10. Quanto maior o nível da técnica, mais o Ataque pesa no Poder.</li>
+                            <li><strong>Potencial</strong>: nota do limite de evolução, combinando grupo de EXP e atributos de crescimento.</li>
+                            <li><strong>IVs</strong>: atributos ocultos de cada Pokémon (0~31) que influenciam os atributos finais.</li>
+                            <li><strong>Pokédex</strong>: registra o que você viu e capturou. Regiões e Insígnias dependem do progresso dela.</li>
+                            <li><strong>Insígnias e Gemas</strong>: as Insígnias dão funções e bônus; as Gemas reforçam os efeitos de batalha.</li>
                         </ul>
                     </div>
 
                     <div class="help-group">
-                        <h4>⚔️ 战斗属性来源</h4>
+                        <h4>⚔️ Origem dos atributos</h4>
                         <ul>
-                            <li><strong>基础面板</strong>：由种族值、等级、个体值共同决定。</li>
-                            <li><strong>队伍加成</strong>：队伍其他成员按比例提供属性支援。</li>
-                            <li><strong>图鉴加成</strong>：已捕获且不在队伍中的宝可梦也会提供小比例加成。</li>
-                            <li><strong>宝石/徽章词条</strong>：会心、闪避、伤害修正、胜利回复等额外效果。</li>
-                            <li><strong>属性克制</strong>：攻击与防御属性关系会改变最终伤害。</li>
+                            <li><strong>Base</strong>: definida por stats base, nível e IVs.</li>
+                            <li><strong>Bônus da equipe</strong>: os outros membros da equipe dão um bônus proporcional.</li>
+                            <li><strong>Bônus da Pokédex</strong>: Pokémon capturados fora da equipe também dão um pequeno bônus.</li>
+                            <li><strong>Gemas e Insígnias</strong>: efeitos extras como crítico, esquiva, ajuste de dano e cura ao vencer.</li>
+                            <li><strong>Vantagem de tipo</strong>: a relação entre tipos de ataque e defesa altera o dano final.</li>
                         </ul>
                     </div>
 
                     <div class="help-group">
-                        <h4>📈 经验分配规则</h4>
+                        <h4>📈 Divisão de EXP</h4>
                         <ul>
-                            <li><strong>出战宝可梦</strong>：获得100%经验。</li>
-                            <li><strong>同队其他宝可梦</strong>：每只获得50%经验。</li>
-                            <li><strong>图鉴中已捕获且不在队伍的宝可梦</strong>：每只获得1%经验（向上取整）。</li>
+                            <li><strong>Pokémon ativo</strong>: recebe 100% do EXP.</li>
+                            <li><strong>Outros da equipe</strong>: cada um recebe 50% do EXP.</li>
+                            <li><strong>Capturados fora da equipe</strong>: cada um recebe 1% do EXP (arredondado para cima).</li>
                         </ul>
                     </div>
                 </div>
                 <div class="modal-buttons">
-                    <button class="cancel-btn gameplay-close-btn">我知道了</button>
+                    <button class="cancel-btn gameplay-close-btn">Entendi</button>
                 </div>
             </div>
         `;
@@ -2738,12 +2738,12 @@ class GameUI {
         if (rulesEl) {
             rulesEl.innerHTML = `
                 <div class="skill-rules-list">
-                    <div class="skill-rule-item">📌 每只宝可梦有独立的<strong>技能等级</strong>（0~${MAX_SKILL_LEVEL}级），默认0级。</div>
-                    <div class="skill-rule-item">📌 当宝可梦等级 ≥ <strong>${SKILL_LEVEL_REQUIREMENT}</strong> 级时，可在图鉴中点击「升级技能」按钮。</div>
-                    <div class="skill-rule-item">📌 升级后：等级<strong>重置为1</strong>，技能等级+1。超过${SKILL_LEVEL_REQUIREMENT}级的经验会返还。</div>
-                    <div class="skill-rule-item">📌 技能等级 > 0 时，战斗攻击将使用该宝可梦对应属性的<strong>技能威力</strong>（替代默认50威力）。</div>
-                    <div class="skill-rule-item">📌 双属性宝可梦会自动选择对敌方<strong>克制效果更好</strong>的属性技能进行攻击。</div>
-                    <div class="skill-rule-item">💡 前往<strong>图鉴</strong>页面，对≥${SKILL_LEVEL_REQUIREMENT}级的宝可梦使用「升级技能」按钮提升实力！</div>
+                    <div class="skill-rule-item">📌 Cada Pokémon tem seu próprio <strong>nível de técnica</strong> (0~${MAX_SKILL_LEVEL}), começando em 0.</div>
+                    <div class="skill-rule-item">📌 Quando o Pokémon chega ao <strong>Lv.${SKILL_LEVEL_REQUIREMENT}</strong> ou mais, use o botão “Subir técnica” na Pokédex.</div>
+                    <div class="skill-rule-item">📌 Ao subir: o nível <strong>volta para 1</strong> e a técnica ganha +1. O EXP acima do Lv.${SKILL_LEVEL_REQUIREMENT} é devolvido.</div>
+                    <div class="skill-rule-item">📌 Com técnica acima de 0, os ataques usam o <strong>poder da técnica</strong> do tipo do Pokémon (no lugar do poder padrão 50).</div>
+                    <div class="skill-rule-item">📌 Pokémon de dois tipos escolhem automaticamente a técnica com <strong>melhor vantagem</strong> contra o inimigo.</div>
+                    <div class="skill-rule-item">💡 Vá à <strong>Pokédex</strong> e use “Subir técnica” nos Pokémon a partir do Lv.${SKILL_LEVEL_REQUIREMENT} para ficar mais forte!</div>
                 </div>
             `;
         }
@@ -2765,7 +2765,7 @@ class GameUI {
                                 <div class="skill-row">
                                     <span class="skill-level-tag">Lv.${s.level}</span>
                                     <span class="skill-name">${s.name}</span>
-                                    <span class="skill-power">威力 ${s.power}</span>
+                                    <span class="skill-power">Poder ${s.power}</span>
                                 </div>
                             `).join('')}
                         </div>
@@ -2808,10 +2808,10 @@ class GameUI {
         const pointsDisplay = document.getElementById('talent-points-display');
         if (pointsDisplay) {
             pointsDisplay.innerHTML = `
-                <span>🌟 天赋点：</span>
+                <span>🌟 Pontos de talento:</span>
                 <span class="talent-points-remaining">${remainingPoints}</span>
-                <span class="talent-points-total">/ ${totalPoints} (已用 ${usedPoints})</span>
-                <span class="talent-level-info">｜📊 总等级 ${totalLevel.toLocaleString()} / ${nextPointLevel.toLocaleString()} (下一点)</span>
+                <span class="talent-points-total">/ ${totalPoints} (usados: ${usedPoints})</span>
+                <span class="talent-level-info">| 📊 Nível total ${totalLevel.toLocaleString('pt-BR')} / ${nextPointLevel.toLocaleString('pt-BR')} (próximo ponto)</span>
             `;
         }
 
@@ -2820,12 +2820,12 @@ class GameUI {
         if (rulesEl) {
             rulesEl.innerHTML = `
                 <div class="talent-rules-list">
-                    <div class="talent-rule-item">📌 天赋点总数 = 全部宝可梦等级之和 ÷ <strong>10000</strong>（向下取整）</div>
-                    <div class="talent-rule-item">📌 每次升级天赋消耗 <strong>1</strong> 个天赋点</div>
-                    <div class="talent-rule-item">📌 按住 <strong>Shift</strong> 点击升级可一次升 <strong>10</strong> 级</div>
-                    <div class="talent-rule-item">📌 按住 <strong>Ctrl</strong> 点击升级可一次升满</div>
-                    <div class="talent-rule-item">📌 重置天赋需要花费 <strong>100万</strong> 金币，归还所有已用天赋点</div>
-                    <div class="talent-rule-item">💡 宝可梦等级越高，可用天赋点越多！持续战斗提升等级来获取更多天赋点</div>
+                    <div class="talent-rule-item">📌 Total de pontos = soma dos níveis de todos os Pokémon ÷ <strong>10000</strong> (arredondado para baixo)</div>
+                    <div class="talent-rule-item">📌 Cada nível de talento custa <strong>1</strong> ponto</div>
+                    <div class="talent-rule-item">📌 Segure <strong>Shift</strong> ao subir para ganhar <strong>10</strong> níveis de uma vez</div>
+                    <div class="talent-rule-item">📌 Segure <strong>Ctrl</strong> ao subir para ir ao máximo</div>
+                    <div class="talent-rule-item">📌 Resetar os talentos custa <strong>1 milhão</strong> de moedas e devolve todos os pontos usados</div>
+                    <div class="talent-rule-item">💡 Quanto maior o nível dos Pokémon, mais pontos! Continue lutando para ganhar mais</div>
                 </div>
             `;
         }
@@ -2838,13 +2838,13 @@ class GameUI {
             resetBtn.parentNode.replaceChild(newResetBtn, resetBtn);
             newResetBtn.addEventListener('click', () => {
                 if (usedPoints === 0) {
-                    this.showToast('当前没有已分配的天赋点');
+                    this.showToast('Nenhum ponto de talento usado');
                     return;
                 }
-                if (confirm(`确定要重置所有天赋吗？\n将花费 1,000,000 金币\n当前金币: ${this.game.gameState.gold.toLocaleString()}`)) {
+                if (confirm(`Resetar todos os talentos?\nCusto: 1.000.000 moedas\nMoedas atuais: ${this.game.gameState.gold.toLocaleString('pt-BR')}`)) {
                     const result = this.game.resetTalents();
                     if (result.success) {
-                        this.showToast('🔄 天赋已重置！');
+                        this.showToast('🔄 Talentos resetados!');
                         this.renderTalentPage();
                     } else {
                         this.showToast(result.message);
@@ -2862,7 +2862,7 @@ class GameUI {
                 const level = this.game.getTalentLevel(talentId);
                 const effectValue = this.game.getTalentValue(talentId);
                 const isMaxed = level >= talent.maxLevel;
-                const category = TALENT_CATEGORIES[talent.category] || { name: '其他', icon: '📋' };
+                const category = TALENT_CATEGORIES[talent.category] || { name: 'Outros', icon: '📋' };
                 const progressPercent = (level / talent.maxLevel * 100).toFixed(1);
 
                 // 特殊效果文本
@@ -2870,20 +2870,20 @@ class GameUI {
                 if (talentId === 'skill_stat_bonus') {
                     const skillSum = this.game.getSkillLevelSum();
                     const actualBonus = this.game.getTalentStatBonusPercent();
-                    effectText = `技能等级之和(${skillSum}) × ${effectValue.toFixed(2)}% = <span class="effect-value">+${actualBonus.toFixed(2)}%</span> 全属性`;
+                    effectText = `Soma dos níveis de técnica (${skillSum}) × ${effectValue.toFixed(2)}% = <span class="effect-value">+${actualBonus.toFixed(2)}%</span> em todos os atributos`;
                 } else if (talentId === 'gem_attr_boost') {
                     const choice = this.game.getTalentGemAttrChoice();
-                    const choiceName = choice ? (GEM_ATTRIBUTES.find(a => a.id === choice)?.name || '未选择') : '未选择';
-                    effectText = `当前选择: <span class="effect-value">${choiceName}</span>，概率 <span class="effect-value">+${effectValue}%</span>`;
+                    const choiceName = choice ? (GEM_ATTRIBUTES.find(a => a.id === choice)?.name || 'nenhum') : 'nenhum';
+                    effectText = `Seleção atual: <span class="effect-value">${choiceName}</span> · chance <span class="effect-value">+${effectValue}%</span>`;
                 } else if (talentId === 'team_exp_bonus') {
                     const tLevel = this.game.getTalentLevel('team_exp_bonus');
                     // 展示几个代表等级的提升示例
                     const exampleLow = this.game.getMonsterLevelBoost(1);
                     const exampleMid = this.game.getMonsterLevelBoost(5000);
                     const exampleHigh = this.game.getMonsterLevelBoost(17000);
-                    effectText = `Lv.${tLevel}: Lv.1→<span class="effect-value">${exampleLow}</span>，Lv.5000→<span class="effect-value">${exampleMid}</span>，Lv.17000→<span class="effect-value">${exampleHigh}</span>`;
+                    effectText = `Lv.${tLevel}: Lv.1→<span class="effect-value">${exampleLow}</span>, Lv.5000→<span class="effect-value">${exampleMid}</span>, Lv.17000→<span class="effect-value">${exampleHigh}</span>`;
                 } else {
-                    effectText = `当前效果: <span class="effect-value">${talentId === 'berry_time_reduce' ? '-' : '+'}${effectValue}${talent.unit}</span>`;
+                    effectText = `Efeito atual: <span class="effect-value">${talentId === 'berry_time_reduce' ? '-' : '+'}${effectValue}${talent.unit}</span>`;
                 }
 
                 html += `
@@ -2908,9 +2908,9 @@ class GameUI {
                                 <button class="talent-upgrade-btn ${isMaxed ? 'maxed' : ''}" 
                                         data-talent="${talentId}"
                                         ${isMaxed ? 'disabled' : ''}>
-                                    ${isMaxed ? '已满级' : '⬆ 升级'}
+                                    ${isMaxed ? 'Nível máx.' : '⬆ Subir'}
                                 </button>
-                                <div class="talent-upgrade-hint">${isMaxed ? '' : '每级+' + talent.perLevel + talent.unit}</div>
+                                <div class="talent-upgrade-hint">${isMaxed ? '' : '+' + talent.perLevel + talent.unit + ' por nível'}</div>
                             </div>
                         </div>
                         ${talentId === 'gem_attr_boost' ? this._renderGemAttrSelector() : ''}
@@ -2935,12 +2935,12 @@ class GameUI {
                         levels = Math.min(10, talent.maxLevel - currentLv, remainingPoints);
                     }
                     if (levels <= 0) {
-                        this.showToast('天赋点不足');
+                        this.showToast('Pontos de talento insuficientes');
                         return;
                     }
                     const result = this.game.upgradeTalent(tid, levels);
                     if (result.success) {
-                        this.showToast(`🌟 ${talent.name} 升至 Lv.${result.newLevel}（消耗${result.pointsUsed}点）`);
+                        this.showToast(`🌟 ${talent.name} foi para Lv.${result.newLevel} (custo: ${result.pointsUsed} ${ptPlural(result.pointsUsed, 'ponto', 'pontos')})`);
                         this.renderTalentPage();
                     } else {
                         this.showToast(result.message);
@@ -2955,7 +2955,7 @@ class GameUI {
                     const result = this.game.setTalentGemAttrChoice(attrId);
                     if (result.success) {
                         const attrName = GEM_ATTRIBUTES.find(a => a.id === attrId)?.name || attrId;
-                        this.showToast(`🔮 宝石属性偏好已设为: ${attrName}`);
+                        this.showToast(`🔮 Atributo de gema preferido: ${attrName}`);
                         this.renderTalentPage();
                     }
                 });
@@ -2977,7 +2977,7 @@ class GameUI {
 
 
     updateGoldDisplay() {
-        const goldStr = (this.game.gameState.gold || 0).toLocaleString();
+        const goldStr = (this.game.gameState.gold || 0).toLocaleString('pt-BR');
         const el = document.getElementById('gold-amount');
         if (el) el.textContent = goldStr;
         const berryEl = document.getElementById('berry-gold-amount');
@@ -3014,13 +3014,13 @@ class GameUI {
                         <div class="gem-quality" style="color:${safeCssColor(gem.qualityColor)}">💎 ${escapeHtml(gem.qualityName)}</div>
                         <div class="gem-attrs-mini">${gem.attrs.map(a => `<span>${escapeHtml(a.icon)} ${escapeHtml(a.name)}+${escapeHtml(a.value)}${escapeHtml(a.unit)}</span>`).join('')}</div>
                         <div class="gem-slot-bottom">
-                            <button class="gem-unequip-btn" data-region="${regionId}">卸下</button>
-                            <span class="gem-attr-sum" style="color:${safeCssColor(gem.qualityColor)}">属性总和：${gemAttrSum}%</span>
+                            <button class="gem-unequip-btn" data-region="${regionId}">Remover</button>
+                            <span class="gem-attr-sum" style="color:${safeCssColor(gem.qualityColor)}">Soma dos atributos: ${gemAttrSum}%</span>
                         </div>
                     </div>
                 ` : `
                     <div class="badge-gem-slot empty">
-                        <span class="gem-slot-empty-text">🔲 空插槽 - 从背包镶嵌宝石</span>
+                        <span class="gem-slot-empty-text">🔲 Slot vazio - engaste uma gema da bolsa</span>
                     </div>
                 `;
 
@@ -3033,7 +3033,7 @@ class GameUI {
                         </div>
                     </div>
                     <div class="badge-gem-area">
-                        <div class="badge-gem-label">宝石插槽</div>
+                        <div class="badge-gem-label">Slot de gema</div>
                         ${gemHtml}
                     </div>
                 `;
@@ -3045,7 +3045,7 @@ class GameUI {
                         e.stopPropagation();
                         const result = this.game.unequipGem(regionId);
                         if (result.success) {
-                            this.showToast('💎 宝石已卸下');
+                            this.showToast('💎 Gema removida');
                             this.renderBadgePage();
                         } else {
                             this.showToast('⚠️ ' + result.message);
@@ -3068,18 +3068,18 @@ class GameUI {
 
                 if (regionId === 'kanto') {
                     // 关都：起始地区，无需解锁地区，只需集齐图鉴
-                    progressText = `关都徽章进度: ${badgeProgress.caught}/${badgeProgress.total}`;
+                    progressText = `Insígnia de Kanto: ${badgeProgress.caught}/${badgeProgress.total}`;
                 } else if (!regionUnlocked) {
                     // 地区未解锁
-                    lockedDesc = `需先解锁${regionName}（集齐${prevRegionName}图鉴）`;
+                    lockedDesc = `Desbloqueie antes: ${regionName} (complete a Pokédex de ${prevRegionName})`;
                     // 仅城都显示解锁进度（第一个需要解锁的地区，玩家最关心）
                     if (regionId === 'johto') {
-                        progressText = `${regionName}解锁进度: ${unlockProgress.current}/${unlockProgress.total} (${unlockProgress.percent}%)`;
+                        progressText = `Progresso de ${regionName}: ${unlockProgress.current}/${unlockProgress.total} (${unlockProgress.percent}%)`;
                     }
                 } else {
                     // 地区已解锁，但徽章未获得
-                    lockedDesc = `${regionName}已解锁，捕获全部${regionName}宝可梦后获得`;
-                    progressText = `${badgeInfo.name}进度: ${badgeProgress.caught}/${badgeProgress.total}`;
+                    lockedDesc = `${regionName} desbloqueada. Capture todos os Pokémon de ${regionName} para obter`;
+                    progressText = `${badgeInfo.name}: ${badgeProgress.caught}/${badgeProgress.total}`;
                 }
 
                 card.innerHTML = `
@@ -3110,7 +3110,7 @@ class GameUI {
         shopSection.style.display = '';
 
         const gemCount = this.game.gameState.gems.length;
-        document.getElementById('gem-bag-count').textContent = `背包: ${gemCount}/${GEM_BAG_MAX}`;
+        document.getElementById('gem-bag-count').textContent = `Bolsa: ${gemCount}/${GEM_BAG_MAX}`;
 
         const buyBtn = document.getElementById('btn-buy-gem');
         if (buyBtn) {
@@ -3120,7 +3120,7 @@ class GameUI {
             newBtn.addEventListener('click', () => {
                 const result = this.game.buyGem();
                 if (result.success) {
-                    this.showToast(`💎 获得 ${result.gem.qualityName} 宝石！`);
+                    this.showToast(`💎 Gema obtida: ${result.gem.qualityName}!`);
                     this.updateGoldDisplay();
                     this.renderGemBag();
                     this.renderShop();
@@ -3138,8 +3138,8 @@ class GameUI {
             newAllBtn.addEventListener('click', () => {
                 const result = this.game.buyAllGems();
                 if (result.success) {
-                    const stopText = result.reason === 'bag_full' ? '背包已满' : '金币已不足';
-                    this.showToast(`🛒 批量购买完成：获得 ${result.count} 颗宝石，花费 ${result.spent} 金币（${stopText}）`);
+                    const stopText = result.reason === 'bag_full' ? 'bolsa cheia' : 'moedas esgotadas';
+                    this.showToast(`🛒 Compra em lote concluída: ${result.count} ${ptPlural(result.count, 'gema', 'gemas')}, ${result.spent} moedas (${stopText})`);
                     this.updateGoldDisplay();
                     this.renderGemBag();
                     this.renderShop();
@@ -3172,12 +3172,12 @@ class GameUI {
                 const candidates = this.game.gameState.gems.filter(g => g.quality === sourceQuality && !g.locked);
 
                 if (!sourceInfo || !targetInfo) {
-                    this.showToast('⚠️ 合成配置异常');
+                    this.showToast('⚠️ Configuração de síntese inválida');
                     return;
                 }
 
                 if (candidates.length < 10) {
-                    this.showToast(`⚠️ 缺少可合成的${sourceInfo.name}宝石：需要10个，当前${candidates.length}个（未锁定）`);
+                    this.showToast(`⚠️ Faltam Gemas ${sourceInfo.name}: precisa de 10, você tem ${candidates.length} (destravadas)`);
                     return;
                 }
 
@@ -3194,14 +3194,14 @@ class GameUI {
                 const result = this.game.synthesizeAllGems();
                 if (result.success) {
                     // 汇总合成结果
-                    const qualityNames = { common: '普通', magic: '魔法', rare: '稀有', epic: '史诗', mythic: '神话', legendary: '传说', eternal: '永恒' };
+                    const qualityNames = { common: 'Comum', magic: 'Mágica', rare: 'Rara', epic: 'Épica', mythic: 'Mítica', legendary: 'Lendária', eternal: 'Eterna' };
                     const summary = {};
                     for (const r of result.results) {
                         const name = qualityNames[r.targetQuality] || r.targetQuality;
                         summary[name] = (summary[name] || 0) + 1;
                     }
-                    const summaryText = Object.entries(summary).map(([name, count]) => `${name}×${count}`).join('、');
-                    this.showToast(`🔄 一键合成完成！共合成 ${result.count} 次，获得：${summaryText}`);
+                    const summaryText = Object.entries(summary).map(([name, count]) => `${name}×${count}`).join(', ');
+                    this.showToast(`🔄 Síntese em massa concluída! ${result.count} ${ptPlural(result.count, 'síntese', 'sínteses')}. Obtido: ${summaryText}`);
                     this.renderBadgePage();
                 } else {
                     this.showToast('⚠️ ' + result.message);
@@ -3217,7 +3217,7 @@ class GameUI {
             newReforgeBtn.addEventListener('click', () => {
                 const eternalGems = this.game.gameState.gems.filter(g => g.quality === 'eternal' && !g.locked);
                 if (eternalGems.length < 2) {
-                    this.showToast(`⚠️ 需要至少2个未锁定的永恒宝石，当前${eternalGems.length}个`);
+                    this.showToast(`⚠️ Precisa de ao menos 2 Gemas Eternas destravadas (você tem ${eternalGems.length})`);
                     return;
                 }
                 this.showReforgeDialog();
@@ -3234,17 +3234,17 @@ class GameUI {
                 autoEternalBtn.parentNode.replaceChild(newAutoBtn, autoEternalBtn);
                 newAutoBtn.addEventListener('click', () => {
                     if (this.game.gameState.gold < 1000) {
-                        this.showToast('⚠️ 金币不足');
+                        this.showToast('⚠️ Moedas insuficientes');
                         return;
                     }
                     // 如果正在运行中，忽略重复点击
                     if (this._autoEternalRunning) {
-                        this.showToast('⏳ 正在运行中...');
+                        this.showToast('⏳ Em andamento...');
                         return;
                     }
                     this.showConfirmDialog(
-                        '一键购买并合成永恒宝石',
-                        '将自动循环购买宝石并合成，直到产生新的永恒宝石或金币耗尽。<br>⚠️ 可能消耗大量金币，确定继续吗？',
+                        'Comprar e sintetizar Gema Eterna',
+                        'Compra e sintetiza gemas automaticamente até surgir uma nova Gema Eterna ou as moedas acabarem.<br>⚠️ Pode gastar muitas moedas. Continuar?',
                         () => {
                             this._startAutoEternalProcess();
                         }
@@ -3258,13 +3258,13 @@ class GameUI {
         const sourceInfo = GEM_QUALITIES.find(q => q.id === sourceQuality);
         const targetInfo = GEM_QUALITIES.find(q => q.id === targetQuality);
         if (!sourceInfo || !targetInfo) {
-            this.showToast('⚠️ 合成配置异常');
+            this.showToast('⚠️ Configuração de síntese inválida');
             return;
         }
 
         const candidates = this.game.gameState.gems.filter(g => g.quality === sourceQuality && !g.locked);
         if (candidates.length < 10) {
-            this.showToast(`⚠️ 缺少可合成的${sourceInfo.name}宝石：需要10个，当前${candidates.length}个（未锁定）`);
+            this.showToast(`⚠️ Faltam Gemas ${sourceInfo.name}: precisa de 10, você tem ${candidates.length} (destravadas)`);
             return;
         }
 
@@ -3272,11 +3272,11 @@ class GameUI {
         overlay.className = 'modal-overlay';
 
         const listHtml = candidates.map((g, idx) => {
-            const attrsText = g.attrs.map(a => `${escapeHtml(a.icon)}${escapeHtml(a.name)}+${escapeHtml(a.value)}${escapeHtml(a.unit)}`).join('、');
+            const attrsText = g.attrs.map(a => `${escapeHtml(a.icon)}${escapeHtml(a.name)}+${escapeHtml(a.value)}${escapeHtml(a.unit)}`).join(', ');
             return `
                 <label class="synthesis-item">
                     <input type="checkbox" class="synthesis-check" value="${escapeHtml(g.uid)}" ${idx < 10 ? 'checked' : ''}>
-                    <span class="synthesis-item-name">💎 ${escapeHtml(g.qualityName)}宝石</span>
+                    <span class="synthesis-item-name">💎 Gema ${escapeHtml(g.qualityName)}</span>
                     <span class="synthesis-item-attrs">${attrsText}</span>
                 </label>
             `;
@@ -3284,13 +3284,13 @@ class GameUI {
 
         overlay.innerHTML = `
             <div class="modal synthesis-modal">
-                <h3>✨ 合成${targetInfo.name}宝石</h3>
-                <p>请选择 10 个${sourceInfo.name}宝石进行合成</p>
-                <div class="synthesis-count">已选择 <span id="synthesis-selected-count">10</span>/10</div>
+                <h3>✨ Sintetizar Gema ${targetInfo.name}</h3>
+                <p>Escolha 10 Gemas ${sourceInfo.name} para sintetizar</p>
+                <div class="synthesis-count">Selecionadas <span id="synthesis-selected-count">10</span>/10</div>
                 <div class="synthesis-list">${listHtml}</div>
                 <div class="modal-buttons">
-                    <button class="cancel-btn">取消</button>
-                    <button class="confirm-btn">确认合成</button>
+                    <button class="cancel-btn">Cancelar</button>
+                    <button class="confirm-btn">Sintetizar</button>
                 </div>
             </div>
         `;
@@ -3310,7 +3310,7 @@ class GameUI {
                 const selectedCount = checks.filter(x => x.checked).length;
                 if (selectedCount > 10) {
                     c.checked = false;
-                    this.showToast('⚠️ 最多只能选择10个宝石');
+                    this.showToast('⚠️ Máximo de 10 gemas');
                 }
                 updateSelectedState();
             });
@@ -3325,7 +3325,7 @@ class GameUI {
                 return;
             }
             overlay.remove();
-            this.showToast(`✨ 合成成功！获得 ${result.newGem.qualityName} 宝石`);
+            this.showToast(`✨ Síntese concluída! Gema obtida: ${result.newGem.qualityName}`);
             this.renderBadgePage();
         });
 
@@ -3353,14 +3353,14 @@ class GameUI {
         overlay.className = 'modal-overlay';
         overlay.innerHTML = `
             <div class="modal" style="max-width:420px;text-align:center">
-                <h3>💎 一键购买合成永恒</h3>
+                <h3>💎 Comprar e sintetizar Eterna</h3>
                 <div id="eternal-progress-info" style="margin:12px 0;color:var(--text-secondary);font-size:13px;min-height:40px;">
-                    正在准备...
+                    Preparando...
                 </div>
                 <div style="background:rgba(255,255,255,0.1);border-radius:8px;height:20px;overflow:hidden;margin-bottom:8px;">
                     <div id="eternal-progress-bar" style="width:0%;height:100%;background:linear-gradient(90deg,#9b59b6,#e74c3c);border-radius:8px;transition:width 0.15s;"></div>
                 </div>
-                <button id="btn-stop-auto-eternal" class="gem-synthesis-btn eternal" style="padding:10px 30px;font-size:15px;">⏹️ 停止</button>
+                <button id="btn-stop-auto-eternal" class="gem-synthesis-btn eternal" style="padding:10px 30px;font-size:15px;">⏹️ Parar</button>
             </div>`;
         document.body.appendChild(overlay);
 
@@ -3371,7 +3371,7 @@ class GameUI {
         stopBtn.addEventListener('click', () => {
             this.game.stopAutoEternal();
             stopBtn.disabled = true;
-            stopBtn.textContent = '停止中...';
+            stopBtn.textContent = 'Parando...';
         });
 
         const BATCH_SIZE = 50; // 每批处理轮数
@@ -3395,7 +3395,7 @@ class GameUI {
             if (!this._autoEternalRunning) {
                 this._finishAutoEternal({ reason: 'stopped', bought: stepResult?.totalBought || 0, spent: stepResult?.totalSpent || 0, synthesized: stepResult?.totalSynthesized || 0, rounds: batchCount }, infoEl, barEl, stopBtn, overlay);
             } else {
-                infoEl.innerHTML = `第 ${batchCount} 轮...<br>已购买 ${stepResult.totalBought} 颗 | 花费 ${stepResult.totalSpent.toLocaleString()} 金币 | 合成 ${stepResult.totalSynthesized} 次`;
+                infoEl.innerHTML = `Rodada ${batchCount}...<br>Compradas: ${stepResult.totalBought} | Gasto: ${stepResult.totalSpent.toLocaleString('pt-BR')} moedas | Sínteses: ${stepResult.totalSynthesized}`;
                 barEl.style.width = Math.min(100, (batchCount % 500) / 500 * 100) + '%';
                 setTimeout(runBatch, 0); // 让出主线程
             }
@@ -3407,17 +3407,17 @@ class GameUI {
     _finishAutoEternal(result, infoEl, barEl, stopBtn, overlay) {
         this._autoEternalRunning = false;
         const reasonText = result.reason === 'eternal_found'
-            ? `<span style="color:#e74c3c">✨ 成功获得 ${result.newEternals} 颗永恒宝石！</span>`
+            ? `<span style="color:#e74c3c">✨ ${result.newEternals} ${ptPlural(result.newEternals, 'Gema Eterna obtida', 'Gemas Eternas obtidas')}!</span>`
             : result.reason === 'stopped'
-                ? '<span style="color:#f39c12">⏹️ 已手动停止</span>'
+                ? '<span style="color:#f39c12">⏹️ Parado manualmente</span>'
                 : result.reason === 'gold_empty'
-                    ? '💰 金币已耗尽'
-                    : '🎒 背包已满且无法继续合成';
-        infoEl.innerHTML = `${reasonText}<br><small>共购买 ${result.bought} 颗，花费 ${result.spent.toLocaleString()} 金币，合成 ${result.synthesized} 次（${result.rounds} 轮）</small>`;
+                    ? '💰 Moedas esgotadas'
+                    : '🎒 Bolsa cheia, não dá para continuar';
+        infoEl.innerHTML = `${reasonText}<br><small>Compradas: ${result.bought} · Gasto: ${result.spent.toLocaleString('pt-BR')} moedas · Sínteses: ${result.synthesized} (${result.rounds} ${ptPlural(result.rounds, 'rodada', 'rodadas')})</small>`;
         barEl.style.width = '100%';
         // 克隆替换按钮，清除所有旧的 eventListener
         const doneBtn = stopBtn.cloneNode(true);
-        doneBtn.textContent = '完成';
+        doneBtn.textContent = 'Concluir';
         doneBtn.disabled = false;
         doneBtn.addEventListener('click', () => { overlay.remove(); this.renderBadgePage(); });
         stopBtn.parentNode.replaceChild(doneBtn, stopBtn);
@@ -3426,7 +3426,7 @@ class GameUI {
     showReforgeDialog() {
         const eternalGems = this.game.gameState.gems.filter(g => g.quality === 'eternal' && !g.locked);
         if (eternalGems.length < 2) {
-            this.showToast(`⚠️ 需要至少2个未锁定的永恒宝石，当前${eternalGems.length}个`);
+            this.showToast(`⚠️ Precisa de ao menos 2 Gemas Eternas destravadas (você tem ${eternalGems.length})`);
             return;
         }
 
@@ -3434,11 +3434,11 @@ class GameUI {
         overlay.className = 'modal-overlay';
 
         const listHtml = eternalGems.map((g, idx) => {
-            const attrsText = g.attrs.map(a => `${escapeHtml(a.icon)}${escapeHtml(a.name)}+${escapeHtml(a.value)}${escapeHtml(a.unit)}`).join('、');
+            const attrsText = g.attrs.map(a => `${escapeHtml(a.icon)}${escapeHtml(a.name)}+${escapeHtml(a.value)}${escapeHtml(a.unit)}`).join(', ');
             return `
                 <label class="synthesis-item">
                     <input type="checkbox" class="reforge-check" value="${escapeHtml(g.uid)}" ${idx < 2 ? 'checked' : ''}>
-                    <span class="synthesis-item-name">💎 ${escapeHtml(g.qualityName)}宝石</span>
+                    <span class="synthesis-item-name">💎 Gema ${escapeHtml(g.qualityName)}</span>
                     <span class="synthesis-item-attrs">${attrsText}</span>
                 </label>
             `;
@@ -3446,13 +3446,13 @@ class GameUI {
 
         overlay.innerHTML = `
             <div class="modal synthesis-modal">
-                <h3>🔨 重铸永恒宝石</h3>
-                <p>选择 2 个永恒宝石，重铸为 1 个新的永恒宝石（重新随机属性）</p>
-                <div class="synthesis-count">已选择 <span id="reforge-selected-count">2</span>/2</div>
+                <h3>🔨 Refundir Gema Eterna</h3>
+                <p>Escolha 2 Gemas Eternas para refundir em 1 nova Gema Eterna (atributos sorteados de novo)</p>
+                <div class="synthesis-count">Selecionadas <span id="reforge-selected-count">2</span>/2</div>
                 <div class="synthesis-list">${listHtml}</div>
                 <div class="modal-buttons">
-                    <button class="cancel-btn">取消</button>
-                    <button class="confirm-btn">确认重铸</button>
+                    <button class="cancel-btn">Cancelar</button>
+                    <button class="confirm-btn">Refundir</button>
                 </div>
             </div>
         `;
@@ -3472,7 +3472,7 @@ class GameUI {
                 const selectedCount = checks.filter(x => x.checked).length;
                 if (selectedCount > 2) {
                     c.checked = false;
-                    this.showToast('⚠️ 最多只能选择2个宝石');
+                    this.showToast('⚠️ Máximo de 2 gemas');
                 }
                 updateSelectedState();
             });
@@ -3487,7 +3487,7 @@ class GameUI {
                 return;
             }
             overlay.remove();
-            this.showToast(`🔨 重铸成功！获得新的永恒宝石`);
+            this.showToast(`🔨 Refundição concluída! Nova Gema Eterna obtida`);
             this.renderBadgePage();
         });
 
@@ -3512,7 +3512,7 @@ class GameUI {
 
         const gems = this.game.gameState.gems;
         if (gems.length === 0) {
-            container.innerHTML = '<div class="gem-bag-empty">背包空空如也，去商店购买宝石吧！</div>';
+            container.innerHTML = '<div class="gem-bag-empty">Bolsa vazia. Compre gemas na loja!</div>';
             return;
         }
 
@@ -3549,22 +3549,22 @@ class GameUI {
             }
 
             const equipBtnsHtml = badgeOptions.map(b =>
-                `<button class="gem-equip-btn" data-gem-uid="${escapeHtml(gem.uid)}" data-region="${b.regionId}">镶嵌到${b.name}</button>`
+                `<button class="gem-equip-btn" data-gem-uid="${escapeHtml(gem.uid)}" data-region="${b.regionId}">Engastar em ${b.name}</button>`
             ).join('');
 
-            const newBadgeHtml = gem.isNew ? '<span class="gem-new-badge" title="新购买">NEW</span>' : '';
+            const newBadgeHtml = gem.isNew ? '<span class="gem-new-badge" title="Nova compra">NEW</span>' : '';
 
             const gemAttrTotal = gem.attrs.reduce((sum, a) => sum + a.value, 0);
             card.innerHTML = `
                 ${newBadgeHtml}
-                <div class="gem-name">${gem.locked ? '🔒 ' : ''}💎 ${escapeHtml(gem.qualityName)}宝石</div>
+                <div class="gem-name">${gem.locked ? '🔒 ' : ''}💎 Gema ${escapeHtml(gem.qualityName)}</div>
                 <div class="gem-hover-panel">
                     <div class="gem-attrs">${attrsHtml}</div>
-                    <div class="gem-attr-sum-row" style="color:${safeCssColor(gem.qualityColor)}">属性总和：${gemAttrTotal}%</div>
+                    <div class="gem-attr-sum-row" style="color:${safeCssColor(gem.qualityColor)}">Soma dos atributos: ${gemAttrTotal}%</div>
                     <div class="gem-equip-actions">${equipBtnsHtml}</div>
                     <div class="gem-action-row">
-                        <button class="gem-lock-btn${gem.locked ? ' locked' : ''}" data-gem-uid="${escapeHtml(gem.uid)}">${gem.locked ? '🔓 解锁' : '🔒 锁定'}</button>
-                        <button class="gem-discard-btn" data-gem-uid="${escapeHtml(gem.uid)}">🗑️ 丢弃</button>
+                        <button class="gem-lock-btn${gem.locked ? ' locked' : ''}" data-gem-uid="${escapeHtml(gem.uid)}">${gem.locked ? '🔓 Destravar' : '🔒 Travar'}</button>
+                        <button class="gem-discard-btn" data-gem-uid="${escapeHtml(gem.uid)}">🗑️ Descartar</button>
                     </div>
                 </div>
             `;
@@ -3626,7 +3626,7 @@ class GameUI {
                     const gemUid = btn.dataset.gemUid;
                     const result = this.game.equipGem(regionId, gemUid);
                     if (result.success) {
-                        this.showToast(`💎 宝石已镶嵌到 ${BADGE_DATA[regionId].name}`);
+                        this.showToast(`💎 Gema engastada em ${BADGE_DATA[regionId].name}`);
                         this.renderBadgePage();
                     } else {
                         this.showToast('⚠️ ' + result.message);
@@ -3641,7 +3641,7 @@ class GameUI {
                     e.stopPropagation();
                     const result = this.game.toggleGemLock(gem.uid);
                     if (result.success) {
-                        this.showToast(result.locked ? '🔒 宝石已锁定' : '🔓 宝石已解锁');
+                        this.showToast(result.locked ? '🔒 Gema travada' : '🔓 Gema destravada');
                         this.renderGemBag();
                         this.renderShop();
                     } else {
@@ -3656,10 +3656,10 @@ class GameUI {
                 discardBtn.addEventListener('click', (e) => {
                     markGemViewed();
                     e.stopPropagation();
-                    this.showConfirmDialog('丢弃宝石', '确定要丢弃这颗宝石吗？此操作不可恢复。', () => {
+                    this.showConfirmDialog('Descartar gema', 'Descartar esta gema? Esta ação não pode ser desfeita.', () => {
                         const result = this.game.discardGem(gem.uid);
                         if (result.success) {
-                            this.showToast('🗑️ 宝石已丢弃');
+                            this.showToast('🗑️ Gema descartada');
                             this.renderBadgePage();
                         } else {
                             this.showToast('⚠️ ' + result.message);
@@ -3700,7 +3700,7 @@ class GameUI {
         const hasAnyBonus = Object.values(bonuses).some(v => v > 0);
 
         if (!hasAnyBonus) {
-            container.innerHTML = '<div class="gem-bonus-empty">暂无宝石加成，镶嵌宝石到徽章中即可获得加成</div>';
+            container.innerHTML = '<div class="gem-bonus-empty">Sem bônus de gemas. Engaste gemas nas Insígnias para ganhar bônus.</div>';
             return;
         }
 
@@ -3711,7 +3711,7 @@ class GameUI {
                 line.className = 'gem-bonus-line';
                 let valueText = `+${bonuses[attr.id]}${attr.unit}`;
                 if (attr.id === 'dodge_rate' && bonuses[attr.id] > 75) {
-                    valueText += `（上限：75%）`;
+                    valueText += ` (máx.: 75%)`;
                 }
                 line.innerHTML = `<span>${attr.icon} ${attr.name}</span><span class="gem-bonus-value">${valueText}</span>`;
                 container.appendChild(line);
@@ -3766,8 +3766,8 @@ class GameUI {
         const floorDisplay = document.getElementById('tower-floor-display');
         if (floorDisplay) {
             floorDisplay.innerHTML = `
-                <span class="tower-progress">进度：<strong>${tower.currentFloor}</strong> / ${TOWER_MAX_FLOOR} 层</span>
-                <span class="tower-highest">最高：<strong>${tower.highestFloor}</strong> 层</span>
+                <span class="tower-progress">Progresso: <strong>${tower.currentFloor}</strong> / ${TOWER_MAX_FLOOR} ${ptPlural(TOWER_MAX_FLOOR, 'andar', 'andares')}</span>
+                <span class="tower-highest">Recorde: <strong>${tower.highestFloor}</strong> ${ptPlural(tower.highestFloor, 'andar', 'andares')}</span>
             `;
         }
 
@@ -3778,17 +3778,17 @@ class GameUI {
                 <div class="tower-bonus-grid">
                     <div class="tower-bonus-item">
                         <span class="bonus-icon">📈</span>
-                        <span class="bonus-label">经验值</span>
+                        <span class="bonus-label">EXP</span>
                         <span class="bonus-value">+${bonus}%</span>
                     </div>
                     <div class="tower-bonus-item">
                         <span class="bonus-icon">🪙</span>
-                        <span class="bonus-label">金币</span>
+                        <span class="bonus-label">Moedas</span>
                         <span class="bonus-value">+${bonus}%</span>
                     </div>
                     <div class="tower-bonus-item">
                         <span class="bonus-icon">✨</span>
-                        <span class="bonus-label">闪光概率</span>
+                        <span class="bonus-label">Chance Shiny</span>
                         <span class="bonus-value">+${bonus}%</span>
                     </div>
                 </div>
@@ -3800,11 +3800,11 @@ class GameUI {
         if (rulesContent) {
             rulesContent.innerHTML = `
                 <div class="tower-rules-list">
-                    <div class="tower-rule-item">🏝️ 挑战塔共 <strong>${TOWER_MAX_FLOOR} 层</strong>，每层 <strong>${TOWER_ENEMIES_PER_FLOOR} 只</strong>高种族值闪光宝可梦</div>
-                    <div class="tower-rule-item">⚔️ 需要连续击败6只才能通关，<strong>HP跨怪物继承</strong>（每场战斗不回复血量）</div>
-                    <div class="tower-rule-item">🔄 每层进入时<strong>HP回满</strong>，失败后从第一只怪重新开始</div>
-                    <div class="tower-rule-item">📈 通关加成：<strong>历史最高层数%</strong> 额外增加经验/金币/闪光概率</div>
-                    <div class="tower-rule-item">⚠️ 怪物等级范围：<strong>${this.game.getTowerFloorLevel(1).toLocaleString()}</strong> ~ <strong>${this.game.getTowerFloorLevel(TOWER_MAX_FLOOR).toLocaleString()}</strong></div>
+                    <div class="tower-rule-item">🏝️ A Torre tem <strong>${TOWER_MAX_FLOOR} andares</strong>, cada um com <strong>${TOWER_ENEMIES_PER_FLOOR}</strong> Pokémon Shiny de stats base altos</div>
+                    <div class="tower-rule-item">⚔️ Derrote 6 seguidos para concluir. O <strong>HP é mantido entre as lutas</strong> (sem cura a cada batalha)</div>
+                    <div class="tower-rule-item">🔄 Ao entrar no andar, o <strong>HP é restaurado</strong>. Se falhar, recomeça no primeiro inimigo</div>
+                    <div class="tower-rule-item">📈 Bônus de conclusão: <strong>% igual ao recorde de andares</strong> extra em EXP, moedas e chance Shiny</div>
+                    <div class="tower-rule-item">⚠️ Nível dos inimigos: <strong>${this.game.getTowerFloorLevel(1).toLocaleString('pt-BR')}</strong> ~ <strong>${this.game.getTowerFloorLevel(TOWER_MAX_FLOOR).toLocaleString('pt-BR')}</strong></div>
                 </div>
             `;
         }
@@ -3813,7 +3813,7 @@ class GameUI {
         const floorTitle = document.getElementById('tower-floor-title');
         if (floorTitle) {
             const level = this.game.getTowerFloorLevel(tower.currentFloor);
-            floorTitle.textContent = `第 ${tower.currentFloor} 层 — 怪物等级 ${level.toLocaleString()}`;
+            floorTitle.textContent = `Andar ${tower.currentFloor} — inimigos Lv.${level.toLocaleString('pt-BR')}`;
         }
 
         // 敌人网格
@@ -3847,7 +3847,7 @@ class GameUI {
                                 <img src="${spriteUrl}" alt="${name}" onerror="this.style.display='none';this.parentElement.textContent='${name.slice(0,2)}'">
                             </div>
                             <div class="tower-enemy-name">${name}</div>
-                            <div class="tower-enemy-level">Lv.${level.toLocaleString()}</div>
+                            <div class="tower-enemy-level">Lv.${level.toLocaleString('pt-BR')}</div>
                         </div>
                     `;
                 }
@@ -3868,11 +3868,11 @@ class GameUI {
 
                 // 全部通关 100 层
                 if (tower.currentFloor >= TOWER_MAX_FLOOR && tower.highestFloor >= TOWER_MAX_FLOOR) {
-                    startBtn.textContent = `🏆 已通关全部 ${tower.currentFloor} 层！`;
+                    startBtn.textContent = `🏆 Todos os ${tower.currentFloor} andares concluídos!`;
                     startBtn.disabled = true;
                     startBtn.classList.add('maxed');
                 } else {
-                    startBtn.textContent = `⚔️ 挑战第 ${tower.currentFloor} 层`;
+                    startBtn.textContent = `⚔️ Desafiar andar ${tower.currentFloor}`;
                     startBtn.disabled = false;
                     startBtn.classList.remove('maxed');
                 }
@@ -3905,7 +3905,7 @@ class GameUI {
 
                 // 切换到战斗页面
                 this.switchTab('tab-battle');
-                this.addBattleLog(`🏝️ 进入挑战塔第 ${this.game.gameState.tower.currentFloor} 层！`, 'evolution');
+                this.addBattleLog(`🏝️ Entrou no andar ${this.game.gameState.tower.currentFloor} da Torre!`, 'evolution');
 
                 // 开始战斗
                 this.game.startTowerBattle();
@@ -3916,8 +3916,8 @@ class GameUI {
             fleeBtn.addEventListener('click', () => {
                 if (!this.game._towerMode) return;
                 this.game.exitTower();
-                this.addBattleLog(`🏃 撤退了挑战塔`, 'info');
-                this.showToast('🏃 已撤退，返回主线战斗');
+                this.addBattleLog(`🏃 Você se retirou da Torre`, 'info');
+                this.showToast('🏃 Retirada! Voltando à batalha principal');
                 this.renderTowerPage();
             });
         }

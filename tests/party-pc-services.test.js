@@ -162,7 +162,7 @@ test('describeInstance：给界面用的快照，能区分同物种的两只', (
     assert.notEqual(da.uid, db.uid);
     assert.equal(da.ivPercent, 100);
     assert.equal(db.ivPercent, 0);
-    assert.equal(da.natureName, '胆小');
+    assert.equal(da.natureName, 'Tímida');
     assert.equal(db.displayName, '小黄');
     assert.equal(da.where, 'pc');
     assert.equal(game.describeInstance(game.gameState.party[0]).where, 'party');

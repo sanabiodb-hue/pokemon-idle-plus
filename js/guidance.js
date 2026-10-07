@@ -18,65 +18,65 @@ const GUIDE_UPDATE_MIN_INTERVAL_MS = 1000;  // 由战斗胜利触发的检查最
 // 新手引导步骤。done(game)：由状态判定；cta：可点的快捷入口
 const GUIDE_ONBOARDING_STEPS = [
     {
-        id: 'battle', icon: '⚔️', title: '看第一场战斗',
-        text: '战斗是自动进行的——你的皮卡丘正在战斗，等它击败第一只野生宝可梦吧。',
+        id: 'battle', icon: '⚔️', title: 'Assista à sua primeira batalha',
+        text: 'A batalha é automática. Espere seu Pikachu vencer o primeiro Pokémon selvagem.',
         done: (g) => g.gameState.stats.totalBattles >= 1,
         progress: (g) => ({ current: Math.min(1, g.gameState.stats.totalBattles), total: 1 }),
         reward: 0.3,
-        doneText: '漂亮！击败野生宝可梦会给你经验，皮卡丘会越来越强。',
+        doneText: 'Boa! Vencer dá EXP, e seu Pikachu fica cada vez mais forte.',
     },
     {
-        id: 'capture', icon: '🎯', title: '捕获新伙伴',
-        text: '击败野生宝可梦会自动捕获它。再赢几场，收下你的第一个新伙伴！',
+        id: 'capture', icon: '🎯', title: 'Capture seu primeiro Pokémon',
+        text: 'Vencer um Pokémon selvagem captura ele automaticamente. Ganhe mais algumas batalhas!',
         done: (g) => g.getPokedexStats().caught >= 2,
-        progress: (g) => ({ current: Math.min(2, g.getPokedexStats().caught), total: 2, label: '已收集' }),
+        progress: (g) => ({ current: Math.min(2, g.getPokedexStats().caught), total: 2, label: 'Coletados' }),
         reward: 0.4,
-        doneText: '你有了第一个新伙伴！它已经被送到 PC。',
+        doneText: 'Você tem um novo Pokémon! Ele foi enviado para o PC.',
     },
     {
-        id: 'pc', icon: '🖥️', title: '打开 PC',
-        text: '新伙伴在 PC 里。点底部的「PC」看看它。',
+        id: 'pc', icon: '🖥️', title: 'Abra o PC',
+        text: 'Seu novo Pokémon está no PC. Toque em “PC” lá embaixo.',
         done: (g) => !!g.gameState.guide.flags.pcOpened,
-        cta: { label: '打开 PC', tab: 'tab-pc' },
+        cta: { label: 'Abrir PC', tab: 'tab-pc' },
         reward: 0.2,
-        doneText: '这里存放所有没上场的宝可梦，同一种捕获多只也会分开显示。',
+        doneText: 'O PC guarda quem não está na equipe. Se capturar a mesma espécie de novo, cada um aparece separado.',
     },
     {
-        id: 'party', icon: '👥', title: '组建队伍',
-        text: '在 PC 里点中新伙伴，再点「加入队伍」。队伍里的伙伴会一起获得经验。',
+        id: 'party', icon: '👥', title: 'Monte sua equipe',
+        text: 'No PC, toque no novo Pokémon e depois em “Adicionar à equipe”. Quem está na equipe ganha EXP junto.',
         done: (g) => g.gameState.party.length >= 2,
-        progress: (g) => ({ current: Math.min(2, g.gameState.party.length), total: 2, label: '队伍' }),
-        cta: { label: '去 PC', tab: 'tab-pc' },
+        progress: (g) => ({ current: Math.min(2, g.gameState.party.length), total: 2, label: 'Equipe' }),
+        cta: { label: 'Ir ao PC', tab: 'tab-pc' },
         reward: 0.5,
-        doneText: '队伍最多 6 只。没上场的宝可梦还会按比例给队伍加成。',
+        doneText: 'A equipe tem até 6 Pokémon. Quem fica de fora ainda dá um bônus à equipe.',
     },
     {
-        id: 'explore', icon: '🗺️', title: '探索新道路',
-        text: '这条道路上的宝可梦快抓齐了。去「地图」选一条新道路，发现更多种类！',
+        id: 'explore', icon: '🗺️', title: 'Explore uma nova rota',
+        text: 'Você já capturou quase tudo desta rota. Abra o “Mapa” e escolha uma rota nova!',
         done: (g) => !!g.gameState.guide.flags.routeChanged,
-        cta: { label: '打开地图', tab: 'tab-map' },
+        cta: { label: 'Abrir Mapa', tab: 'tab-map' },
         reward: 0.6,
-        doneText: '每条道路有不同的宝可梦和等级。集齐一个地区的图鉴就能解锁下一个地区！',
+        doneText: 'Cada rota tem Pokémon e níveis diferentes. Complete a Pokédex de uma região para desbloquear a próxima!',
     },
 ];
 
 // 目标（里程碑）。current(game) → 当前进度；达成后自动发奖励（reward 是“占升一级所需经验的比例”）
 const GUIDE_GOALS = [
-    { id: 'evolve_first', title: '见证第一次进化', desc: '让一只宝可梦进化', target: 1, reward: 1, current: (g) => g.guideCounters().evolved ? 1 : 0 },
-    { id: 'catch_10', title: '收集 10 种宝可梦', desc: '图鉴里有 10 种', target: 10, reward: 0.6, current: (g) => g.getPokedexStats().caught },
-    { id: 'win_50', title: '打赢 50 场战斗', desc: '累计胜利 50 场', target: 50, reward: 0.6, current: (g) => g.gameState.stats.totalBattles },
-    { id: 'level_10', title: '培养一只 Lv.10', desc: '拥有一只 10 级的宝可梦', target: 10, reward: 0.6, current: (g) => g.guideMaxLevel() },
-    { id: 'duplicate_2', title: '收下同一种的第二只', desc: '同一种宝可梦拥有 2 只（每只的个体值、性格都不同）', target: 2, reward: 0.8, current: (g) => g.guideMostOfOneSpecies() },
-    { id: 'catch_25', title: '收集 25 种宝可梦', desc: '图鉴里有 25 种', target: 25, reward: 0.8, current: (g) => g.getPokedexStats().caught },
-    { id: 'party_6', title: '组满 6 只队伍', desc: '队伍里有 6 只宝可梦', target: 6, reward: 0.8, current: (g) => g.gameState.party.length },
-    { id: 'level_25', title: '培养一只 Lv.25', desc: '拥有一只 25 级的宝可梦', target: 25, reward: 0.8, current: (g) => g.guideMaxLevel() },
-    { id: 'win_200', title: '打赢 200 场战斗', desc: '累计胜利 200 场', target: 200, reward: 0.8, current: (g) => g.gameState.stats.totalBattles },
-    { id: 'shiny_first', title: '发现一只闪光', desc: '遇到并击败一只闪光宝可梦（概率约 1/4096）', target: 1, reward: 1, current: (g) => Math.min(1, g.getShinyStats()) },
-    { id: 'catch_50', title: '收集 50 种宝可梦', desc: '图鉴里有 50 种', target: 50, reward: 1, current: (g) => g.getPokedexStats().caught },
-    { id: 'perfect_iv', title: '拥有一只 6V', desc: '一只六项个体值都是 31 的宝可梦', target: 1, reward: 1, current: (g) => g.guideHasPerfectIv() ? 1 : 0 },
-    { id: 'level_50', title: '培养一只 Lv.50', desc: '拥有一只 50 级的宝可梦', target: 50, reward: 1, current: (g) => g.guideMaxLevel() },
-    { id: 'win_1000', title: '打赢 1000 场战斗', desc: '累计胜利 1000 场', target: 1000, reward: 1, current: (g) => g.gameState.stats.totalBattles },
-    { id: 'catch_100', title: '收集 100 种宝可梦', desc: '图鉴里有 100 种', target: 100, reward: 1, current: (g) => g.getPokedexStats().caught },
+    { id: 'evolve_first', title: 'Evolua um Pokémon', desc: 'Faça um Pokémon evoluir', target: 1, reward: 1, current: (g) => g.guideCounters().evolved ? 1 : 0 },
+    { id: 'catch_10', title: 'Capture 10 espécies', desc: 'Tenha 10 espécies na Pokédex', target: 10, reward: 0.6, current: (g) => g.getPokedexStats().caught },
+    { id: 'win_50', title: 'Vença 50 batalhas', desc: 'Acumule 50 vitórias', target: 50, reward: 0.6, current: (g) => g.gameState.stats.totalBattles },
+    { id: 'level_10', title: 'Treine um Pokémon até o Lv.10', desc: 'Tenha um Pokémon no Lv.10', target: 10, reward: 0.6, current: (g) => g.guideMaxLevel() },
+    { id: 'duplicate_2', title: 'Capture a mesma espécie de novo', desc: 'Tenha 2 Pokémon da mesma espécie (cada um com IVs e natureza próprios)', target: 2, reward: 0.8, current: (g) => g.guideMostOfOneSpecies() },
+    { id: 'catch_25', title: 'Capture 25 espécies', desc: 'Tenha 25 espécies na Pokédex', target: 25, reward: 0.8, current: (g) => g.getPokedexStats().caught },
+    { id: 'party_6', title: 'Complete sua equipe', desc: 'Tenha 6 Pokémon na equipe', target: 6, reward: 0.8, current: (g) => g.gameState.party.length },
+    { id: 'level_25', title: 'Treine um Pokémon até o Lv.25', desc: 'Tenha um Pokémon no Lv.25', target: 25, reward: 0.8, current: (g) => g.guideMaxLevel() },
+    { id: 'win_200', title: 'Vença 200 batalhas', desc: 'Acumule 200 vitórias', target: 200, reward: 0.8, current: (g) => g.gameState.stats.totalBattles },
+    { id: 'shiny_first', title: 'Encontre um Pokémon Shiny', desc: 'Derrote um Pokémon Shiny (chance de cerca de 1 em 4096)', target: 1, reward: 1, current: (g) => Math.min(1, g.getShinyStats()) },
+    { id: 'catch_50', title: 'Capture 50 espécies', desc: 'Tenha 50 espécies na Pokédex', target: 50, reward: 1, current: (g) => g.getPokedexStats().caught },
+    { id: 'perfect_iv', title: 'Tenha um Pokémon 6V', desc: 'Um Pokémon com os seis IVs em 31', target: 1, reward: 1, current: (g) => g.guideHasPerfectIv() ? 1 : 0 },
+    { id: 'level_50', title: 'Treine um Pokémon até o Lv.50', desc: 'Tenha um Pokémon no Lv.50', target: 50, reward: 1, current: (g) => g.guideMaxLevel() },
+    { id: 'win_1000', title: 'Vença 1.000 batalhas', desc: 'Acumule 1.000 vitórias', target: 1000, reward: 1, current: (g) => g.gameState.stats.totalBattles },
+    { id: 'catch_100', title: 'Capture 100 espécies', desc: 'Tenha 100 espécies na Pokédex', target: 100, reward: 1, current: (g) => g.getPokedexStats().caught },
 ];
 
 function guideDefaultState(onboarding) {
@@ -305,7 +305,7 @@ const GuidanceMethods = {
             if (this.isRegionUnlocked(regionId)) continue;
             const prog = this.getRegionUnlockProgress(regionId);
             list.push({
-                id: 'unlock_' + regionId, title: `解锁${REGIONS[regionId].name}`, desc: REGIONS[regionId].description,
+                id: 'unlock_' + regionId, title: `Desbloqueie ${REGIONS[regionId].name}`, desc: REGIONS[regionId].description,
                 current: prog.current, target: prog.total, done: false, ratio: prog.total ? prog.current / prog.total : 0, region: true,
             });
             break;
@@ -331,7 +331,7 @@ const GuidanceMethods = {
             };
             // 探索这一步：当前道路确实还有没抓到的，就先别催着换路
             if (step.id === 'explore' && here && here.newCount > 0) {
-                action.text = `这条道路还有 ${here.newCount} 种没抓到，也可以直接去「地图」看看新道路。`;
+                action.text = `${ptPlural(here.newCount, 'Falta', 'Faltam')} ${here.newCount} ${ptPlural(here.newCount, 'espécie', 'espécies')} nesta rota, mas você pode abrir o “Mapa” e ver outras rotas.`;
             }
             return action;
         }
@@ -341,9 +341,9 @@ const GuidanceMethods = {
             const rec = this.getRecommendedRoute();
             if (rec) {
                 return {
-                    type: 'route', icon: '🗺️', title: '这条道路已经抓齐了',
-                    text: `去「${rec.route.name}」（Lv.${rec.route.levelRange[0]}~${rec.route.levelRange[1]}），那里有 ${rec.progress.newCount} 种你还没有的宝可梦。`,
-                    cta: { label: '前往', route: rec.route.id, tab: 'tab-map' },
+                    type: 'route', icon: '🗺️', title: 'Esta rota está completa',
+                    text: `Vá para ${rec.route.name} (Lv.${rec.route.levelRange[0]}~${rec.route.levelRange[1]}): há ${rec.progress.newCount} ${ptPlural(rec.progress.newCount, 'espécie nova', 'espécies novas')} para capturar.`,
+                    cta: { label: 'Ir', route: rec.route.id, tab: 'tab-map' },
                 };
             }
         }
@@ -353,11 +353,11 @@ const GuidanceMethods = {
             const name = POKEMON_DATA[evo.inst.speciesId].name;
             const target = POKEMON_DATA[evo.evo.id].name;
             return {
-                type: 'evolution', icon: '🌟', title: `${name} 快要进化了`,
+                type: 'evolution', icon: '🌟', title: `${name} está quase evoluindo`,
                 text: evo.resets
-                    ? `再升 ${evo.left} 级就会变成${target}（新登记的形态从 Lv.1 重新成长，${name}会留在图鉴里）。`
-                    : `再升 ${evo.left} 级就会变成${target}，等级保持不变。`,
-                progress: { current: evo.inst.level, total: evo.evo.level, label: '等级' },
+                    ? `Faltam ${evo.left} ${ptPlural(evo.left, 'nível', 'níveis')}. A nova forma (${target}) volta para o Lv.1, e ${name} continua na Pokédex.`
+                    : `Faltam ${evo.left} ${ptPlural(evo.left, 'nível', 'níveis')} para virar ${target}. O nível se mantém.`,
+                progress: { current: evo.inst.level, total: evo.evo.level, label: 'Lv.' },
             };
         }
 
@@ -366,10 +366,10 @@ const GuidanceMethods = {
             const goal = goals[0];
             return {
                 type: 'goal', icon: '🏆', title: goal.title, text: goal.desc,
-                progress: { current: goal.current, total: goal.target }, cta: { label: '全部目标', goals: true },
+                progress: { current: goal.current, total: goal.target }, cta: { label: 'Todas as metas', goals: true },
             };
         }
-        return { type: 'idle', icon: '✨', title: '继续挂机吧', text: '更多宝可梦和道路等你发现。', cta: { label: '全部目标', goals: true } };
+        return { type: 'idle', icon: '✨', title: 'Continue jogando', text: 'Ainda há mais Pokémon e rotas para descobrir.', cta: { label: 'Todas as metas', goals: true } };
     },
 };
 

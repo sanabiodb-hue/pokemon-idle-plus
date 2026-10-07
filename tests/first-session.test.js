@@ -72,8 +72,8 @@ test('卡在第一条道路上：抓齐后下一步建议是“前往新道路�
     const a = game.getNextAction();
     assert.equal(a.type, 'route');
     assert.equal(a.cta.route, 'kanto_route2');
-    assert.match(a.text, /2号道路/);
-    assert.match(a.text, /2 种/);
+    assert.match(a.text, /Rota 2/);
+    assert.match(a.text, /2 espécies novas/);
     assert.equal(game.changeRoute(a.cta.route), true);
     assert.notEqual(game.getNextAction().type === 'route' && game.getNextAction().cta.route === 'kanto_route2', true, '去了之后不会再推荐同一条');
 });

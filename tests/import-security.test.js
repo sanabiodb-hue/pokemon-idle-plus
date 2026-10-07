@@ -158,17 +158,17 @@ test('导入：非法输入返回明确原因，且不改动当前游戏', () =>
     game.saveNow();
     const snapshot = JSON.stringify(game.gameState);
     const cases = [
-        ['', /为空/],
-        ['   ', /为空/],
+        ['', /vazio/],
+        ['   ', /vazio/],
         ['not base64 !!!', /Base64/],
         ['{"a":', /JSON/],
-        ['[]', /对象|队伍/],
+        ['[]', /objeto|equipe/],
         ['null', /./],
-        ['{}', /队伍/],
-        ['{"team":[]}', /队伍/],
-        ['{"team":[999999]}', /队伍/],
-        [Buffer.from('LZ:乱码').toString('base64'), /解压|JSON/],
-        ['x'.repeat(31 * 1000 * 1000), /过大/],
+        ['{}', /equipe/],
+        ['{"team":[]}', /equipe/],
+        ['{"team":[999999]}', /equipe/],
+        [Buffer.from('LZ:乱码').toString('base64'), /descompactar|JSON/],
+        ['x'.repeat(31 * 1000 * 1000), /grande demais/],
     ];
     for (const [input, re] of cases) {
         const r = game.importSave(input);

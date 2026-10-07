@@ -1594,9 +1594,9 @@ class GameCore {
             typeEffectiveness = getBestTypeEffectiveness(attackerTypes, defenderTypes).multiplier;
             damage = Math.floor(damage * typeEffectiveness);
 
-            if (typeEffectiveness <= 0.25) effectivenessText = '微弱伤害...';
-            else if (typeEffectiveness > 1) effectivenessText = '效果拔群！';
-            else if (typeEffectiveness < 1) effectivenessText = '效果不佳...';
+            if (typeEffectiveness <= 0.25) effectivenessText = 'Quase nenhum dano...';
+            else if (typeEffectiveness > 1) effectivenessText = 'É super efetivo!';
+            else if (typeEffectiveness < 1) effectivenessText = 'Não foi muito efetivo...';
         }
 
         // 会心一击判定
@@ -2256,7 +2256,7 @@ class GameCore {
             if (!wasJohtoUnlocked && this.isRegionUnlocked('johto')) {
                 this._track('route_unlock', { region: 'johto' });
                 if (this.onBattleEvent) {
-                    this.onBattleEvent('regionUnlocked', { regionId: 'johto', regionName: '城都地区' });
+                    this.onBattleEvent('regionUnlocked', { regionId: 'johto', regionName: 'Região de Johto' });
                 }
             }
 
@@ -2264,7 +2264,7 @@ class GameCore {
             if (!wasHoennUnlocked && this.isRegionUnlocked('hoenn')) {
                 this._track('route_unlock', { region: 'hoenn' });
                 if (this.onBattleEvent) {
-                    this.onBattleEvent('regionUnlocked', { regionId: 'hoenn', regionName: '丰缘地区' });
+                    this.onBattleEvent('regionUnlocked', { regionId: 'hoenn', regionName: 'Região de Hoenn' });
                 }
             }
 
@@ -2272,7 +2272,7 @@ class GameCore {
             if (!wasSinnohUnlocked && this.isRegionUnlocked('sinnoh')) {
                 this._track('route_unlock', { region: 'sinnoh' });
                 if (this.onBattleEvent) {
-                    this.onBattleEvent('regionUnlocked', { regionId: 'sinnoh', regionName: '神奥地区' });
+                    this.onBattleEvent('regionUnlocked', { regionId: 'sinnoh', regionName: 'Região de Sinnoh' });
                 }
             }
 
@@ -2280,7 +2280,7 @@ class GameCore {
             if (!wasUnovaUnlocked && this.isRegionUnlocked('unova')) {
                 this._track('route_unlock', { region: 'unova' });
                 if (this.onBattleEvent) {
-                    this.onBattleEvent('regionUnlocked', { regionId: 'unova', regionName: '合众地区' });
+                    this.onBattleEvent('regionUnlocked', { regionId: 'unova', regionName: 'Região de Unova' });
                 }
             }
 
@@ -2288,7 +2288,7 @@ class GameCore {
             if (!wasKalosUnlocked && this.isRegionUnlocked('kalos')) {
                 this._track('route_unlock', { region: 'kalos' });
                 if (this.onBattleEvent) {
-                    this.onBattleEvent('regionUnlocked', { regionId: 'kalos', regionName: '卡洛斯地区' });
+                    this.onBattleEvent('regionUnlocked', { regionId: 'kalos', regionName: 'Região de Kalos' });
                 }
             }
 
@@ -2296,7 +2296,7 @@ class GameCore {
             if (!wasAlolaUnlocked && this.isRegionUnlocked('alola')) {
                 this._track('route_unlock', { region: 'alola' });
                 if (this.onBattleEvent) {
-                    this.onBattleEvent('regionUnlocked', { regionId: 'alola', regionName: '阿罗拉地区' });
+                    this.onBattleEvent('regionUnlocked', { regionId: 'alola', regionName: 'Região de Alola' });
                 }
             }
 
@@ -2304,7 +2304,7 @@ class GameCore {
             if (!wasGalarUnlocked && this.isRegionUnlocked('galar')) {
                 this._track('route_unlock', { region: 'galar' });
                 if (this.onBattleEvent) {
-                    this.onBattleEvent('regionUnlocked', { regionId: 'galar', regionName: '伽勒尔地区' });
+                    this.onBattleEvent('regionUnlocked', { regionId: 'galar', regionName: 'Região de Galar' });
                 }
             }
 
@@ -2312,7 +2312,7 @@ class GameCore {
             if (!wasPaldeaUnlocked && this.isRegionUnlocked('paldea')) {
                 this._track('route_unlock', { region: 'paldea' });
                 if (this.onBattleEvent) {
-                    this.onBattleEvent('regionUnlocked', { regionId: 'paldea', regionName: '帕底亚地区' });
+                    this.onBattleEvent('regionUnlocked', { regionId: 'paldea', regionName: 'Região de Paldea' });
                 }
             }
 
@@ -2320,7 +2320,7 @@ class GameCore {
             if (!wasMegaUnlocked && this.isRegionUnlocked('mega')) {
                 this._track('route_unlock', { region: 'mega' });
                 if (this.onBattleEvent) {
-                    this.onBattleEvent('regionUnlocked', { regionId: 'mega', regionName: 'Mega进化地区' });
+                    this.onBattleEvent('regionUnlocked', { regionId: 'mega', regionName: 'Mega Evolução' });
                 }
             }
 
@@ -3228,12 +3228,12 @@ class GameCore {
 
     // 购买宝石
     buyGem() {
-        if (!this.isGoldUnlocked()) return { success: false, message: '尚未解锁金币系统' };
-        if (this.gameState.gems.length >= GEM_BAG_MAX) return { success: false, message: `背包已满（最多${GEM_BAG_MAX}个）` };
+        if (!this.isGoldUnlocked()) return { success: false, message: 'Sistema de Moedas ainda bloqueado.' };
+        if (this.gameState.gems.length >= GEM_BAG_MAX) return { success: false, message: `Mochila cheia (máx. ${GEM_BAG_MAX} Gemas).` };
 
         // 随机品质价格（购买固定价格1000金币，获得随机品质宝石）
         const price = 1000;
-        if (this.gameState.gold < price) return { success: false, message: `金币不足（需要 ${price}）` };
+        if (this.gameState.gold < price) return { success: false, message: `Moedas insuficientes (precisa de ${price}).` };
 
         this.gameState.gold -= price;
         const gem = this.generateGem();
@@ -3246,8 +3246,8 @@ class GameCore {
 
     // 批量购买宝石：直到金币不足或背包满
     buyAllGems() {
-        if (!this.isGoldUnlocked()) return { success: false, message: '尚未解锁金币系统' };
-        if (this.gameState.gems.length >= GEM_BAG_MAX) return { success: false, message: `背包已满（最多${GEM_BAG_MAX}个）` };
+        if (!this.isGoldUnlocked()) return { success: false, message: 'Sistema de Moedas ainda bloqueado.' };
+        if (this.gameState.gems.length >= GEM_BAG_MAX) return { success: false, message: `Mochila cheia (máx. ${GEM_BAG_MAX} Gemas).` };
 
         const price = 1000;
         const bagRemain = GEM_BAG_MAX - this.gameState.gems.length;
@@ -3255,7 +3255,7 @@ class GameCore {
         const count = Math.min(bagRemain, affordable);
 
         if (count <= 0) {
-            return { success: false, message: `金币不足（需要 ${price}）` };
+            return { success: false, message: `Moedas insuficientes (precisa de ${price}).` };
         }
 
         for (let i = 0; i < count; i++) {
@@ -3278,15 +3278,15 @@ class GameCore {
     // 镶嵌宝石到徽章
     equipGem(regionId, gemUid) {
         const badge = this.gameState.badges[regionId];
-        if (!badge || !badge.unlocked) return { success: false, message: '徽章未解锁' };
+        if (!badge || !badge.unlocked) return { success: false, message: 'Insígnia bloqueada.' };
 
         const gemIndex = this.gameState.gems.findIndex(g => g.uid === gemUid);
-        if (gemIndex === -1) return { success: false, message: '宝石不存在' };
+        if (gemIndex === -1) return { success: false, message: 'Gema não encontrada.' };
 
         // 如果徽章已有宝石，放回背包
         if (badge.gem) {
             if (this.gameState.gems.length >= GEM_BAG_MAX) {
-                return { success: false, message: '背包已满，无法卸下当前宝石' };
+                return { success: false, message: 'Mochila cheia. Não dá para remover a Gema atual.' };
             }
             this.gameState.gems.push(badge.gem);
         }
@@ -3303,8 +3303,8 @@ class GameCore {
     // 卸下徽章上的宝石
     unequipGem(regionId) {
         const badge = this.gameState.badges[regionId];
-        if (!badge || !badge.unlocked || !badge.gem) return { success: false, message: '没有可卸下的宝石' };
-        if (this.gameState.gems.length >= GEM_BAG_MAX) return { success: false, message: '背包已满' };
+        if (!badge || !badge.unlocked || !badge.gem) return { success: false, message: 'Nenhuma Gema para remover.' };
+        if (this.gameState.gems.length >= GEM_BAG_MAX) return { success: false, message: 'Mochila cheia.' };
 
         this.gameState.gems.push(badge.gem);
         badge.gem = null;
@@ -3317,7 +3317,7 @@ class GameCore {
     // 切换宝石锁定状态
     toggleGemLock(gemUid) {
         const gem = this.gameState.gems.find(g => g.uid === gemUid);
-        if (!gem) return { success: false, message: '宝石不存在' };
+        if (!gem) return { success: false, message: 'Gema não encontrada.' };
         gem.locked = !gem.locked;
         this.save();
         return { success: true, locked: gem.locked, gem };
@@ -3326,8 +3326,8 @@ class GameCore {
     // 丢弃背包中的宝石
     discardGem(gemUid) {
         const idx = this.gameState.gems.findIndex(g => g.uid === gemUid);
-        if (idx === -1) return { success: false, message: '宝石不存在' };
-        if (this.gameState.gems[idx].locked) return { success: false, message: '宝石已锁定，无法丢弃' };
+        if (idx === -1) return { success: false, message: 'Gema não encontrada.' };
+        if (this.gameState.gems[idx].locked) return { success: false, message: 'Gema travada. Não pode ser descartada.' };
         this.gameState.gems.splice(idx, 1);
         this.save();
         return { success: true };
@@ -3336,31 +3336,31 @@ class GameCore {
     // 宝石合成：10个同品质宝石 => 1个高品质宝石（永恒为最高品质，无法继续合成）
     synthesizeGems(sourceQuality, gemUids) {
         const sourceInfo = this.getGemQualityById(sourceQuality);
-        if (!sourceInfo) return { success: false, message: '宝石品质不存在' };
+        if (!sourceInfo) return { success: false, message: 'Qualidade de Gema inválida.' };
 
         const targetQuality = this.getNextGemQualityId(sourceQuality);
-        if (!targetQuality) return { success: false, message: '永恒宝石无法继续合成' };
+        if (!targetQuality) return { success: false, message: 'Gemas Eternas não podem ser sintetizadas.' };
 
-        if (!Array.isArray(gemUids)) return { success: false, message: '请选择要合成的宝石' };
+        if (!Array.isArray(gemUids)) return { success: false, message: 'Selecione as Gemas para sintetizar.' };
 
         const sourceCount = this.gameState.gems.filter(g => g.quality === sourceQuality && !g.locked).length;
         if (sourceCount < 10) {
-            return { success: false, message: `缺少可合成的${sourceInfo.name}宝石：需要10个，当前${sourceCount}个（未锁定）` };
+            return { success: false, message: `Gemas insuficientes para sintetizar (${sourceInfo.name}): precisa de 10 sem trava, você tem ${sourceCount}.` };
         }
 
         const uniqueUids = [...new Set(gemUids)];
         if (uniqueUids.length !== 10) {
-            return { success: false, message: `需要选择10个${sourceInfo.name}宝石，当前选择${uniqueUids.length}个` };
+            return { success: false, message: `Selecione 10 Gemas (${sourceInfo.name}). Selecionadas: ${uniqueUids.length}.` };
         }
 
         for (const uid of uniqueUids) {
             const gem = this.gameState.gems.find(g => g.uid === uid);
-            if (!gem) return { success: false, message: '所选宝石不存在或已变化，请重试' };
+            if (!gem) return { success: false, message: 'As Gemas selecionadas não existem ou mudaram. Tente de novo.' };
             if (gem.quality !== sourceQuality) {
-                return { success: false, message: `所选宝石中包含非${sourceInfo.name}品质` };
+                return { success: false, message: `As Gemas selecionadas incluem qualidade diferente de ${sourceInfo.name}.` };
             }
             if (gem.locked) {
-                return { success: false, message: '所选宝石包含已锁定宝石，无法合成' };
+                return { success: false, message: 'As Gemas selecionadas incluem Gemas travadas. Não dá para sintetizar.' };
             }
         }
 
@@ -3368,7 +3368,7 @@ class GameCore {
         this.gameState.gems = this.gameState.gems.filter(g => !removeSet.has(g.uid));
 
         const newGem = this.generateGemByQuality(targetQuality);
-        if (!newGem) return { success: false, message: '生成目标品质宝石失败' };
+        if (!newGem) return { success: false, message: 'Falha ao gerar a Gema de qualidade superior.' };
 
         // 合成产出的新宝石也标记为NEW
         newGem.isNew = true;
@@ -3379,22 +3379,22 @@ class GameCore {
 
     // 重铸永恒宝石：2颗永恒宝石 => 1颗新的永恒宝石（重新随机属性）
     reforgeEternalGem(gemUids) {
-        if (!Array.isArray(gemUids)) return { success: false, message: '请选择要重铸的宝石' };
+        if (!Array.isArray(gemUids)) return { success: false, message: 'Selecione as Gemas para reforjar.' };
 
         const uniqueUids = [...new Set(gemUids)];
         if (uniqueUids.length !== 2) {
-            return { success: false, message: `需要选择2个永恒宝石，当前选择${uniqueUids.length}个` };
+            return { success: false, message: `Selecione 2 Gemas Eternas. Selecionadas: ${uniqueUids.length}.` };
         }
 
         // 验证每颗宝石
         for (const uid of uniqueUids) {
             const gem = this.gameState.gems.find(g => g.uid === uid);
-            if (!gem) return { success: false, message: '所选宝石不存在或已变化，请重试' };
+            if (!gem) return { success: false, message: 'As Gemas selecionadas não existem ou mudaram. Tente de novo.' };
             if (gem.quality !== 'eternal') {
-                return { success: false, message: '所选宝石包含非永恒品质' };
+                return { success: false, message: 'As Gemas selecionadas incluem qualidade diferente de Eterna.' };
             }
             if (gem.locked) {
-                return { success: false, message: '所选宝石包含已锁定宝石，无法重铸' };
+                return { success: false, message: 'As Gemas selecionadas incluem Gemas travadas. Não dá para reforjar.' };
             }
         }
 
@@ -3404,7 +3404,7 @@ class GameCore {
 
         // 生成1颗新的永恒宝石
         const newGem = this.generateGemByQuality('eternal');
-        if (!newGem) return { success: false, message: '生成永恒宝石失败' };
+        if (!newGem) return { success: false, message: 'Falha ao gerar a Gema Eterna.' };
 
         newGem.isNew = true;
         this.gameState.gems.push(newGem);
@@ -3441,7 +3441,7 @@ class GameCore {
                     this.gameState.gems = this.gameState.gems.filter(g => !toRemove.has(g.uid));
                     // 生成新宝石
                     const newGem = this.generateGemByQuality(targetQuality);
-                    if (!newGem) { lastError = '生成目标品质宝石失败'; break; }
+                    if (!newGem) { lastError = 'Falha ao gerar a Gema de qualidade superior.'; break; }
                     newGem.isNew = true;
                     this.gameState.gems.push(newGem);
                     totalSynthesized++;
@@ -3475,7 +3475,7 @@ class GameCore {
                             newGem: result.newGem,
                         });
                     } catch (e) {
-                        lastError = '异常: ' + e.message;
+                        lastError = 'Erro: ' + e.message;
                         console.error('synthesizeAllGems error:', e);
                         break;
                     }
@@ -3484,13 +3484,13 @@ class GameCore {
         }
 
         if (totalSynthesized === 0) {
-            const qualityNames = { common: '普通', magic: '魔法', rare: '稀有', epic: '史诗', mythic: '神话', legendary: '传说' };
+            const qualityNames = { common: 'Comum', magic: 'Mágica', rare: 'Rara', epic: 'Épica', mythic: 'Mítica', legendary: 'Lendária' };
             const diag = qualityOrder.map(q => {
                 const total = this.gameState.gems.filter(g => g.quality === q).length;
                 const unlocked = this.gameState.gems.filter(g => g.quality === q && !g.locked).length;
                 return `${qualityNames[q]}:${unlocked}/${total}`;
             }).join(' | ');
-            return { success: false, message: `没有足够的宝石可以合成（需要同品质10个未锁定）。当前：${diag}${lastError ? ' | 错误:' + lastError : ''}` };
+            return { success: false, message: `Gemas insuficientes para sintetizar (precisa de 10 sem trava da mesma qualidade). Atual: ${diag}${lastError ? ' | Erro: ' + lastError : ''}` };
         }
 
         return { success: true, count: totalSynthesized, results };
@@ -3503,9 +3503,9 @@ class GameCore {
 
     // 初始化一键合成永恒的状态
     startAutoEternal() {
-        if (!this.isGoldUnlocked()) return { success: false, message: '尚未解锁金币系统' };
+        if (!this.isGoldUnlocked()) return { success: false, message: 'Sistema de Moedas ainda bloqueado.' };
         const price = 1000;
-        if (this.gameState.gold < price) return { success: false, message: '金币不足' };
+        if (this.gameState.gold < price) return { success: false, message: 'Moedas insuficientes.' };
 
         const startEternalCount = this.gameState.gems.filter(g => g.quality === 'eternal').length;
         this._autoEternalState = {
@@ -3742,17 +3742,17 @@ class GameCore {
 
     // 升级宝可梦技能：等级重置为1，技能等级+1，超过1000的等级换算为经验返还
     upgradeSkill(pokemonId) {
-        if (!this.isSkillUnlocked()) return { success: false, message: '技能系统尚未解锁' };
+        if (!this.isSkillUnlocked()) return { success: false, message: 'Sistema de Técnicas ainda bloqueado.' };
 
         const storedData = this.gameState.caughtPokemon[pokemonId];
-        if (!storedData) return { success: false, message: '未捕获该宝可梦' };
+        if (!storedData) return { success: false, message: 'Este Pokémon ainda não foi capturado.' };
 
         const currentSkillLevel = storedData.skillLevel || 0;
-        if (currentSkillLevel >= MAX_SKILL_LEVEL) return { success: false, message: '技能等级已达上限' };
-        if (storedData.level < SKILL_LEVEL_REQUIREMENT) return { success: false, message: `等级需达到 ${SKILL_LEVEL_REQUIREMENT} 级` };
+        if (currentSkillLevel >= MAX_SKILL_LEVEL) return { success: false, message: 'A Técnica já está no nível máximo.' };
+        if (storedData.level < SKILL_LEVEL_REQUIREMENT) return { success: false, message: `Precisa estar no Lv.${SKILL_LEVEL_REQUIREMENT}.` };
 
         const baseData = POKEMON_DATA[pokemonId];
-        if (!baseData) return { success: false, message: '无效的宝可梦' };
+        if (!baseData) return { success: false, message: 'Pokémon inválido.' };
 
         const oldLevel = storedData.level;
 
@@ -3810,7 +3810,7 @@ class GameCore {
 
     // 一键升级所有可升级技能的宝可梦
     upgradeAllSkills() {
-        if (!this.isSkillUnlocked()) return { success: false, message: '技能系统尚未解锁' };
+        if (!this.isSkillUnlocked()) return { success: false, message: 'Sistema de Técnicas ainda bloqueado.' };
 
         const results = [];
         for (const pokemonId in this.gameState.caughtPokemon) {
@@ -3876,7 +3876,7 @@ class GameCore {
         }
 
         if (results.length === 0) {
-            return { success: false, message: '没有可升级技能的宝可梦（需要等级≥1000且技能未满级）' };
+            return { success: false, message: 'Nenhum Pokémon pode melhorar a Técnica (precisa de Lv.1000 ou mais e Técnica abaixo do máximo).' };
         }
 
         this.save();
@@ -3947,19 +3947,19 @@ class GameCore {
 
     // 升级天赋（支持多级升级）
     upgradeTalent(talentId, levels = 1) {
-        if (!this.isTalentUnlocked()) return { success: false, message: '天赋系统尚未解锁' };
+        if (!this.isTalentUnlocked()) return { success: false, message: 'Sistema de Talentos ainda bloqueado.' };
         const talent = TALENT_DATA[talentId];
-        if (!talent) return { success: false, message: '无效的天赋' };
+        if (!talent) return { success: false, message: 'Talento inválido.' };
 
         if (!this.gameState.talents) this.gameState.talents = {};
         const currentLevel = this.gameState.talents[talentId] || 0;
 
-        if (currentLevel >= talent.maxLevel) return { success: false, message: '已达最大等级' };
+        if (currentLevel >= talent.maxLevel) return { success: false, message: 'Já está no nível máximo.' };
 
         const remaining = this.getRemainingTalentPoints();
         const maxUpgradeable = Math.min(levels, talent.maxLevel - currentLevel, remaining);
 
-        if (maxUpgradeable <= 0) return { success: false, message: '天赋点不足' };
+        if (maxUpgradeable <= 0) return { success: false, message: 'Pontos de Talento insuficientes.' };
 
         this.gameState.talents[talentId] = currentLevel + maxUpgradeable;
         this.save();
@@ -3973,9 +3973,9 @@ class GameCore {
 
     // 重置天赋（消耗100万金币）
     resetTalents() {
-        if (!this.isTalentUnlocked()) return { success: false, message: '天赋系统尚未解锁' };
+        if (!this.isTalentUnlocked()) return { success: false, message: 'Sistema de Talentos ainda bloqueado.' };
         if (this.gameState.gold < TALENT_RESET_COST) {
-            return { success: false, message: `金币不足，重置需要 ${TALENT_RESET_COST.toLocaleString()} 金币` };
+            return { success: false, message: `Moedas insuficientes. Redefinir custa ${TALENT_RESET_COST.toLocaleString()} Moedas.` };
         }
 
         this.gameState.gold -= TALENT_RESET_COST;
@@ -3991,7 +3991,7 @@ class GameCore {
     // 设置宝石属性偏好（第10个天赋：选择一条宝石属性）
     setTalentGemAttrChoice(attrId) {
         const valid = GEM_ATTRIBUTES.find(a => a.id === attrId);
-        if (!valid) return { success: false, message: '无效的宝石属性' };
+        if (!valid) return { success: false, message: 'Atributo de Gema inválido.' };
         if (!this.gameState.talents) this.gameState.talents = {};
         this.gameState.talents.gemAttrChoice = attrId;
         this.save();
@@ -4028,12 +4028,12 @@ class GameCore {
 
     // 种植树果（购买种子，花费金币）
     plantBerry(berryId) {
-        if (!this.isBerryUnlocked()) return { success: false, message: '树果系统尚未解锁' };
-        if (!BERRY_DATA[berryId]) return { success: false, message: '无效的树果类型' };
-        if (this.gameState.berryPlots.length >= BERRY_PLOT_MAX) return { success: false, message: '没有空地了' };
+        if (!this.isBerryUnlocked()) return { success: false, message: 'Sistema de Frutas ainda bloqueado.' };
+        if (!BERRY_DATA[berryId]) return { success: false, message: 'Tipo de Fruta inválido.' };
+        if (this.gameState.berryPlots.length >= BERRY_PLOT_MAX) return { success: false, message: 'Sem terreno livre.' };
         // 花费金币购买种子
         if (this.gameState.gold < BERRY_SEED_PRICE) {
-            return { success: false, message: `金币不足，购买种子需要 ${BERRY_SEED_PRICE.toLocaleString()} 金币` };
+            return { success: false, message: `Moedas insuficientes. A semente custa ${BERRY_SEED_PRICE.toLocaleString()} Moedas.` };
         }
         this.gameState.gold -= BERRY_SEED_PRICE;
         this.gameState.berryPlots.push({ berryId, plantedAt: Date.now() });
@@ -4043,9 +4043,9 @@ class GameCore {
 
     // 种植树果（不消耗背包，首次解锁时的免费种子直接种到地里）
     plantBerryFree(berryId) {
-        if (!this.isBerryUnlocked()) return { success: false, message: '树果系统尚未解锁' };
-        if (!BERRY_DATA[berryId]) return { success: false, message: '无效的树果类型' };
-        if (this.gameState.berryPlots.length >= BERRY_PLOT_MAX) return { success: false, message: '没有空地了' };
+        if (!this.isBerryUnlocked()) return { success: false, message: 'Sistema de Frutas ainda bloqueado.' };
+        if (!BERRY_DATA[berryId]) return { success: false, message: 'Tipo de Fruta inválido.' };
+        if (this.gameState.berryPlots.length >= BERRY_PLOT_MAX) return { success: false, message: 'Sem terreno livre.' };
         this.gameState.berryPlots.push({ berryId, plantedAt: Date.now() });
         this.save();
         return { success: true };
@@ -4084,10 +4084,10 @@ class GameCore {
 
     // 采摘树果（收获到背包）
     harvestBerry(plotIndex) {
-        if (!this.isBerryUnlocked()) return { success: false, message: '树果系统尚未解锁' };
+        if (!this.isBerryUnlocked()) return { success: false, message: 'Sistema de Frutas ainda bloqueado.' };
         const plot = this.gameState.berryPlots[plotIndex];
-        if (!plot) return { success: false, message: '该地块没有种植树果' };
-        if (!this.isBerryRipe(plotIndex)) return { success: false, message: '树果还没有成熟' };
+        if (!plot) return { success: false, message: 'Não há Fruta plantada neste terreno.' };
+        if (!this.isBerryRipe(plotIndex)) return { success: false, message: 'A Fruta ainda não amadureceu.' };
         const berryId = plot.berryId;
         const berryInfo = BERRY_DATA[berryId];
         // 收获：每次采摘获得1~2个
@@ -4106,7 +4106,7 @@ class GameCore {
 
     // 采摘所有已成熟的树果
     harvestAllBerries() {
-        if (!this.isBerryUnlocked()) return { success: false, message: '树果系统尚未解锁' };
+        if (!this.isBerryUnlocked()) return { success: false, message: 'Sistema de Frutas ainda bloqueado.' };
         const results = [];
         // 从后往前遍历避免索引偏移
         for (let i = this.gameState.berryPlots.length - 1; i >= 0; i--) {
@@ -4115,25 +4115,25 @@ class GameCore {
                 if (result.success) results.push(result);
             }
         }
-        if (results.length === 0) return { success: false, message: '没有可采摘的树果' };
+        if (results.length === 0) return { success: false, message: 'Nenhuma Fruta para colher.' };
         return { success: true, results };
     }
 
     // 喂食树果给宝可梦
     feedBerry(pokemonId, berryId) {
-        if (!this.isBerryUnlocked()) return { success: false, message: '树果系统尚未解锁' };
-        if (!BERRY_DATA[berryId]) return { success: false, message: '无效的树果' };
-        if (this.gameState.pokedex[pokemonId] !== 'caught') return { success: false, message: '未捕获该宝可梦' };
+        if (!this.isBerryUnlocked()) return { success: false, message: 'Sistema de Frutas ainda bloqueado.' };
+        if (!BERRY_DATA[berryId]) return { success: false, message: 'Fruta inválida.' };
+        if (this.gameState.pokedex[pokemonId] !== 'caught') return { success: false, message: 'Este Pokémon ainda não foi capturado.' };
         // 检查背包
         if (!this.gameState.berryBag[berryId] || this.gameState.berryBag[berryId] <= 0) {
-            return { success: false, message: `没有${BERRY_DATA[berryId].name}了` };
+            return { success: false, message: `Você não tem mais ${BERRY_DATA[berryId].name}.` };
         }
         // 检查该宝可梦的该类树果是否已达上限
         if (!this.gameState.berryFed[pokemonId]) this.gameState.berryFed[pokemonId] = {};
         const currentFed = this.gameState.berryFed[pokemonId][berryId] || 0;
         const maxForType = this.getBerryMaxForType(pokemonId, berryId);
         if (currentFed >= maxForType) {
-            return { success: false, message: `该宝可梦${BERRY_DATA[berryId].name}已达上限（${currentFed}/${maxForType}）` };
+            return { success: false, message: `Limite de ${BERRY_DATA[berryId].name} atingido para este Pokémon (${currentFed}/${maxForType}).` };
         }
         // 扣除背包
         this.gameState.berryBag[berryId]--;
@@ -4262,7 +4262,7 @@ class GameCore {
 
     // 进入挑战塔（暂停主线战斗，初始化当前层）
     enterTower() {
-        if (!this.isTowerUnlocked()) return { success: false, message: '挑战塔未解锁' };
+        if (!this.isTowerUnlocked()) return { success: false, message: 'Torre de Desafio bloqueada.' };
 
         const tower = this.gameState.tower;
 

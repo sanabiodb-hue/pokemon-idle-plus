@@ -162,8 +162,8 @@ test('下一步建议的优先级：引导 > 当前道路抓齐 > 即将进化 >
     pika.level = 20; pika.exp = expFor(ctx, 25, 20);
     let a = game.getNextAction();
     assert.equal(a.type, 'evolution');
-    assert.match(a.text, /再升 2 级/);
-    assert.match(a.text, /从 Lv\.1/, '新登记的形态会提醒“从 Lv.1 重新成长”');
+    assert.match(a.text, /Faltam 2 níveis/);
+    assert.match(a.text, /volta para o Lv\.1/, '新登记的形态会提醒“回到 Lv.1”');
     // 道路抓齐 → route，且带“前往”快捷入口
     game.catchPokemonWithIvs(19, 1, ivs(1)); game.catchPokemonWithIvs(16, 1, ivs(1));
     a = game.getNextAction();
@@ -190,7 +190,7 @@ test('没有别的事可做时给出目标：显示最接近完成的目标和�
     game.gameState.stats.totalBattles = 40;          // win_50 完成度 80%
     const a = game.getNextAction();
     assert.equal(a.type, 'goal');
-    assert.equal(a.title, '打赢 50 场战斗');
+    assert.equal(a.title, 'Vença 50 batalhas');
     assert.deepEqual(plain(a.progress), { current: 40, total: 50 });
 });
 

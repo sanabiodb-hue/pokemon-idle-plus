@@ -99,7 +99,7 @@ function loadGameContext(opts = {}) {
     const code = readFiles(GAME_FILES) + `
 ;({
   GameCore, SaveManager, SaveCodec, sanitizeSave, processSaveObject, migrateSave, SAVE_MIGRATIONS,
-  escapeHtml, safeCssColor,
+  escapeHtml, safeCssColor, ptPlural, ptNumber, TYPE_NAMES,
   PokemonRoster, PartyManager, PCStorage, PARTY_MAX, PC_BOX_CAPACITY, PC_MAX_BOXES, PC_BOX_NAME_MAX, RELEASED_LOG_MAX,
   POKEMON_NATURES, DEFAULT_NATURE, POKEMON_GENDERS, POKEMON_ORIGINS, NICKNAME_MAX_LENGTH, IV_KEYS,
   createPokemonInstance, buildInstance, sanitizeInstance, sanitizeRosterSection, validateRosterIntegrity,

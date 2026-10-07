@@ -136,7 +136,7 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
             await page.reload();
             await page.waitForSelector('#offline-report:not(.hidden)', { timeout: 30000 });
             const reportText = await page.locator('#offline-report').innerText();
-            check('离线结算报告显示（战斗数/经验）', /完成战斗/.test(reportText) && /获得经验/.test(reportText), reportText.slice(0, 120));
+            check('离线结算报告显示（战斗数/经验）', /Batalhas/.test(reportText) && /EXP ganho/.test(reportText), reportText.slice(0, 120));
             await page.locator('.offline-report-close').click();
             await sleep(600);
             check('点击确定后遮罩关闭', await page.locator('#offline-overlay.hidden').count() === 1);
@@ -170,12 +170,12 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
                 name: game.gameState.badges.kanto && game.gameState.badges.kanto.gem && game.gameState.badges.kanto.gem.qualityName,
             }));
             check('恶意存档导入后没有脚本执行', result && probe.pwned === undefined && probe.evilImgs === 0 && probe.svgs === 0, JSON.stringify(probe));
-            check('恶意宝石字段已被配置值替换', probe.name === '史诗' && probe.gems === 2, JSON.stringify(probe));
+            check('恶意宝石字段已被配置值替换', probe.name === 'Épica' && probe.gems === 2, JSON.stringify(probe));
             // 无效导入给出明确提示且不破坏当前游戏
             await page.evaluate(() => { document.getElementById('save-data-area').value = '{"team":[999999]}'; document.getElementById('btn-import').click(); });
             await sleep(300);
             const toast = await page.locator('.toast').last().textContent();
-            check('无效导入显示具体原因', /导入失败/.test(toast), toast);
+            check('无效导入显示具体原因', /Falha ao importar/.test(toast), toast);
             check('无效导入不破坏当前游戏', await page.evaluate(() => game.gameState.team.length >= 1 && !!game.currentBattle));
             await context.close();
         }
@@ -195,7 +195,7 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
             });
             await sleep(200);
             const banner = await page.locator('#save-banner');
-            check('保存失败时显示红色横幅', (await banner.getAttribute('class')).includes('error') && /空间已满/.test(await banner.innerText()));
+            check('保存失败时显示红色横幅', (await banner.getAttribute('class')).includes('error') && /cheio/.test(await banner.innerText()));
             await page.evaluate(() => { Storage.prototype.setItem = window.__realSet; game.saveNow(); });
             await sleep(200);
             check('保存恢复后横幅自动消失', (await banner.getAttribute('class')).includes('hidden'));
@@ -307,7 +307,7 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
             const target = pc1.cards[1];
             await page.click(`#pc-grid .pc-card[data-uid="${target}"]`);
             const detail = await page.locator('#pc-detail').innerText();
-            check('详情显示编号、个体值、性格', detail.includes('#' + target) && /合计/.test(detail) && /性格/.test(detail), detail.slice(0, 120));
+            check('详情显示编号、个体值、性格', detail.includes('#' + target) && /Total/.test(detail) && /Natureza/.test(detail), detail.slice(0, 120));
             await page.click('#pc-detail [data-pc-action="to-party"]');
             await sleep(200);
             const afterAdd = await page.evaluate((uid) => ({
@@ -321,7 +321,7 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
             await sleep(200);
             const snap = () => page.evaluate(() => ({ party: game.gameState.party.slice(), active: game.gameState.party[game.gameState.activePokemonIndex] }));
             const orderBefore = await snap();
-            await page.click('#team-list .team-slot:nth-of-type(2) .team-slot-actions button[title="上移"]');
+            await page.click('#team-list .team-slot:nth-of-type(2) .team-slot-actions button[title="Subir"]');
             const orderAfter = await snap();
             check('队伍面板 ▲：顺序交换，出战者仍是同一只',
                 orderAfter.party[0] === orderBefore.party[1] && orderAfter.party[1] === orderBefore.party[0] && orderAfter.active === orderBefore.active,
@@ -356,14 +356,14 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
             check('手机视口：没有被放大裁切，没有横向滚动', vp.scale === 1 && vp.sw <= vp.iw + 1 && vp.vv >= vp.iw - 1, JSON.stringify(vp));
 
             const welcome = await page.locator('.tutorial-modal').innerText();
-            check('欢迎页只有三件事，并提示跟着任务条走', /收集全部宝可梦/.test(welcome) && /自动/.test(welcome) && /任务条/.test(welcome) && welcome.length < 160, welcome);
+            check('欢迎页只有三件事，并提示跟着任务条走', /capture todos os Pokémon/.test(welcome) && /automáticas/.test(welcome) && /barra de passos/.test(welcome) && welcome.length < 320, welcome);
             await page.click('.tutorial-start-btn');
             await sleep(500);
             const bar1 = await page.locator('#guide-bar').innerText();
-            check('下一步条：显示步骤 1/5 与进度', /1\/5/.test(bar1) && /战斗/.test(bar1) && await page.locator('#guide-bar .guide-progress').count() === 1, bar1);
+            check('下一步条：显示步骤 1/5 与进度', /1\/5/.test(bar1) && /primeira batalha/.test(bar1) && await page.locator('#guide-bar .guide-progress').count() === 1, bar1);
 
             const teamHint = await page.locator('#team-list .team-empty-slots').innerText();
-            check('队伍没满：提示还有几个空位以及怎么补', /还有 5 个空位/.test(teamHint), teamHint);
+            check('队伍没满：提示还有几个空位以及怎么补', /5 vagas livres/.test(teamHint), teamHint);
 
             // 统计：打开/会话已记录；第一次操作（上面的点击）已记录
             const an0 = await page.evaluate(() => JSON.parse(localStorage.getItem('pokemon_idle_analytics')).queue.map(e => e.n));
@@ -373,7 +373,7 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
             await page.evaluate(() => game.stopBattle());
             await page.click('[data-tab="tab-pc"]');
             const pcEmpty = await page.locator('#pc-grid').innerText();
-            check('PC 空状态：说明新宝可梦会送到这里', /PC 还是空的/.test(pcEmpty), pcEmpty);
+            check('PC 空状态：说明新宝可梦会送到这里', /O PC está vazio/.test(pcEmpty), pcEmpty);
             await page.click('[data-tab="tab-battle"]');
             await page.evaluate(() => { game.gameState.guide.flags.pcOpened = false; });   // 上面只是看了一眼空 PC，下面重新走“打开 PC”这一步
 
@@ -391,8 +391,8 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
                 dot: (document.querySelector('.tab-btn[data-tab="tab-pc"] .tab-dot') || {}).textContent || '',
                 bar: document.getElementById('guide-bar').innerText,
             }));
-            check('捕获新宝可梦：弹出事件卡片（发生了什么 + 去哪看），PC 页签出现红点', afterCapture.cards.some(t => /捕获了新宝可梦/.test(t)) && afterCapture.dot === '1', JSON.stringify(afterCapture));
-            check('引导推进到“打开 PC”，并给出一键入口', /3\/5/.test(afterCapture.bar) && /打开 PC/.test(afterCapture.bar));
+            check('捕获新宝可梦：弹出事件卡片（发生了什么 + 去哪看），PC 页签出现红点', afterCapture.cards.some(t => /Novo Pokémon/.test(t)) && afterCapture.dot === '1', JSON.stringify(afterCapture));
+            check('引导推进到“打开 PC”，并给出一键入口', /3\/5/.test(afterCapture.bar) && /Abrir PC/.test(afterCapture.bar));
 
             // 打开 PC → 红点消失 → 引导进入“组建队伍” → 在 PC 里加入队伍 → 进入“探索”
             await page.click('#guide-bar [data-guide-action="open-tab"]');
@@ -405,7 +405,7 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
             await sleep(300);
             await page.click('[data-tab="tab-battle"]');
             const bar5 = await page.locator('#guide-bar').innerText();
-            check('加入队伍后进入第 5 步“探索新道路”', /5\/5/.test(bar5) && /地图/.test(bar5), bar5);
+            check('加入队伍后进入第 5 步“探索新道路”', /5\/5/.test(bar5) && /Mapa/.test(bar5), bar5);
 
             // 抓齐一号道路 → 地图上有“推荐”的新道路，并显示每条道路还有几种没抓到
             await page.evaluate(() => { for (const id of [16, 19]) if (game.gameState.pokedex[id] !== 'caught') game.catchPokemonWithIvs(id, 1, { hp: 5, atk: 5, def: 5, spAtk: 5, spDef: 5, speed: 5 }); });
@@ -415,7 +415,7 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
                 rec: [...document.querySelectorAll('.route-card.recommended h3')].map(h => h.textContent),
                 chips: [...document.querySelectorAll('.route-progress-line')].map(c => c.textContent.trim()),
             }));
-            check('地图：被推荐的新道路高亮，每条道路显示还有几种没抓到', map.rec.length === 1 && /2号道路/.test(map.rec[0]) && /推荐/.test(map.rec[0]) && map.chips.some(c => /已抓齐/.test(c)) && map.chips.some(c => /还有 \d+ 种没抓到/.test(c)), JSON.stringify(map));
+            check('地图：被推荐的新道路高亮，每条道路显示还有几种没抓到', map.rec.length === 1 && /Rota 2/.test(map.rec[0]) && /Sugerida/.test(map.rec[0]) && map.chips.some(c => /Completa/.test(c)) && map.chips.some(c => /Faltam \d+/.test(c)), JSON.stringify(map));
             await page.click('.route-card.recommended');
             await sleep(300);
             await page.click('[data-tab="tab-battle"]');
@@ -425,12 +425,12 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
             // 目标面板与空状态
             await page.evaluate(() => gameUI.guideView.showGoals());
             const goals = await page.locator('.goals-modal').innerText();
-            check('目标面板：列出目标和进度', /目标（\d+\/\d+）/.test(goals) && /收集 10 种宝可梦/.test(goals) && /解锁城都地区/.test(goals), goals.slice(0, 80));
+            check('目标面板：列出目标和进度', /Metas \(\d+\/\d+\)/.test(goals) && /Capture 10 espécies/.test(goals) && /Desbloqueie Johto/.test(goals), goals.slice(0, 80));
             await page.click('.goals-close');
             await page.click('[data-tab="tab-pokedex"]');
             await page.evaluate(() => { const i = document.getElementById('pokedex-search-input'); i.value = '不存在的名字'; i.dispatchEvent(new Event('input')); });
             await sleep(300);
-            check('图鉴：搜索无结果有说明和返回按钮', /没有找到/.test(await page.locator('#pokedex-grid').innerText()));
+            check('图鉴：搜索无结果有说明和返回按钮', /Nada encontrado/.test(await page.locator('#pokedex-grid').innerText()));
             await page.evaluate(() => { const i = document.getElementById('pokedex-search-input'); i.value = ''; i.dispatchEvent(new Event('input')); });
             await page.click('.filter-btn[data-filter="shiny"]');
             await sleep(200);
@@ -488,6 +488,105 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
             const vs = await vet.page.evaluate(() => ({ modal: document.querySelectorAll('.tutorial-modal').length, ob: game.gameState.guide.onboarding, bar: document.getElementById('guide-bar').className, hidden: document.getElementById('guide-bar').classList.contains('hidden') }));
             check('老存档：没有欢迎页、没有新手引导，下一步条给出建议/目标', vs.modal === 0 && vs.ob === 'done' && !/guide-onboarding/.test(vs.bar) && !vs.hidden, JSON.stringify(vs));
             await vet.context.close();
+        }
+
+        // ---------- J. Localização pt-BR: nenhuma tela mostra chinês e o texto não estoura o layout ----------
+        for (const vp of [{ name: 'desktop 1280x800', opts: { viewport: { width: 1280, height: 800 } } }, { name: 'celular 360x640', opts: { viewport: { width: 360, height: 640 }, isMobile: true, hasTouch: true } }]) {
+            const { page, context } = await newPage(`localStorage.setItem('pokemon_idle_tutorial_done', '1');`, vp.opts);
+            await page.goto(base);
+            await page.waitForFunction(() => typeof game !== 'undefined' && game.currentBattle, null, { timeout: 15000 });
+            // estado "avançado": tudo capturado, insígnias, gemas, frutas, para renderizar TODAS as abas
+            await page.evaluate(() => {
+                game.stopBattle();
+                const iv = { hp: 20, atk: 20, def: 20, spAtk: 20, spDef: 20, speed: 20 };
+                for (let id = 1; id <= 1073; id++) if (game.gameState.pokedex[id] !== 'caught') game.catchPokemonWithIvs(id, 1, iv);
+                for (const r of Object.keys(REGIONS)) game.tryUnlockBadge(r);
+                game.gameState.gold = 1e9;
+                for (let i = 0; i < 12; i++) game.buyGem();
+                for (const id of Object.keys(BERRY_DATA)) { game.gameState.berryBag[id] = 3; }
+                game.plantBerryFree(Object.keys(BERRY_DATA)[0]);
+                gameUI.updateBadgeTabVisibility(); gameUI.updateBerryTabVisibility(); gameUI.updateSkillTabVisibility();
+                gameUI.updateTalentTabVisibility(); gameUI.updateTowerTabVisibility();
+                game.gameState.shinyDex[25] = true;
+                game.startBattle();
+            });
+            const CJK = '[\\u3400-\\u9fff\\uff00-\\uffef\\u3000-\\u303f]';
+            const scan = (label) => page.evaluate(({ label, CJK }) => {
+                const re = new RegExp(CJK);
+                const texts = [];
+                for (const el of document.querySelectorAll('body *')) {
+                    for (const attr of ['title', 'placeholder', 'aria-label', 'alt']) { const v = el.getAttribute(attr); if (v && re.test(v)) texts.push(attr + ':' + v.slice(0, 30)); }
+                    if (el.children.length === 0 && re.test(el.textContent)) texts.push(el.textContent.trim().slice(0, 30));
+                }
+                const doc = document.documentElement;
+                return { label, cjk: texts.slice(0, 5), overflow: doc.scrollWidth > window.innerWidth + 1 };
+            }, { label, CJK });
+            const problems = [];
+            const tabs = ['tab-battle', 'tab-map', 'tab-badge', 'tab-berry', 'tab-skill', 'tab-talent', 'tab-tower', 'tab-pokedex', 'tab-pc', 'tab-settings'];
+            for (const t of tabs) {
+                const btn = page.locator(`#tab-nav [data-tab="${t}"]`);
+                await btn.click();
+                await sleep(250);
+                const active = await page.evaluate(() => document.querySelector('#tab-nav .tab-btn.active').dataset.tab);
+                if (active !== t) problems.push(`${t}: não abriu (${active})`);
+                const r = await scan(t);
+                if (r.cjk.length) problems.push(`${t}: chinês ${JSON.stringify(r.cjk)}`);
+                if (r.overflow) problems.push(`${t}: rolagem horizontal`);
+            }
+            check(`pt-BR ${vp.name}: todas as 10 abas abrem, sem chinês e sem rolagem horizontal`, problems.length === 0, problems.join(' | '));
+
+            // mapa: regiões bloqueadas/desbloqueadas e todas as rotas de cada região
+            const mapProblems = [];
+            await page.click('#tab-nav [data-tab="tab-map"]');
+            for (const rid of ['kanto', 'johto', 'hoenn', 'sinnoh', 'unova', 'kalos', 'alola', 'galar', 'paldea', 'mega']) {
+                await page.evaluate((rid) => gameUI.showRoutes(rid), rid);
+                const r = await scan('mapa ' + rid);
+                if (r.cjk.length || r.overflow) mapProblems.push(`${rid}: ${JSON.stringify(r)}`);
+            }
+            check(`pt-BR ${vp.name}: mapa de todas as 10 regiões (192 rotas) em português`, mapProblems.length === 0, mapProblems.join(' | ').slice(0, 300));
+
+            // pokédex: filtros, regiões, busca
+            const dexProblems = [];
+            await page.click('#tab-nav [data-tab="tab-pokedex"]');
+            for (const f of ['all', 'caught', 'uncaught', 'shiny', 'not_shiny']) {
+                await page.click(`.filter-btn[data-filter="${f}"]`);
+                await sleep(150);
+                const r = await scan('dex ' + f);
+                if (r.cjk.length || r.overflow) dexProblems.push(`${f}: ${JSON.stringify(r)}`);
+            }
+            check(`pt-BR ${vp.name}: Pokédex (todos os filtros) em português e sem estourar`, dexProblems.length === 0, dexProblems.join(' | ').slice(0, 300));
+
+            // diálogos e cartões
+            const dialogProblems = [];
+            const dialogs = [
+                ['guia de jogo', () => gameUI.showGameplayHelpDialog()],
+                ['boas-vindas', () => gameUI.showTutorialDialog(() => {})],
+                ['metas', () => gameUI.guideView.showGoals()],
+                ['síntese de gemas', () => gameUI.showGemSynthesisDialog('common', 'magic')],
+                ['refazer gema', () => gameUI.showReforgeDialog()],
+            ];
+            for (const [name, open] of dialogs) {
+                try { await page.evaluate(open); } catch (e) { dialogProblems.push(`${name}: erro ${e.message.slice(0, 60)}`); continue; }
+                await sleep(200);
+                const r = await scan(name);
+                if (r.cjk.length || r.overflow) dialogProblems.push(`${name}: ${JSON.stringify(r)}`);
+                await page.evaluate(() => document.querySelectorAll('.modal-overlay, .dialog-overlay').forEach(e => e.remove()));
+            }
+            // cartões de evento (nova espécie, shiny, evolução, região, meta)
+            await page.evaluate(() => {
+                const v = gameUI.guideView;
+                v.onNewSpecies({ name: 'Pikachu', uid: 'p1', shiny: true });
+                v.onShiny('Pikachu');
+                v.onEvolved({ oldName: 'Pikachu', newName: 'Raichu', keptLevel: false, archivedOld: true, pokemon: { level: 1 } });
+                v.onRegionUnlocked({ regionName: 'Região de Johto' });
+                v.onGuideEvent({ kind: 'goal', title: 'Capture 10 espécies', text: 'x', exp: 50 });
+                gameUI.showCatchNotification({ name: 'Rattata', isDuplicate: true, uid: 'p1' });
+                gameUI.showToast('x');
+            });
+            const rc = await scan('cartões');
+            if (rc.cjk.length || rc.overflow) dialogProblems.push(`cartões: ${JSON.stringify(rc)}`);
+            check(`pt-BR ${vp.name}: diálogos e cartões de evento em português e sem estourar`, dialogProblems.length === 0, dialogProblems.join(' | ').slice(0, 300));
+            await context.close();
         }
 
         check('整个过程中没有页面错误或 console.error', errors.length === 0, errors.slice(0, 5).join(' | '));

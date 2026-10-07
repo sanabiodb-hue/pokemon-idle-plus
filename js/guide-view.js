@@ -44,7 +44,7 @@ class GuideView {
             else if (a.cta.goals) cta = `<button class="guide-btn" data-guide-action="goals">${escapeHtml(a.cta.label)}</button>`;
             else if (a.cta.tab) cta = `<button class="guide-btn primary" data-guide-action="open-tab" data-target="${escapeHtml(a.cta.tab)}">${escapeHtml(a.cta.label)}</button>`;
         }
-        const skip = a.skippable ? '<button class="guide-btn ghost" data-guide-action="skip" title="跳过新手引导">跳过</button>' : '';
+        const skip = a.skippable ? '<button class="guide-btn ghost" data-guide-action="skip" title="Pular o tutorial">Pular</button>' : '';
         const html = `
             <span class="guide-icon">${a.icon}</span>
             <div class="guide-main">
@@ -107,7 +107,7 @@ class GuideView {
                 <div class="event-card-text">${escapeHtml(opts.text || '')}</div>
                 ${actions ? `<div class="event-card-actions">${actions}</div>` : ''}
             </div>
-            <button class="event-card-close" data-guide-action="close-card" aria-label="关闭">✕</button>`;
+            <button class="event-card-close" data-guide-action="close-card" aria-label="Fechar">✕</button>`;
         this._positionCards();
         this.cards.appendChild(card);
         if (opts.keep) card.dataset.keep = '1';
@@ -128,16 +128,16 @@ class GuideView {
 
     // ---------- 游戏事件 → 卡片 ----------
     onGuideEvent(e) {
-        const expText = e.exp > 0 ? `奖励：出战宝可梦获得 ${e.exp} 经验。` : '';
+        const expText = e.exp > 0 ? `Recompensa: o Pokémon ativo ganhou ${ptNumber(e.exp)} EXP.` : '';
         if (e.kind === 'step') {
             this.showCard({
-                icon: '✅', tone: 'success', title: `${e.title} · 完成！`,
-                text: `${e.text} ${expText}${e.last ? ' 新手引导完成，接下来跟着上方的目标继续吧！' : ''}`.trim(),
+                icon: '✅', tone: 'success', title: `${e.title} · Feito!`,
+                text: `${e.text} ${expText}${e.last ? ' Tutorial concluído! Agora siga as metas no topo.' : ''}`.trim(),
             });
         } else {
             this.showCard({
-                icon: '🏆', tone: 'success', title: `目标达成：${e.title}`, text: expText || e.text,
-                actions: [{ label: '查看全部目标', action: 'goals' }],
+                icon: '🏆', tone: 'success', title: `Meta concluída: ${e.title}`, text: expText || e.text,
+                actions: [{ label: 'Ver todas as metas', action: 'goals' }],
             });
         }
         this.renderBar();
@@ -147,39 +147,39 @@ class GuideView {
     onNewSpecies(info) {
         const stats = this.game.getPokedexStats();
         const rec = this.game.getNextAction();
-        const tip = rec && rec.type === 'route' ? '' : '新伙伴已放入 PC，可以把它加入队伍。';
+        const tip = rec && rec.type === 'route' ? '' : 'O novo Pokémon foi para o PC. Você pode adicioná-lo à equipe.';
         this.showCard({
             icon: info.shiny ? '✨' : '🆕', tone: info.shiny ? 'shiny' : '', keep: true,
-            title: `捕获了新宝可梦：${info.name}${info.shiny ? '（闪光！）' : ''}`,
-            text: `图鉴 ${stats.caught}/${stats.total}。${tip}`,
-            actions: info.uid ? [{ label: '去 PC 看看', action: 'open-pc', uid: info.uid }] : [],
+            title: `Novo Pokémon: ${info.name}${info.shiny ? ' (Shiny!)' : ''}`,
+            text: `Pokédex ${stats.caught}/${stats.total}. ${tip}`,
+            actions: info.uid ? [{ label: 'Ver no PC', action: 'open-pc', uid: info.uid }] : [],
         });
         this.bumpPcBadge(1);
     }
 
     onShiny(name) {
         this.showCard({
-            icon: '✨', tone: 'shiny', keep: true, title: `发现闪光 ${name}！`,
-            text: '闪光宝可梦出现概率只有约 1/4096，已记入图鉴；它拥有更高的属性。可以在图鉴里切换显示。',
+            icon: '✨', tone: 'shiny', keep: true, title: `Você achou um ${name} Shiny!`,
+            text: 'Shiny aparecem em cerca de 1 a cada 4096 encontros. Ele já está na Pokédex e tem atributos maiores. Dá para alternar a aparência na Pokédex.',
             ttl: 12000,
         });
     }
 
     onEvolved(data) {
         const text = data.keptLevel
-            ? `${data.oldName} 变成了 ${data.newName}，等级保持 Lv.${data.pokemon.level}。个体值、性格都和原来一样。`
-            : `${data.oldName} 变成了 ${data.newName}！这是你图鉴里新登记的形态，从 Lv.1 重新成长${data.archivedOld ? `；${data.oldName} 仍保留在图鉴里，继续提供图鉴加成` : ''}。`;
+            ? `${data.oldName} virou ${data.newName} e mantém o Lv.${data.pokemon.level}. IVs e natureza continuam os mesmos.`
+            : `${data.oldName} virou ${data.newName}! Forma nova na sua Pokédex: ela volta para o Lv.1${data.archivedOld ? `, e ${data.oldName} continua na Pokédex dando bônus` : ''}.`;
         this.showCard({
-            icon: '🌟', tone: 'evolution', keep: true, title: `${data.oldName} 进化了！`, text,
-            actions: [{ label: '看看队伍', action: 'open-tab', target: 'tab-battle' }], ttl: 12000,
+            icon: '🌟', tone: 'evolution', keep: true, title: `${data.oldName} evoluiu!`, text,
+            actions: [{ label: 'Ver equipe', action: 'open-tab', target: 'tab-battle' }], ttl: 12000,
         });
     }
 
     onRegionUnlocked(data) {
         this.showCard({
-            icon: '🎉', tone: 'success', keep: true, title: `${data.regionName}已解锁！`,
-            text: '那里有全新的宝可梦等你收集，去地图选一条道路吧。',
-            actions: [{ label: '打开地图', action: 'open-tab', target: 'tab-map' }], ttl: 12000,
+            icon: '🎉', tone: 'success', keep: true, title: `${data.regionName} desbloqueada!`,
+            text: 'Há Pokémon novos para capturar lá. Abra o Mapa e escolha uma rota.',
+            actions: [{ label: 'Abrir Mapa', action: 'open-tab', target: 'tab-map' }], ttl: 12000,
         });
     }
 
@@ -189,7 +189,7 @@ class GuideView {
         const rows = goals.map(g => {
             const pct = Math.min(100, Math.round(g.ratio * 100));
             return `<div class="goal-row${g.done ? ' done' : ''}">
-                <div class="goal-head"><span>${g.done ? '✅' : g.region ? '🗺️' : '🎯'} ${escapeHtml(g.title)}</span><span class="goal-count">${g.done ? '已完成' : g.current + '/' + g.target}</span></div>
+                <div class="goal-head"><span>${g.done ? '✅' : g.region ? '🗺️' : '🎯'} ${escapeHtml(g.title)}</span><span class="goal-count">${g.done ? 'Concluída' : ptNumber(g.current) + '/' + ptNumber(g.target)}</span></div>
                 <div class="goal-desc">${escapeHtml(g.desc)}</div>
                 ${g.done ? '' : `<div class="guide-progress"><div class="guide-progress-fill" style="width:${pct}%"></div></div>`}
             </div>`;
@@ -198,11 +198,11 @@ class GuideView {
         const overlay = document.createElement('div');
         overlay.className = 'modal-overlay goals-overlay';
         overlay.innerHTML = `
-            <div class="modal goals-modal" role="dialog" aria-label="目标">
-                <h3>🏆 目标（${doneCount}/${goals.length}）</h3>
-                <p class="goal-intro">达成目标会自动获得经验奖励。</p>
+            <div class="modal goals-modal" role="dialog" aria-label="Metas">
+                <h3>🏆 Metas (${doneCount}/${goals.length})</h3>
+                <p class="goal-intro">Ao concluir uma meta, você ganha EXP automaticamente.</p>
                 <div class="goal-list">${rows}</div>
-                <div class="modal-buttons"><button class="confirm-btn goals-close">关闭</button></div>
+                <div class="modal-buttons"><button class="confirm-btn goals-close">Fechar</button></div>
             </div>`;
         const close = () => overlay.remove();
         overlay.querySelector('.goals-close').addEventListener('click', close);
@@ -225,7 +225,7 @@ class GuideView {
                 const ok = g.changeRoute(data.route);
                 if (ok) {
                     const route = g.getRoute(data.route);
-                    this.ui.showToast(`📍 前往 ${route ? route.name : '新道路'}`);
+                    this.ui.showToast(`📍 Indo para ${route ? route.name : 'a nova rota'}`);
                     if (route) {
                         for (const rid in REGIONS) if (REGIONS[rid].routes.some(r => r.id === data.route)) g.changeRegion(rid);
                     }
@@ -238,7 +238,7 @@ class GuideView {
                 this.showGoals();
                 break;
             case 'skip':
-                if (window.confirm('跳过新手引导？之后仍可以在设置里重新查看。')) {
+                if (window.confirm('Pular o tutorial? Você pode revê-lo depois em Configurações.')) {
                     g.guideSkipOnboarding();
                     this.renderBar();
                 }

@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="pt-BR">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>宝可梦挂机放置游戏</title>
+    <title>Pokémon Idle</title>
     <!-- Google Analytics -->
     <script async src="https://www.googletagmanager.com/gtag/js?id=G-JR8QR87EH2"></script>
     <script>
@@ -20,7 +20,7 @@
         <div id="save-banner" class="save-banner hidden" role="alert"></div>
         <!-- 顶部状态栏 -->
         <header id="header">
-            <h1>宝可梦收集放置 <span class="version-tag">v2.73</span></h1>
+            <h1>Pokémon Idle <span class="version-tag">v2.73</span></h1>
             <span class="author-tag">by: jinwind</span>
         </header>
 
@@ -91,11 +91,11 @@
             <div id="tab-map" class="tab-content">
                 <div id="map-container">
                     <div id="region-panel">
-                        <h2>🗺️ 选择地区</h2>
+                        <h2>🗺️ Regiões</h2>
                         <div id="region-list"></div>
                     </div>
                     <div id="route-panel">
-                        <h2 id="region-title">请选择地区</h2>
+                        <h2 id="region-title">Escolha uma região</h2>
                         <div id="route-list"></div>
                     </div>
                 </div>
@@ -106,40 +106,40 @@
                 <div id="badge-container">
                     <!-- 金币信息 -->
                     <div id="badge-header">
-                        <h2>🏅 徽章</h2>
+                        <h2>🏅 Insígnias</h2>
                         <div id="gold-display">🪙 <span id="gold-amount">0</span></div>
                     </div>
                     <!-- 徽章列表 -->
                     <div id="badge-list"></div>
                     <!-- 商店 -->
                     <div id="shop-section">
-                        <h3>🏪 宝石商店</h3>
-                        <p class="shop-desc">花费金币购买随机宝石，镶嵌到徽章中增强能力</p>
+                        <h3>🏪 Loja de Gemas</h3>
+                        <p class="shop-desc">Gaste Moedas em gemas aleatórias e encaixe nas insígnias para ficar mais forte.</p>
                         <div id="shop-actions">
-                            <button id="btn-buy-gem" class="shop-buy-btn">🪙 1000 购买宝石</button>
-                            <button id="btn-buy-all-gems" class="shop-buy-btn batch" title="快捷键 B">🛒 全部购买 (B)</button>
-                            <span id="gem-bag-count">背包: 0/50</span>
+                            <button id="btn-buy-gem" class="shop-buy-btn">🪙 1.000 Comprar gema</button>
+                            <button id="btn-buy-all-gems" class="shop-buy-btn batch" title="Atalho: B">🛒 Comprar tudo (B)</button>
+                            <span id="gem-bag-count">Bolsa: 0/50</span>
                         </div>
                         <div id="synthesis-actions">
-                            <button class="gem-synthesis-btn" data-target-quality="magic">✨ 合成魔法宝石</button>
-                            <button class="gem-synthesis-btn" data-target-quality="rare">✨ 合成稀有宝石</button>
-                            <button class="gem-synthesis-btn" data-target-quality="epic">✨ 合成史诗宝石</button>
-                            <button class="gem-synthesis-btn" data-target-quality="mythic">✨ 合成神话宝石</button>
-                            <button class="gem-synthesis-btn" data-target-quality="legendary">✨ 合成传说宝石</button>
-                            <button class="gem-synthesis-btn" data-target-quality="eternal">✨ 合成永恒宝石</button>
-                            <button id="btn-reforge-eternal" class="gem-synthesis-btn reforge">🔨 重铸永恒宝石</button>
-                            <button id="btn-synthesize-all" class="gem-synthesis-btn batch" title="快捷键 S">🔄 一键合成 (S)</button>
-                            <button id="btn-auto-eternal" class="gem-synthesis-btn eternal" style="display:none">💎 一键购买并合成永恒</button>
+                            <button class="gem-synthesis-btn" data-target-quality="magic">✨ Fundir gema Mágica</button>
+                            <button class="gem-synthesis-btn" data-target-quality="rare">✨ Fundir gema Rara</button>
+                            <button class="gem-synthesis-btn" data-target-quality="epic">✨ Fundir gema Épica</button>
+                            <button class="gem-synthesis-btn" data-target-quality="mythic">✨ Fundir gema Mítica</button>
+                            <button class="gem-synthesis-btn" data-target-quality="legendary">✨ Fundir gema Lendária</button>
+                            <button class="gem-synthesis-btn" data-target-quality="eternal">✨ Fundir gema Eterna</button>
+                            <button id="btn-reforge-eternal" class="gem-synthesis-btn reforge">🔨 Refazer gema Eterna</button>
+                            <button id="btn-synthesize-all" class="gem-synthesis-btn batch" title="Atalho: S">🔄 Fundir tudo (S)</button>
+                            <button id="btn-auto-eternal" class="gem-synthesis-btn eternal" style="display:none">💎 Comprar e fundir até Eterna</button>
                         </div>
                     </div>
                     <!-- 宝石背包 -->
                     <div id="gem-bag-section">
-                        <h3>💎 宝石背包</h3>
+                        <h3>💎 Bolsa de Gemas</h3>
                         <div id="gem-bag-list"></div>
                     </div>
                     <!-- 宝石加成总览 -->
                     <div id="gem-bonus-section">
-                        <h3>📊 宝石加成总览</h3>
+                        <h3>📊 Bônus das Gemas</h3>
                         <div id="gem-bonus-list"></div>
                     </div>
                 </div>
@@ -149,7 +149,7 @@
             <div id="tab-berry" class="tab-content">
                 <div id="berry-container">
                     <div id="berry-header">
-                        <h2>🌱 树果花园</h2>
+                        <h2>🌱 Jardim de Frutas</h2>
                         <div class="berry-header-right">
                             <div id="berry-bag-summary"></div>
                             <div id="berry-gold-display">🪙 <span id="berry-gold-amount">0</span></div>
@@ -157,21 +157,21 @@
                     </div>
                     <!-- 种植区 -->
                     <div id="berry-garden-section">
-                        <h3>🌿 种植区 <span id="berry-plot-count">0/10</span></h3>
+                        <h3>🌿 Canteiros <span id="berry-plot-count">0/10</span></h3>
                         <div id="berry-garden-actions">
-                            <button id="btn-harvest-all" class="berry-action-btn harvest">🧺 一键采摘</button>
+                            <button id="btn-harvest-all" class="berry-action-btn harvest">🧺 Colher tudo</button>
                         </div>
                         <div id="berry-plots-grid"></div>
                     </div>
                     <!-- 背包 -->
                     <div id="berry-bag-section">
-                        <h3>🎒 树果背包</h3>
+                        <h3>🎒 Bolsa de Frutas</h3>
                         <div id="berry-bag-grid"></div>
                     </div>
                     <!-- 种植选择 -->
                     <div id="berry-plant-section">
-                        <h3>🌰 购买种子</h3>
-                        <p class="berry-plant-desc">花费50,000金币购买种子种植，5小时后成熟可采摘1~2个树果</p>
+                        <h3>🌰 Comprar sementes</h3>
+                        <p class="berry-plant-desc">Compre sementes por 50.000 Moedas. Depois de 5 h, colha 1 a 2 frutas.</p>
                         <div id="berry-plant-grid"></div>
                     </div>
                 </div>
@@ -181,16 +181,16 @@
             <div id="tab-skill" class="tab-content">
                 <div id="skill-container">
                     <div id="skill-header">
-                        <h2>⚡ 技能系统</h2>
+                        <h2>⚡ Técnicas</h2>
                     </div>
                     <!-- 规则说明 -->
                     <div id="skill-rules-section">
-                        <h3>📋 技能规则</h3>
+                        <h3>📋 Como funciona</h3>
                         <div id="skill-rules-content"></div>
                     </div>
                     <!-- 技能列表 -->
                     <div id="skill-table-section">
-                        <h3>📊 各属性技能一览</h3>
+                        <h3>📊 Técnicas por tipo</h3>
                         <div id="skill-table-content"></div>
                     </div>
                 </div>
@@ -200,21 +200,21 @@
             <div id="tab-talent" class="tab-content">
                 <div id="talent-container">
                     <div id="talent-header">
-                        <h2>🌟 天赋系统</h2>
+                        <h2>🌟 Talentos</h2>
                         <div id="talent-points-display"></div>
                     </div>
                     <!-- 规则说明 -->
                     <div id="talent-rules-section">
-                        <h3>📋 天赋规则</h3>
+                        <h3>📋 Como funciona</h3>
                         <div id="talent-rules-content"></div>
                     </div>
                     <!-- 操作区 -->
                     <div id="talent-actions">
-                        <button id="btn-reset-talents" class="talent-reset-btn">🔄 重置天赋（100万金币）</button>
+                        <button id="btn-reset-talents" class="talent-reset-btn">🔄 Redefinir talentos (1.000.000 Moedas)</button>
                     </div>
                     <!-- 天赋列表 -->
                     <div id="talent-list-section">
-                        <h3>📊 天赋列表</h3>
+                        <h3>📊 Lista de talentos</h3>
                         <div id="talent-list"></div>
                     </div>
                 </div>
@@ -224,28 +224,28 @@
             <div id="tab-tower" class="tab-content">
                 <div id="tower-container">
                     <div id="tower-header">
-                        <h2>🏝️ 挑战岛</h2>
+                        <h2>🏝️ Torre de Desafio</h2>
                         <div id="tower-floor-display"></div>
                     </div>
                     <!-- 加成信息 -->
                     <div id="tower-bonus-section">
-                        <h3>📊 通关加成</h3>
+                        <h3>📊 Bônus por andar</h3>
                         <div id="tower-bonus-info"></div>
                     </div>
                     <!-- 规则说明 -->
                     <div id="tower-rules-section">
-                        <h3>📋 挑战规则</h3>
+                        <h3>📋 Regras</h3>
                         <div id="tower-rules-content"></div>
                     </div>
                     <!-- 当前层信息 -->
                     <div id="tower-floor-section">
-                        <h3 id="tower-floor-title">第 1 层</h3>
+                        <h3 id="tower-floor-title">Andar 1</h3>
                         <div id="tower-enemies-grid"></div>
                     </div>
                     <!-- 操作按钮 -->
                     <div id="tower-actions">
-                        <button id="btn-tower-start" class="tower-action-btn start">⚔️ 开始挑战</button>
-                        <button id="btn-tower-flee" class="tower-action-btn flee" style="display:none;">🏃 撤退</button>
+                        <button id="btn-tower-start" class="tower-action-btn start">⚔️ Começar desafio</button>
+                        <button id="btn-tower-flee" class="tower-action-btn flee" style="display:none;">🏃 Desistir</button>
                     </div>
                 </div>
             </div>
@@ -253,35 +253,35 @@
             <!-- Tab 6: 图鉴界面 -->
             <div id="tab-pokedex" class="tab-content">
                 <div id="pokedex-container">
-                    <h2>📖 宝可梦图鉴 <span id="pokedex-caught">已捕获: 0</span></h2>
+                    <h2>📖 Pokédex <span id="pokedex-caught">Capturados: 0</span></h2>
                     <div id="pokedex-region-filters">
-                        <button class="region-filter-btn active" data-region="all">全部</button>
-                        <button class="region-filter-btn" data-region="kanto">关都地区</button>
-                        <button class="region-filter-btn" data-region="johto">城都地区</button>
-                        <button class="region-filter-btn" data-region="hoenn">丰缘地区</button>
-                        <button class="region-filter-btn" data-region="sinnoh">神奥地区</button>
-                        <button class="region-filter-btn" data-region="unova">合众地区</button>
-                        <button class="region-filter-btn" data-region="kalos">卡洛斯地区</button>
-                        <button class="region-filter-btn" data-region="alola">阿罗拉地区</button>
-                        <button class="region-filter-btn" data-region="galar">伽勒尔地区</button>
-                        <button class="region-filter-btn" data-region="paldea">帕底亚地区</button>
-                        <button class="region-filter-btn" data-region="mega">Mega地区</button>
+                        <button class="region-filter-btn active" data-region="all">Todas</button>
+                        <button class="region-filter-btn" data-region="kanto">Kanto</button>
+                        <button class="region-filter-btn" data-region="johto">Johto</button>
+                        <button class="region-filter-btn" data-region="hoenn">Hoenn</button>
+                        <button class="region-filter-btn" data-region="sinnoh">Sinnoh</button>
+                        <button class="region-filter-btn" data-region="unova">Unova</button>
+                        <button class="region-filter-btn" data-region="kalos">Kalos</button>
+                        <button class="region-filter-btn" data-region="alola">Alola</button>
+                        <button class="region-filter-btn" data-region="galar">Galar</button>
+                        <button class="region-filter-btn" data-region="paldea">Paldea</button>
+                        <button class="region-filter-btn" data-region="mega">Mega</button>
                     </div>
                     <div id="pokedex-filters">
-                        <button class="filter-btn" data-filter="all">全部</button>
-                        <button class="filter-btn active" data-filter="caught">已捕获</button>
-                        <button class="filter-btn" data-filter="uncaught">未捕获</button>
-                        <button class="filter-btn shiny-filter" data-filter="shiny">✨ 闪光</button>
-                        <button class="filter-btn not-shiny-filter" data-filter="not_shiny">未闪光</button>
+                        <button class="filter-btn" data-filter="all">Todos</button>
+                        <button class="filter-btn active" data-filter="caught">Capturados</button>
+                        <button class="filter-btn" data-filter="uncaught">Faltam</button>
+                        <button class="filter-btn shiny-filter" data-filter="shiny">✨ Shiny</button>
+                        <button class="filter-btn not-shiny-filter" data-filter="not_shiny">Não shiny</button>
                     </div>
                     <div id="pokedex-sub-filters">
-                        <button class="sub-filter-btn active" data-sort="none">默认排序</button>
-                        <button class="sub-filter-btn" data-sort="power">战力排序</button>
-                        <button class="sub-filter-btn" data-sort="potential">潜力排序</button>
-                        <button class="sub-filter-btn" data-sort="level">等级排序</button>
+                        <button class="sub-filter-btn active" data-sort="none">Padrão</button>
+                        <button class="sub-filter-btn" data-sort="power">Por Poder</button>
+                        <button class="sub-filter-btn" data-sort="potential">Por Potencial</button>
+                        <button class="sub-filter-btn" data-sort="level">Por Lv.</button>
                     </div>
                     <div id="pokedex-search-bar">
-                        <input type="text" id="pokedex-search-input" placeholder="🔍 搜索宝可梦名称或编号..." autocomplete="off">
+                        <input type="text" id="pokedex-search-input" placeholder="🔍 Buscar por nome ou número..." autocomplete="off">
                     </div>
                     <div id="pokedex-grid"></div>
                 </div>
@@ -295,189 +295,189 @@
             <!-- Tab 6: 设置界面 -->
             <div id="tab-settings" class="tab-content">
                 <div id="settings-container">
-                    <h2>⚙️ 设置</h2>
+                    <h2>⚙️ Configurações</h2>
                     <div class="settings-section">
-                        <h3>🎮 游戏选项</h3>
+                        <h3>🎮 Jogo</h3>
                         <label class="setting-toggle">
                             <input type="checkbox" id="setting-auto-switch">
                             <span class="toggle-slider"></span>
-                            <span class="toggle-label">自动更换最优宝可梦出战</span>
+                            <span class="toggle-label">Trocar automaticamente pelo melhor Pokémon</span>
                         </label>
-                        <p class="setting-desc">遭遇新敌人时，自动选择队伍中对其伤害最高的宝可梦出战</p>
+                        <p class="setting-desc">A cada novo inimigo, entra o Pokémon da equipe que causa mais dano.</p>
                         <div id="oneshot-strategy-group" class="setting-radio-group" style="display:none;">
-                            <p class="setting-radio-label">⚡ 一击必杀时优先选择：</p>
-                            <label class="setting-radio"><input type="radio" name="oneshot-strategy" value="fastest"> 🏃 速度最快（清怪更快）</label>
-                            <label class="setting-radio"><input type="radio" name="oneshot-strategy" value="lowest_level"> 📈 等级最低（练级优先）</label>
-                            <label class="setting-radio"><input type="radio" name="oneshot-strategy" value="no_change"> 🔒 不改变（保持当前出战）</label>
+                            <p class="setting-radio-label">⚡ Se houver Pokémon que derrote de um golpe, preferir:</p>
+                            <label class="setting-radio"><input type="radio" name="oneshot-strategy" value="fastest"> 🏃 O mais rápido (limpa mais rápido)</label>
+                            <label class="setting-radio"><input type="radio" name="oneshot-strategy" value="lowest_level"> 📈 O de menor Lv. (para treinar)</label>
+                            <label class="setting-radio"><input type="radio" name="oneshot-strategy" value="no_change"> 🔒 Não trocar (manter o atual)</label>
                         </div>
                         <label class="setting-toggle" id="setting-auto-route-wrapper">
                             <input type="checkbox" id="setting-auto-route">
                             <span class="toggle-slider"></span>
-                            <span class="toggle-label">🔄 自动切换地图</span>
+                            <span class="toggle-label">🔄 Trocar de rota automaticamente</span>
                         </label>
-                        <p class="setting-desc" id="setting-auto-route-desc">当前地图所有宝可梦达成条件后，自动前往下一个未完成的地图</p>
+                        <p class="setting-desc" id="setting-auto-route-desc">Quando todos os Pokémon da rota atual cumprirem a condição, vai para a próxima rota incompleta.</p>
                         <div id="route-switch-condition-group" class="setting-radio-group" style="display:none;">
-                            <p class="setting-radio-label">📋 切换条件：</p>
-                            <label class="setting-radio"><input type="radio" name="route-switch-condition" value="6v_shiny"> ✨ 全部6V且闪光后切换</label>
-                            <label class="setting-radio"><input type="radio" name="route-switch-condition" value="6v_only"> 🎯 全部6V后切换</label>
+                            <p class="setting-radio-label">📋 Condição para trocar:</p>
+                            <label class="setting-radio"><input type="radio" name="route-switch-condition" value="6v_shiny"> ✨ Todos 6V e shiny</label>
+                            <label class="setting-radio"><input type="radio" name="route-switch-condition" value="6v_only"> 🎯 Todos 6V</label>
                         </div>
                         <div id="capture-duplicates-group" class="setting-radio-group">
-                            <p class="setting-radio-label">🎒 遇到已拥有的宝可梦时：</p>
-                            <label class="setting-radio"><input type="radio" name="capture-duplicates" value="all"> 有几率收为新的个体（默认，闪光必收）</label>
-                            <label class="setting-radio"><input type="radio" name="capture-duplicates" value="better"> 只收个体值总和更高的（闪光必收）</label>
-                            <label class="setting-radio"><input type="radio" name="capture-duplicates" value="off"> 不收（只提升图鉴代表的个体值，旧版行为）</label>
+                            <p class="setting-radio-label">🎒 Ao encontrar um Pokémon que você já tem:</p>
+                            <label class="setting-radio"><input type="radio" name="capture-duplicates" value="all"> Pode capturar outro, com chance (padrão; shiny sempre)</label>
+                            <label class="setting-radio"><input type="radio" name="capture-duplicates" value="better"> Só se os IVs somarem mais (shiny sempre)</label>
+                            <label class="setting-radio"><input type="radio" name="capture-duplicates" value="off"> Não capturar (só melhora os IVs do principal da Pokédex)</label>
                         </div>
-                        <button id="btn-upgrade-all-skills" class="setting-btn" style="display:none; margin-top: 12px;">⚡ 一键升级技能</button>
+                        <button id="btn-upgrade-all-skills" class="setting-btn" style="display:none; margin-top: 12px;">⚡ Melhorar todas as Técnicas</button>
                     </div>
                     <div class="settings-section">
-                        <h3>📊 测试期统计</h3>
+                        <h3>📊 Estatísticas do teste</h3>
                         <label class="setting-toggle">
                             <input type="checkbox" id="setting-analytics">
                             <span class="toggle-slider"></span>
-                            <span class="toggle-label">发送匿名使用统计</span>
+                            <span class="toggle-label">Enviar estatísticas anônimas</span>
                         </label>
-                        <p class="setting-desc">只记录“打开游戏、第一次捕获、进化”这类匿名事件，用来改进新手体验；不包含任何个人信息。关闭后不再记录。</p>
-                        <button id="btn-copy-beta-report" class="setting-btn">复制测试报告</button>
-                        <button id="btn-open-goals" class="setting-btn">🏆 查看全部目标</button>
-                        <button id="btn-restart-onboarding" class="setting-btn">🎓 重新查看新手引导</button>
-                        <p class="setting-desc">参加测试时，可以把报告发给开发者（只含匿名的进度与时长摘要）。</p>
+                        <p class="setting-desc">Registra só eventos anônimos (abrir o jogo, primeira captura, evolução) para melhorar a experiência de quem está começando. Não inclui dados pessoais. Desligado, nada é registrado.</p>
+                        <button id="btn-copy-beta-report" class="setting-btn">Copiar relatório do teste</button>
+                        <button id="btn-open-goals" class="setting-btn">🏆 Ver todas as metas</button>
+                        <button id="btn-restart-onboarding" class="setting-btn">🎓 Rever o tutorial</button>
+                        <p class="setting-desc">Se estiver participando do teste, envie o relatório ao desenvolvedor (só resumo anônimo de progresso e tempo).</p>
                     </div>
                     <div class="settings-section gameplay-entry">
-                        <h3>📘 游戏玩法说明</h3>
-                        <p class="gameplay-entry-desc">点击查看名词解释、战斗属性来源与经验分配规则</p>
-                        <button id="btn-gameplay-help" class="setting-btn">查看玩法说明</button>
+                        <h3>📘 Como jogar</h3>
+                        <p class="gameplay-entry-desc">Veja os termos, de onde vêm os atributos e como o EXP é dividido.</p>
+                        <button id="btn-gameplay-help" class="setting-btn">Ver guia</button>
                     </div>
                     <div class="settings-section">
-                        <h3>🎨 主题颜色</h3>
+                        <h3>🎨 Tema</h3>
                         <div id="theme-picker" class="theme-picker">
-                            <button class="theme-color-btn active" data-theme="midnight" title="午夜蓝">
+                            <button class="theme-color-btn active" data-theme="midnight" title="Azul-meia-noite">
                                 <span class="theme-preview" style="background: linear-gradient(135deg, #1a1a2e, #0f3460); border: 2px solid #e94560;"></span>
-                                <span class="theme-label">午夜蓝</span>
+                                <span class="theme-label">Meia-noite</span>
                             </button>
-                            <button class="theme-color-btn" data-theme="forest" title="森林绿">
+                            <button class="theme-color-btn" data-theme="forest" title="Verde-floresta">
                                 <span class="theme-preview" style="background: linear-gradient(135deg, #1a2e1a, #0f4a2e); border: 2px solid #2ecc71;"></span>
-                                <span class="theme-label">森林绿</span>
+                                <span class="theme-label">Floresta</span>
                             </button>
-                            <button class="theme-color-btn" data-theme="sakura" title="樱花粉">
+                            <button class="theme-color-btn" data-theme="sakura" title="Rosa-cerejeira">
                                 <span class="theme-preview" style="background: linear-gradient(135deg, #2e1a2a, #4a1a3e); border: 2px solid #e91e90;"></span>
-                                <span class="theme-label">樱花粉</span>
+                                <span class="theme-label">Cerejeira</span>
                             </button>
-                            <button class="theme-color-btn" data-theme="ocean" title="深海蓝">
+                            <button class="theme-color-btn" data-theme="ocean" title="Azul-oceano">
                                 <span class="theme-preview" style="background: linear-gradient(135deg, #0a1628, #0a2a4a); border: 2px solid #00b4d8;"></span>
-                                <span class="theme-label">深海蓝</span>
+                                <span class="theme-label">Oceano</span>
                             </button>
-                            <button class="theme-color-btn" data-theme="sunset" title="落日橙">
+                            <button class="theme-color-btn" data-theme="sunset" title="Laranja-pôr-do-sol">
                                 <span class="theme-preview" style="background: linear-gradient(135deg, #2e1a10, #4a2a10); border: 2px solid #f39c12;"></span>
-                                <span class="theme-label">落日橙</span>
+                                <span class="theme-label">Pôr do sol</span>
                             </button>
-                            <button class="theme-color-btn" data-theme="purple" title="暗夜紫">
+                            <button class="theme-color-btn" data-theme="purple" title="Roxo-noturno">
                                 <span class="theme-preview" style="background: linear-gradient(135deg, #1a1030, #2a1850); border: 2px solid #9b59b6;"></span>
-                                <span class="theme-label">暗夜紫</span>
+                                <span class="theme-label">Noite</span>
                             </button>
                         </div>
                     </div>
                     <div class="settings-section">
-                        <h3>💾 存档管理</h3>
+                        <h3>💾 Save</h3>
                         <div class="settings-buttons">
-                            <button id="btn-save" class="setting-btn">手动保存</button>
-                            <button id="btn-export" class="setting-btn">导出存档</button>
-                            <button id="btn-import" class="setting-btn">导入存档</button>
-                            <button id="btn-delete" class="setting-btn danger">删除存档</button>
+                            <button id="btn-save" class="setting-btn">Salvar agora</button>
+                            <button id="btn-export" class="setting-btn">Exportar save</button>
+                            <button id="btn-import" class="setting-btn">Importar save</button>
+                            <button id="btn-delete" class="setting-btn danger">Apagar save</button>
                         </div>
                         <div class="settings-buttons">
-                            <button id="btn-export-file" class="setting-btn">📁 导出存档文件</button>
-                            <button id="btn-import-file" class="setting-btn">📂 加载存档文件</button>
+                            <button id="btn-export-file" class="setting-btn">📁 Exportar arquivo</button>
+                            <button id="btn-import-file" class="setting-btn">📂 Carregar arquivo</button>
                             <input type="file" id="import-file-input" accept=".json,.txt" style="display:none">
                         </div>
-                        <textarea id="save-data-area" placeholder="存档数据将显示在这里..." rows="6"></textarea>
+                        <textarea id="save-data-area" placeholder="Os dados do save aparecem aqui..." rows="6"></textarea>
                     </div>
                     <div class="settings-section">
-                        <h3>📊 游戏统计</h3>
+                        <h3>📊 Estatísticas</h3>
                         <div id="game-stats"></div>
                     </div>
 
                     <div class="settings-section">
-                        <h3>📝 版本更新记录</h3>
+                        <h3>📝 Histórico de versões (original)</h3>
                         <div id="changelog" class="changelog">
                             <div class="changelog-item">
                                 <div class="changelog-version">v2.70 <span class="changelog-date">2026-04-10</span></div>
                                 <ul class="changelog-list">
-                                    <li> 欢迎关注 https://www.gityx.com/ 后续我有新作品发布也会更新到上面 </li>
-                                    <li>🔧 修复布土拨、巴布土拨、巨锻匠属性错误</li>
+                                    <li> Siga https://www.gityx.com/ — novos trabalhos do autor serão publicados lá. </li>
+                                    <li>🔧 Corrigidos atributos errados de alguns Pokémon da 9ª geração</li>
                                 </ul>
                             </div>
                             <div class="changelog-item">
                                 <div class="changelog-version">v2.69 <span class="changelog-date">2026-04-10</span></div>
                                 <ul class="changelog-list">
-                                    <li>📁 存档管理新增「导出存档文件」和「加载存档文件」按钮，支持直接文件操作</li>
-                                    <li>🔧 修复导入存档时不计算离线收益的问题</li>
+                                    <li>📁 Novos botões "Exportar arquivo" e "Carregar arquivo" no save, para trabalhar direto com arquivos</li>
+                                    <li>🔧 Corrigido: importar um save não calculava o ganho offline</li>
                                 </ul>
                             </div>
                             <div class="changelog-item">
                                 <div class="changelog-version">v2.66 <span class="changelog-date">2026-04-09</span></div>
                                 <ul class="changelog-list">
-                                    <li>🏰 挑战塔最高层数从200层提升至255层</li>
-                                    <li>⚔️ 201层及以上敌人随机种族值650以上的宝可梦</li>
-                                    <li>💫 宝石加成总览：闪避概率超过75%时显示上限提示</li>
+                                    <li>🏰 Andar máximo da Torre de Desafio: de 200 para 255</li>
+                                    <li>⚔️ Do andar 201 em diante, os inimigos são Pokémon aleatórios com atributos base acima de 650</li>
+                                    <li>💫 Bônus das Gemas: aviso de limite quando a esquiva passa de 75%</li>
                                 </ul>
                             </div>
                             <div class="changelog-item">
                                 <div class="changelog-version">v2.65 <span class="changelog-date">2026-04-08</span></div>
                                 <ul class="changelog-list">
-                                    <li>🌟 新增第10地区「Mega进化地区」，包含5条道路，等级范围17001-24500</li>
-                                    <li>🧬 新增48只经典Mega宝可梦（ID 1026-1073）（Z-A的新Mega精灵没有合适的立绘暂不添加）（极巨化和钛晶化永远不会加入）</li>
-                                    <li>🏅 新增Mega徽章：完成Mega图鉴后，图鉴内宝可梦经验增加50%</li>
-                                    <li>🏰 挑战塔最高层数从150层提升至200层</li>
+                                    <li>🌟 Nova 10ª região, "Mega Evolução", com 5 rotas (Lv. 17001-24500)</li>
+                                    <li>🧬 48 Mega Pokémon clássicos (ID 1026-1073). As novas Megas de Z-A ficam de fora por falta de sprites; Dynamax e Terastal não serão adicionados.</li>
+                                    <li>🏅 Nova Insígnia Mega: ao completar a Pokédex Mega, os Pokémon da Pokédex ganham +50% de EXP</li>
+                                    <li>🏰 Andar máximo da Torre de Desafio: de 150 para 200</li>
                                 </ul>
                             </div>
                             <div class="changelog-item">
                                 <div class="changelog-version">v2.49 <span class="changelog-date">2026-04-07</span></div>
                                 <ul class="changelog-list">
-                                    <li>⚡ 大幅优化"一键购买并合成永恒"性能</li>
-                                    <li>📦 存档压缩：大幅减少占用空间</li>
-                                    <li>🏰 挑战塔最高层数从100层提升至150层</li>
-                                    <li>🚀 重构"一键购买并合成永恒"为异步分批执行</li>
-                                    <li>🔧 修复树果喂食上限计算：种族值251等不能整除5的情况也能继续吃果子（实际加成仍封顶255）</li>
-                                    <li>🔧 修正755号宝可梦名字：甜竹竹→睡睡菇，756号：灿烂甜竹竹→灯罩夜菇</li>
+                                    <li>⚡ "Comprar e fundir até Eterna" ficou muito mais rápido</li>
+                                    <li>📦 Compressão do save: ocupa bem menos espaço</li>
+                                    <li>🏰 Andar máximo da Torre de Desafio: de 100 para 150</li>
+                                    <li>🚀 "Comprar e fundir até Eterna" agora roda em lotes assíncronos</li>
+                                    <li>🔧 Corrigido o limite de frutas: atributos base como 251 (não divisíveis por 5) agora também aceitam frutas (o bônus continua limitado a 255)</li>
+                                    <li>🔧 Corrigidos os nomes dos Pokémon #755 (Morelull) e #756 (Shiinotic)</li>
                                 </ul>
                             </div>
                             <div class="changelog-item">
                                 <div class="changelog-version">v2.33 <span class="changelog-date">2026-04-03</span></div>
                                 <ul class="changelog-list">
-                                    <li>✨ 宝石商店新增"一键购买并合成永恒"按钮：自动循环购买+合成直到出现永恒宝石（需帕底亚徽章解锁）</li>
-                                    <li>✨ 设置-游戏选项新增"一键升级技能"按钮：批量升级所有达到1000级的宝可梦技能（需解锁技能系统后显示）</li>
+                                    <li>✨ Loja de Gemas: botão "Comprar e fundir até Eterna" — compra e funde em loop até sair uma gema Eterna (precisa da Insígnia de Paldea)</li>
+                                    <li>✨ Configurações: botão "Melhorar todas as Técnicas" — melhora a Técnica de todos os Pokémon no Lv.1000+ (aparece depois de desbloquear as Técnicas)</li>
                                 </ul>
                             </div>
                             <div class="changelog-item">
                                 <div class="changelog-version">v2.13 <span class="changelog-date">2026-04-02</span></div>
                                 <ul class="changelog-list">
-                                    <li>🎨 图鉴界面改为自适应多列网格布局，根据屏幕宽度动态排列更多卡片</li>
-                                    <li>🐛 修复图鉴卡片窄宽度下技能等级和按钮被挤出不可见的问题</li>
-                                    <li>🐛 修复喂食树果后野生怪物和挑战塔敌人也享受树果种族值加成的bug</li>
-                                    <li>🔧 重构挑战塔敌人存储：只保存ID列表，战斗时实时计算属性（减小存档体积+彻底修复缓存属性问题）</li>
-                                    <li>✨ 图鉴新增搜索框，支持按名称或编号搜索宝可梦</li>
+                                    <li>🎨 A Pokédex agora usa grade adaptável, com mais cartões conforme a largura da tela</li>
+                                    <li>🐛 Corrigido: em telas estreitas, o nível da Técnica e os botões dos cartões da Pokédex ficavam escondidos</li>
+                                    <li>🐛 Corrigido: inimigos selvagens e da Torre também recebiam o bônus das frutas</li>
+                                    <li>🔧 Inimigos da Torre: o save guarda só a lista de IDs e os atributos são calculados na batalha (save menor e fim dos problemas de cache)</li>
+                                    <li>✨ Busca na Pokédex, por nome ou número</li>
                                 </ul>
                             </div>
                             <div class="changelog-item">
                                 <div class="changelog-version">v1.97 <span class="changelog-date">2026-04-01</span></div>
                                 <ul class="changelog-list">
-                                    <li>✨ 挑战塔支持自动换最优宝可梦（与主线战斗一致）</li>
-                                    <li>🎨 优化手机竖屏战斗界面布局（缩小精灵图、信息框和间距）</li>
-                                    <li>🐛 修复宝石面板PC端点击与hover行为冲突的问题</li>
-                                    <li>🐛 修复挑战塔内手动换人时HP比例未同步的问题</li>
-                                    <li>🐛 修复"普通宝石概率降低"天赋满级后仍有概率获得白色宝石的问题</li>
-                                    <li>🐛 修复挑战塔击败敌人时HP条没有归零动画的问题</li>
-                                    <li>🐛 修复挑战岛怪物精灵图不显示的问题</li>
-                                    <li>🐛 修复挑战岛怪物名字显示不全的问题</li>
+                                    <li>✨ A Torre também troca automaticamente pelo melhor Pokémon (como na batalha normal)</li>
+                                    <li>🎨 Layout da batalha no celular em pé melhorado (sprites, caixas e espaçamentos menores)</li>
+                                    <li>🐛 Corrigido o conflito entre clique e hover no painel de gemas no computador</li>
+                                    <li>🐛 Corrigido: ao trocar de Pokémon na Torre, a proporção de HP não era mantida</li>
+                                    <li>🐛 Corrigido: com o talento "Menos gemas comuns" no máximo, ainda podia cair gema branca</li>
+                                    <li>🐛 Corrigido: a barra de HP não zerava com animação ao vencer na Torre</li>
+                                    <li>🐛 Corrigido: o sprite dos monstros da Torre não aparecia</li>
+                                    <li>🐛 Corrigido: o nome dos monstros da Torre aparecia cortado</li>
                                 </ul>
                             </div>
                         </div>
                     </div>
 
                     <div class="settings-disclaimer">
-                        <p>本游戏由 AI 辅助生成，仅用于学习交流与技术演示，不用于任何商业用途。</p>
-                        <p>“宝可梦 / Pokémon”及相关角色、名称、图像与设定的著作权、商标权等知识产权归原权利人所有（如 Nintendo、Game Freak、Creatures 及 The Pokémon Company）。</p>
-                        <p>如有侵权或不当使用，请联系删除或更正。</p>
+                        <p>Este jogo foi feito com ajuda de IA, apenas para estudo e demonstração técnica, sem nenhum uso comercial.</p>
+                        <p>"Pokémon" e os personagens, nomes, imagens e elementos relacionados pertencem aos seus respectivos donos (como Nintendo, Game Freak, Creatures e The Pokémon Company).</p>
+                        <p>Em caso de violação ou uso indevido, entre em contato para remover ou corrigir.</p>
                     </div>
                 </div>
             </div>
@@ -485,16 +485,16 @@
 
         <!-- 底部导航 -->
         <nav id="tab-nav">
-            <button class="tab-btn active" data-tab="tab-battle"><span class="tab-icon">⚔️</span><span class="tab-label">战斗</span></button>
-            <button class="tab-btn" data-tab="tab-map"><span class="tab-icon">🗺️</span><span class="tab-label">地图</span></button>
-            <button class="tab-btn badge-tab-btn" data-tab="tab-badge"><span class="tab-icon">🏅</span><span class="tab-label">徽章</span></button>
-            <button class="tab-btn berry-tab-btn" data-tab="tab-berry"><span class="tab-icon">🌱</span><span class="tab-label">树果</span></button>
-            <button class="tab-btn skill-tab-btn" data-tab="tab-skill"><span class="tab-icon">⚡</span><span class="tab-label">技能</span></button>
-            <button class="tab-btn talent-tab-btn" data-tab="tab-talent"><span class="tab-icon">🌟</span><span class="tab-label">天赋</span></button>
-            <button class="tab-btn tower-tab-btn" data-tab="tab-tower"><span class="tab-icon">🏝️</span><span class="tab-label">挑战</span></button>
-            <button class="tab-btn" data-tab="tab-pokedex"><span class="tab-icon">📖</span><span class="tab-label">图鉴</span></button>
+            <button class="tab-btn active" data-tab="tab-battle"><span class="tab-icon">⚔️</span><span class="tab-label">Batalha</span></button>
+            <button class="tab-btn" data-tab="tab-map"><span class="tab-icon">🗺️</span><span class="tab-label">Mapa</span></button>
+            <button class="tab-btn badge-tab-btn" data-tab="tab-badge"><span class="tab-icon">🏅</span><span class="tab-label">Insígnias</span></button>
+            <button class="tab-btn berry-tab-btn" data-tab="tab-berry"><span class="tab-icon">🌱</span><span class="tab-label">Frutas</span></button>
+            <button class="tab-btn skill-tab-btn" data-tab="tab-skill"><span class="tab-icon">⚡</span><span class="tab-label">Técnicas</span></button>
+            <button class="tab-btn talent-tab-btn" data-tab="tab-talent"><span class="tab-icon">🌟</span><span class="tab-label">Talentos</span></button>
+            <button class="tab-btn tower-tab-btn" data-tab="tab-tower"><span class="tab-icon">🏝️</span><span class="tab-label">Torre</span></button>
+            <button class="tab-btn" data-tab="tab-pokedex"><span class="tab-icon">📖</span><span class="tab-label">Pokédex</span></button>
             <button class="tab-btn" data-tab="tab-pc"><span class="tab-icon">🖥️</span><span class="tab-label">PC</span></button>
-            <button class="tab-btn" data-tab="tab-settings"><span class="tab-icon">⚙️</span><span class="tab-label">设置</span></button>
+            <button class="tab-btn" data-tab="tab-settings"><span class="tab-icon">⚙️</span><span class="tab-label">Config.</span></button>
         </nav>
     </div>
 

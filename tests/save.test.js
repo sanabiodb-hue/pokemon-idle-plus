@@ -190,7 +190,7 @@ test('迁移框架：缺少迁移步骤时明确报错；多步迁移按顺序�
     // 注：SAVE_MIGRATIONS 是 const，但对象本身可变，测试里临时插入一个假的 v0
     const fn = ctx.SAVE_MIGRATIONS;
     assert.equal(typeof fn[1], 'function');
-    assert.throws(() => ctx.migrateSave({ schemaVersion: 99 }), /更新版本/);
+    assert.throws(() => ctx.migrateSave({ schemaVersion: 99 }), /versão mais nova/);
     const m = ctx.migrateSave({ team: [25], tower: { enemies: [{ id: 1 }, { id: 2 }], inBattle: true } });
     assert.equal(m.fromVersion, 1);
     assert.equal(m.toVersion, ctx.SAVE_SCHEMA_VERSION);
@@ -352,7 +352,7 @@ test('空间不足：先释放备份重试；仍不足则返回明确错误并�
     assert.equal(r.ok, false);
     assert.equal(r.code, 'quota');
     assert.equal(errors2.length, 1);
-    assert.match(errors2[0].message, /空间已满/);
+    assert.match(errors2[0].message, /cheio/);
     assert.equal(sm2.hasPending(), true, '失败后保持脏标记，等待重试');
 
     // 腾出空间后，下一次重试成功并通知恢复

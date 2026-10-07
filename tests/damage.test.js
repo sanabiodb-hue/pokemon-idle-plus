@@ -18,11 +18,11 @@ test('属性克制：拔群 ×2、抵抗 ×0.5、免疫改为 ×0.25', () => {
     game.rng = () => 0.99;
     const dmg = (a, d) => game._computeDamage(50, 100, 100, a, d, 50, 0, 1.5);
     assert.equal(dmg(['fire'], ['grass']).damage, 48);
-    assert.equal(dmg(['fire'], ['grass']).effectivenessText, '效果拔群！');
+    assert.equal(dmg(['fire'], ['grass']).effectivenessText, 'É super efetivo!');
     assert.equal(dmg(['fire'], ['water']).damage, 12);
-    assert.equal(dmg(['fire'], ['water']).effectivenessText, '效果不佳...');
+    assert.equal(dmg(['fire'], ['water']).effectivenessText, 'Não foi muito efetivo...');
     assert.equal(dmg(['normal'], ['ghost']).damage, 6);
-    assert.equal(dmg(['normal'], ['ghost']).effectivenessText, '微弱伤害...');
+    assert.equal(dmg(['normal'], ['ghost']).effectivenessText, 'Quase nenhum dano...');
     dispose(game);
 });
 

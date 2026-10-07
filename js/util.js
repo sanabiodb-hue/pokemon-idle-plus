@@ -40,3 +40,13 @@ function _validPokemonId(id) {
     const n = typeof id === 'string' && /^\d+$/.test(id) ? Number(id) : id;
     return Number.isInteger(n) && _has(POKEMON_DATA, n) ? n : null;
 }
+
+// ===================== 文案辅助（界面文字为巴西葡萄牙语）=====================
+// 葡萄牙语单复数：1 → 单数；0 和其他 → 复数
+function ptPlural(n, one, many) {
+    return Number(n) === 1 ? one : many;
+}
+// 数字按巴西习惯显示：1.234.567
+function ptNumber(n) {
+    return Number(n).toLocaleString('pt-BR');
+}

@@ -141,7 +141,7 @@ Requer apenas Node.js ≥ 20 (nenhuma dependência para instalar).
 
 ```bash
 npm run validate   # valida Pokémon, rotas, regiões e configs (exit 1 se houver erro)
-npm test           # 308 testes automatizados (node:test)
+npm test           # 315 testes automatizados (node:test)
 npm run smoke      # teste de "build": abre o jogo num Chromium headless (precisa do pacote playwright;
                    #   se não estiver instalado, o teste é ignorado)
 npm run check      # os três acima em sequência
@@ -351,8 +351,8 @@ mais 8 verificações de navegador (aba PC, política de captura, ▲▼, persis
 ## 🧪 Fase 4: beta / experiência do jogador (v2.73, sem mudança de schema)
 
 Objetivo: uma pessoa que nunca viu o jogo consegue abrir, entender o objetivo, jogar e perceber que está progredindo.
-Sem refatoração estrutural: tudo é incremental sobre as fases anteriores. **Todo o texto do jogo continua em chinês**
-(i18n fica para outra fase).
+Sem refatoração estrutural: tudo é incremental sobre as fases anteriores. **Todo o texto do jogo agora é pt-BR** (veja
+a seção de localização abaixo).
 
 ### Auditoria da experiência (o que foi encontrado → o que foi feito)
 | Problema encontrado | Correção |
@@ -402,9 +402,36 @@ cartões, bolinha do PC, mapa recomendado, estados vazios, metas, opt-out de ana
 pular onboarding e save antigo sem onboarding.
 
 ### Limitações (fase 4)
-- Texto só em chinês. Recompensas são só XP; metas de longo prazo (6V/shiny de região) ainda dependem do que já existe.
+- Recompensas são só XP; metas de longo prazo (6V/shiny de região) ainda dependem do que já existe.
 - O funil é local por dispositivo: sem backend, o relatório precisa ser copiado pelo jogador.
 - Cartões de evento são informativos (não há histórico); a primeira evolução continua reiniciando o nível (decisão de design anterior).
+
+## 🇧🇷 Localização para português do Brasil (v2.73)
+
+Etapa isolada: **só strings visíveis ao jogador** mudaram. Lógica, balanceamento, save (schema, chaves, ids), analytics,
+eventos e nomes de função ficaram intactos — verificado comparando o código antes/depois com todos os textos
+neutralizados (as únicas diferenças são chamadas `ptPlural`, `ptNumber` e `toLocaleString('pt-BR')` dentro de textos).
+
+- **Helpers** (`js/util.js`): `ptPlural(n, 'espécie', 'espécies')` e `ptNumber(n)` (1.234.567).
+- **O que foi traduzido:** `index.html` (inclui o histórico de versões e o aviso legal), `ui.js`, `pc-view.js`, `guide-view.js`,
+  `guidance.js`, mensagens de `game-core.js`/`save-manager.js`, 1073 nomes de espécie (nomes oficiais internacionais, os mesmos do pt-BR),
+  18 tipos, 25 naturezas, 10 regiões e 192 rotas, insígnias, gemas, frutas, técnicas e talentos (`game-config.js`).
+- **Glossário** (use sempre os mesmos termos): Equipe, PC, Rota, Região, Meta, EXP, Lv., Pokédex, Shiny, Natureza, Habilidade,
+  Gênero, IVs, Insígnia, Gema, **Fruta** (Berry), **Técnica** (skill; "Habilidade" é a Ability), Talento, Moedas, Torre de Desafio, Liberar.
+  Rótulos curtos de aba: Batalha · Mapa · Insígnias · Frutas · Técnicas · Talentos · Torre · Pokédex · PC · Config.
+- **Continua em chinês de propósito** (nunca aparece na interface): comentários, `_log`/`console`, `throw new Error`, avisos
+  de saneamento/`checkIntegrity`, mensagens do validador de dados e o nome padrão de caixa gravado em saves antigos
+  (`箱子 N`, exibido como "Caixa N" por `boxDisplayName`).
+- **Testes:** os que comparavam texto visível foram atualizados só no texto esperado (efeito de tipo, mensagens de import/quota,
+  nome de natureza, textos da barra de passos e metas, e as verificações por texto do smoke). Novos: `tests/localization.test.js`
+  (dados sem chinês, 1073 nomes únicos, ids intactos, varredura estática do código-fonte e do HTML) e 8 verificações de navegador
+  que abrem as 10 abas, o mapa das 10 regiões, a Pokédex (todos os filtros), diálogos e cartões em **desktop 1280×800 e celular
+  360×640**, falhando se houver chinês ou rolagem horizontal.
+- **Ajustes de layout causados pelo texto maior:** abas com ícone sobre o rótulo em telas ≤480px, linha "#id · natureza · IV%" dos
+  cartões do PC quebra em vez de cortar, e a barra de passos ocupa a largura toda no layout de duas colunas (desktop).
+- **Revisar:** nomes de local de rotas de Hoenn/Galar/Mega e alguns apelidos de rota são traduções livres; nomes de golpes em
+  `SKILL_DATA` usam os nomes oficiais em inglês (alguns mapeamentos zh→en foram feitos de memória). A lista id→nome chinês→nome
+  pt-BR das espécies pode ser regenerada a partir do commit anterior para conferência.
 
 ### Problemas conhecidos / ainda não tratados (fases 1 e 2)
 - A UI continua sendo `innerHTML` em muitos lugares (os dados vindos do save já são sanitizados, mas a camada de

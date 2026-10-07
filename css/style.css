@@ -4800,3 +4800,20 @@ body {
 .stat-iv, .slot-traits, .log-time { font-size: 11px; }
 .pc-search { min-height: 36px; }
 .guide-btn.ghost { min-height: 32px; }
+
+/* ============ Localização pt-BR: ajustes de layout causados por textos mais longos ============ */
+/* Barra de passos ocupa a largura toda também no layout de duas colunas (desktop / celular deitado) */
+@media (min-width: 768px), (max-height: 500px) and (orientation: landscape) {
+    #tab-battle.active { flex-wrap: wrap; align-content: flex-start; }
+    #tab-battle.active > #guide-bar { flex: 0 0 100%; box-sizing: border-box; }
+}
+.guide-text { -webkit-line-clamp: 4; }
+/* Abas: rótulos em português são maiores; em telas estreitas o ícone fica em cima do texto */
+@media (max-width: 480px) {
+    .tab-btn { flex-direction: column; gap: 2px; padding: 8px 0 6px; min-width: 0; }
+    .tab-btn .tab-label { font-size: 11px; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+    .tab-btn .tab-icon { font-size: 17px; }
+}
+/* Cartões do PC: a linha “#id · natureza · IV%” é o que diferencia dois Pokémon iguais — deixa quebrar em vez de cortar */
+.pc-card-sub { white-space: normal; overflow: visible; text-overflow: clip; word-break: break-word; }
+.pc-card { align-items: flex-start; }

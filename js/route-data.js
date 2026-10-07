@@ -27,14 +27,14 @@
 const REGIONS = {
     kanto: {
         id: 'kanto',
-        name: '关都地区',
+        name: "Kanto",
         nameEn: 'Kanto',
-        description: '初代宝可梦的故乡，拥有丰富的地形和多样的宝可梦。',
+        description: "Terra da primeira geração, com relevo variado e muitos Pokémon.",
         routes: [
             {
                 id: 'kanto_route1',
-                name: '1号道路',
-                description: '真新镇到常磐市之间的道路',
+                name: "Rota 1",
+                description: "Estrada entre Pallet Town e Viridian City.",
                 levelRange: [1, 5],
                 pokemon: [
                     { id: 19, weight: 55, levelRange: [1, 4] },  // 小拉达
@@ -43,8 +43,8 @@ const REGIONS = {
             },
             {
                 id: 'kanto_route2',
-                name: '2号道路',
-                description: '常磐市到常磐森林之间的道路',
+                name: "Rota 2",
+                description: "Estrada entre Viridian City e Viridian Forest.",
                 levelRange: [6, 10],
                 pokemon: [
                     { id: 16, weight: 30, levelRange: [6, 10] },  // 波波
@@ -55,8 +55,8 @@ const REGIONS = {
             },
             {
                 id: 'kanto_viridian_forest',
-                name: '常磐森林',
-                description: '一片茂密的森林，虫系宝可梦的天堂',
+                name: "Viridian Forest",
+                description: "Floresta cheia de Pokémon do tipo Inseto.",
                 levelRange: [11, 15],
                 pokemon: [
                     { id: 10, weight: 25, levelRange: [11, 15] },  // 绿毛虫
@@ -69,8 +69,8 @@ const REGIONS = {
             },
             {
                 id: 'kanto_route3',
-                name: '3号道路',
-                description: '尼比市到月见山之间的道路',
+                name: "Rota 3",
+                description: "Estrada entre Pewter City e Mt. Moon.",
                 levelRange: [16, 20],
                 pokemon: [
                     { id: 21, weight: 30, levelRange: [16, 20] }, // 烈雀
@@ -82,8 +82,8 @@ const REGIONS = {
             },
             {
                 id: 'kanto_mt_moon',
-                name: '月见山',
-                description: '连接尼比市和华蓝市的山洞',
+                name: "Mt. Moon",
+                description: "Caverna que liga Pewter City a Cerulean City.",
                 levelRange: [21, 25],
                 pokemon: [
                     { id: 41, weight: 35, levelRange: [21, 25] }, // 超音蝠
@@ -95,8 +95,8 @@ const REGIONS = {
             },
             {
                 id: 'kanto_route4',
-                name: '4号道路',
-                description: '月见山到华蓝市之间的道路',
+                name: "Rota 4",
+                description: "Estrada entre Mt. Moon e Cerulean City.",
                 levelRange: [26, 30],
                 pokemon: [
                     { id: 21, weight: 25, levelRange: [26, 30] },  // 烈雀
@@ -108,8 +108,8 @@ const REGIONS = {
             },
             {
                 id: 'kanto_route24',
-                name: '24号道路 (黄金桥)',
-                description: '华蓝市北方的著名桥梁',
+                name: "Rota 24 (Nugget Bridge)",
+                description: "Ponte famosa ao norte de Cerulean City.",
                 levelRange: [31, 35],
                 pokemon: [
                     { id: 43, weight: 25, levelRange: [31, 35] }, // 走路草
@@ -121,8 +121,8 @@ const REGIONS = {
             },
             {
                 id: 'kanto_route5',
-                name: '5号道路',
-                description: '华蓝市到金黄市之间的道路',
+                name: "Rota 5",
+                description: "Estrada entre Cerulean City e Saffron City.",
                 levelRange: [36, 40],
                 pokemon: [
                     { id: 52, weight: 25, levelRange: [36, 40] }, // 喵喵
@@ -135,8 +135,8 @@ const REGIONS = {
             },
             {
                 id: 'kanto_route6',
-                name: '6号道路',
-                description: '金黄市到枯叶市之间的道路',
+                name: "Rota 6",
+                description: "Estrada entre Saffron City e Vermilion City.",
                 levelRange: [41, 45],
                 pokemon: [
                     { id: 52, weight: 25, levelRange: [41, 45] }, // 喵喵
@@ -149,8 +149,8 @@ const REGIONS = {
             },
             {
                 id: 'kanto_route9',
-                name: '9号道路',
-                description: '华蓝市到岩山隧道的崎岖山路',
+                name: "Rota 9",
+                description: "Trilha acidentada de Cerulean City até o Rock Tunnel.",
                 levelRange: [46, 50],
                 pokemon: [
                     { id: 21, weight: 25, levelRange: [46, 50] }, // 烈雀
@@ -162,8 +162,8 @@ const REGIONS = {
             },
             {
                 id: 'kanto_rock_tunnel',
-                name: '岩山隧道',
-                description: '漆黑的岩石隧道，连接华蓝市和紫苑镇',
+                name: "Rock Tunnel",
+                description: "Túnel escuro que liga Cerulean City a Lavender Town.",
                 levelRange: [51, 55],
                 pokemon: [
                     { id: 41, weight: 25, levelRange: [51, 55] }, // 超音蝠
@@ -175,8 +175,8 @@ const REGIONS = {
             },
             {
                 id: 'kanto_route7',
-                name: '7号道路',
-                description: '金黄市到彩虹市之间的短道路',
+                name: "Rota 7",
+                description: "Caminho curto entre Saffron City e Celadon City.",
                 levelRange: [56, 60],
                 pokemon: [
                     { id: 52, weight: 25, levelRange: [56, 60] }, // 喵喵
@@ -189,8 +189,8 @@ const REGIONS = {
             },
             {
                 id: 'kanto_route8',
-                name: '8号道路',
-                description: '金黄市到紫苑镇之间的道路',
+                name: "Rota 8",
+                description: "Estrada entre Saffron City e Lavender Town.",
                 levelRange: [61, 65],
                 pokemon: [
                     { id: 96, weight: 25, levelRange: [61, 65] }, // 催眠貘
@@ -203,8 +203,8 @@ const REGIONS = {
             },
             {
                 id: 'kanto_pokemon_tower',
-                name: '宝可梦塔',
-                description: '紫苑镇的灵魂安息之所',
+                name: "Pokémon Tower",
+                description: "Local de descanso das almas em Lavender Town.",
                 levelRange: [66, 70],
                 pokemon: [
                     { id: 92, weight: 35, levelRange: [66, 70] }, // 鬼斯
@@ -215,8 +215,8 @@ const REGIONS = {
             },
             {
                 id: 'kanto_route10',
-                name: '10号道路',
-                description: '岩山隧道入口和无人发电厂附近',
+                name: "Rota 10",
+                description: "Perto da entrada do Rock Tunnel e da Power Plant.",
                 levelRange: [71, 75],
                 pokemon: [
                     { id: 100, weight: 30, levelRange: [71, 75] }, // 霹雳电球
@@ -229,8 +229,8 @@ const REGIONS = {
             },
             {
                 id: 'kanto_route11',
-                name: '11号道路',
-                description: '枯叶市东方的道路',
+                name: "Rota 11",
+                description: "Estrada a leste de Vermilion City.",
                 levelRange: [76, 80],
                 pokemon: [
                     { id: 23, weight: 25, levelRange: [76, 80] }, // 阿柏蛇
@@ -243,8 +243,8 @@ const REGIONS = {
             },
             {
                 id: 'kanto_route12',
-                name: '12号道路',
-                description: '枯叶市到紫苑镇的海边道路',
+                name: "Rota 12",
+                description: "Estrada à beira-mar entre Vermilion City e Lavender Town.",
                 levelRange: [81, 85],
                 pokemon: [
                     { id: 79, weight: 30, levelRange: [81, 85] }, // 呆呆兽
@@ -257,8 +257,8 @@ const REGIONS = {
             },
             {
                 id: 'kanto_route13',
-                name: '13号道路',
-                description: '连接紫苑镇和浅红市的道路',
+                name: "Rota 13",
+                description: "Estrada entre Lavender Town e Fuchsia City.",
                 levelRange: [86, 90],
                 pokemon: [
                     { id: 43, weight: 20, levelRange: [86, 90] }, // 走路草
@@ -271,8 +271,8 @@ const REGIONS = {
             },
             {
                 id: 'kanto_safari_zone',
-                name: '狩猎区',
-                description: '浅红市的大型自然保护区',
+                name: "Safari Zone",
+                description: "Grande reserva natural de Fuchsia City.",
                 levelRange: [91, 95],
                 pokemon: [
                     { id: 114, weight: 13, levelRange: [91, 95] }, // 蔓藤怪
@@ -289,8 +289,8 @@ const REGIONS = {
             },
             {
                 id: 'kanto_route17',
-                name: '17号道路 (自行车道)',
-                description: '从金黄市到浅红市的下坡道路',
+                name: "Rota 17 (Cycling Road)",
+                description: "Ladeira entre Celadon City e Fuchsia City.",
                 levelRange: [96, 100],
                 pokemon: [
                     { id: 84, weight: 20, levelRange: [96, 100] }, // 嘟嘟
@@ -303,8 +303,8 @@ const REGIONS = {
             },
             {
                 id: 'kanto_route19',
-                name: '19号水道',
-                description: '浅红市到双子岛的海上道路',
+                name: "Rota Marítima 19",
+                description: "Rota marítima de Fuchsia City até as Seafoam Islands.",
                 levelRange: [101, 105],
                 pokemon: [
                     { id: 72, weight: 30, levelRange: [101, 105] }, // 玛瑙水母
@@ -316,8 +316,8 @@ const REGIONS = {
             },
             {
                 id: 'kanto_seafoam_islands',
-                name: '双子岛',
-                description: '传说中急冻鸟栖息的冰冷洞窟',
+                name: "Seafoam Islands",
+                description: "Caverna gelada onde vive o lendário Articuno.",
                 levelRange: [106, 110],
                 pokemon: [
                     { id: 86, weight: 25, levelRange: [106, 110] }, // 小海狮
@@ -331,8 +331,8 @@ const REGIONS = {
             },
             {
                 id: 'kanto_pokemon_mansion',
-                name: '宝可梦屋',
-                description: '红莲岛上的废弃大宅，曾经的研究所',
+                name: "Pokémon Mansion",
+                description: "Mansão abandonada em Cinnabar Island, antigo laboratório.",
                 levelRange: [111, 115],
                 pokemon: [
                     { id: 77, weight: 25, levelRange: [111, 115] }, // 小火马
@@ -345,8 +345,8 @@ const REGIONS = {
             },
             {
                 id: 'kanto_route21',
-                name: '21号水道',
-                description: '红莲岛到真新镇之间的海上道路',
+                name: "Rota Marítima 21",
+                description: "Rota marítima entre Cinnabar Island e Pallet Town.",
                 levelRange: [116, 120],
                 pokemon: [
                     { id: 72, weight: 25, levelRange: [116, 120] }, // 玛瑙水母
@@ -359,8 +359,8 @@ const REGIONS = {
             },
             {
                 id: 'kanto_route22',
-                name: '22号道路',
-                description: '常磐市到冠军之路入口',
+                name: "Rota 22",
+                description: "Estrada de Viridian City até a entrada da Victory Road.",
                 levelRange: [121, 125],
                 pokemon: [
                     { id: 21, weight: 20, levelRange: [121, 125] }, // 烈雀
@@ -373,8 +373,8 @@ const REGIONS = {
             },
             {
                 id: 'kanto_victory_road',
-                name: '冠军之路',
-                description: '通往石英高原的最后试炼',
+                name: "Victory Road",
+                description: "Última provação rumo ao Indigo Plateau.",
                 levelRange: [126, 130],
                 pokemon: [
                     { id: 67, weight: 27, levelRange: [126, 130] }, // 豪力
@@ -388,8 +388,8 @@ const REGIONS = {
             },
             {
                 id: 'kanto_cerulean_cave',
-                name: '华蓝洞窟',
-                description: '传说中最强宝可梦栖息的神秘洞窟',
+                name: "Cerulean Cave",
+                description: "Caverna misteriosa onde vive o mais forte dos Pokémon.",
                 levelRange: [131, 135],
                 pokemon: [
                     { id: 64, weight: 28, levelRange: [131, 135] },  // 勇基拉
@@ -405,15 +405,15 @@ const REGIONS = {
     },
     johto: {
         id: 'johto',
-        name: '城都地区',
+        name: "Johto",
         nameEn: 'Johto',
-        description: '第二世代宝可梦的家园，充满了传说与神秘。需要集齐关都地区所有宝可梦才能前往。',
+        description: "Terra da segunda geração, cheia de lendas e mistérios. Capture todos os Pokémon de Kanto para entrar.",
         unlockCondition: { type: 'pokedex_complete', region: 'kanto', range: [1, 151] },
         routes: [
             {
                 id: 'johto_route29',
-                name: '29号道路',
-                description: '若叶镇到吉花市之间的道路',
+                name: "Rota 29",
+                description: "Estrada entre New Bark Town e Cherrygrove City.",
                 levelRange: [136, 140],
                 pokemon: [
                     { id: 161, weight: 35, levelRange: [136, 140] },  // 尾立
@@ -424,8 +424,8 @@ const REGIONS = {
             },
             {
                 id: 'johto_route30',
-                name: '30号道路',
-                description: '吉花市到桔梗市之间的道路',
+                name: "Rota 30",
+                description: "Estrada entre Cherrygrove City e Violet City.",
                 levelRange: [141, 145],
                 pokemon: [
                     { id: 165, weight: 25, levelRange: [141, 145] },  // 芭瓢虫
@@ -438,8 +438,8 @@ const REGIONS = {
             },
             {
                 id: 'johto_sprout_tower',
-                name: '喇叭芽之塔',
-                description: '桔梗市中供奉喇叭芽的古塔',
+                name: "Sprout Tower",
+                description: "Torre antiga de Violet City dedicada a Bellsprout.",
                 levelRange: [146, 150],
                 pokemon: [
                     { id: 92, weight: 25, levelRange: [146, 150] },   // 鬼斯
@@ -452,8 +452,8 @@ const REGIONS = {
             },
             {
                 id: 'johto_route32',
-                name: '32号道路',
-                description: '桔梗市到联合洞穴的长道路',
+                name: "Rota 32",
+                description: "Estrada longa até a Union Cave.",
                 levelRange: [151, 155],
                 pokemon: [
                     { id: 179, weight: 28, levelRange: [151, 155] },  // 咩利羊
@@ -466,8 +466,8 @@ const REGIONS = {
             },
             {
                 id: 'johto_union_cave',
-                name: '联合洞穴',
-                description: '连接桔梗市和满金市的自然洞穴',
+                name: "Union Cave",
+                description: "Caverna natural que liga Violet City a Goldenrod City.",
                 levelRange: [156, 160],
                 pokemon: [
                     { id: 74, weight: 25, levelRange: [156, 160] },   // 小拳石
@@ -480,8 +480,8 @@ const REGIONS = {
             },
             {
                 id: 'johto_route34',
-                name: '34号道路',
-                description: '满金市南方的道路',
+                name: "Rota 34",
+                description: "Estrada ao sul de Goldenrod City.",
                 levelRange: [161, 165],
                 pokemon: [
                     { id: 183, weight: 22, levelRange: [161, 165] },  // 玛力露
@@ -494,8 +494,8 @@ const REGIONS = {
             },
             {
                 id: 'johto_national_park',
-                name: '自然公园',
-                description: '满金市北方的虫系宝可梦乐园',
+                name: "National Park",
+                description: "Paraíso dos Pokémon do tipo Inseto ao norte de Goldenrod City.",
                 levelRange: [166, 170],
                 pokemon: [
                     { id: 165, weight: 25, levelRange: [166, 170] },  // 芭瓢虫
@@ -508,8 +508,8 @@ const REGIONS = {
             },
             {
                 id: 'johto_route35',
-                name: '35号道路',
-                description: '满金市到圆朱市的道路',
+                name: "Rota 35",
+                description: "Estrada entre Goldenrod City e Ecruteak City.",
                 levelRange: [171, 175],
                 pokemon: [
                     { id: 190, weight: 20, levelRange: [171, 175] },  // 长尾怪手
@@ -522,8 +522,8 @@ const REGIONS = {
             },
             {
                 id: 'johto_burned_tower',
-                name: '焚烧塔',
-                description: '圆朱市中被烧毁的古塔，传说中三圣兽在此诞生',
+                name: "Burned Tower",
+                description: "Torre queimada de Ecruteak City, onde nasceram os três lendários.",
                 levelRange: [176, 180],
                 pokemon: [
                     { id: 92, weight: 25, levelRange: [176, 180] },   // 鬼斯
@@ -536,8 +536,8 @@ const REGIONS = {
             },
             {
                 id: 'johto_route38',
-                name: '38号道路',
-                description: '圆朱市到浅黄市的道路',
+                name: "Rota 38",
+                description: "Estrada entre Ecruteak City e Olivine City.",
                 levelRange: [181, 185],
                 pokemon: [
                     { id: 58, weight: 20, levelRange: [181, 185] },   // 卡蒂狗
@@ -550,8 +550,8 @@ const REGIONS = {
             },
             {
                 id: 'johto_route40',
-                name: '40号水道',
-                description: '浅黄市到漩涡列岛的海上道路',
+                name: "Rota Marítima 40",
+                description: "Rota marítima de Olivine City até as Whirl Islands.",
                 levelRange: [186, 190],
                 pokemon: [
                     { id: 72, weight: 25, levelRange: [186, 190] },   // 玛瑙水母
@@ -564,8 +564,8 @@ const REGIONS = {
             },
             {
                 id: 'johto_route42',
-                name: '42号道路',
-                description: '满金市到阿驲山区的道路',
+                name: "Rota 42",
+                description: "Estrada de montanha rumo a Mahogany Town.",
                 levelRange: [191, 195],
                 pokemon: [
                     { id: 207, weight: 22, levelRange: [191, 195] },  // 天蝎
@@ -578,8 +578,8 @@ const REGIONS = {
             },
             {
                 id: 'johto_route43',
-                name: '43号道路',
-                description: '通往愤怒之湖的道路',
+                name: "Rota 43",
+                description: "Estrada que leva ao Lake of Rage.",
                 levelRange: [196, 200],
                 pokemon: [
                     { id: 23, weight: 18, levelRange: [196, 200] },   // 阿柏蛇
@@ -592,8 +592,8 @@ const REGIONS = {
             },
             {
                 id: 'johto_lake_of_rage',
-                name: '愤怒之湖',
-                description: '传说中红色暴鲤龙出没的湖泊',
+                name: "Lake of Rage",
+                description: "Lago onde aparece o lendário Gyarados vermelho.",
                 levelRange: [201, 210],
                 pokemon: [
                     { id: 129, weight: 28, levelRange: [201, 210] },  // 鲤鱼王
@@ -606,8 +606,8 @@ const REGIONS = {
             },
             {
                 id: 'johto_route44',
-                name: '44号道路',
-                description: '通往冰之通道的寒冷道路',
+                name: "Rota 44",
+                description: "Estrada fria que leva ao Ice Path.",
                 levelRange: [211, 220],
                 pokemon: [
                     { id: 220, weight: 25, levelRange: [211, 220] },  // 小山猪
@@ -620,8 +620,8 @@ const REGIONS = {
             },
             {
                 id: 'johto_ice_path',
-                name: '冰之通道',
-                description: '连接满金和浅黄的冰冷洞穴',
+                name: "Ice Path",
+                description: "Caverna gelada entre Mahogany Town e Blackthorn City.",
                 levelRange: [221, 230],
                 pokemon: [
                     { id: 220, weight: 25, levelRange: [221, 230] },  // 小山猪
@@ -634,8 +634,8 @@ const REGIONS = {
             },
             {
                 id: 'johto_route45',
-                name: '45号道路',
-                description: '黑暗市南方的陡峭山路',
+                name: "Rota 45",
+                description: "Trilha íngreme ao sul de Blackthorn City.",
                 levelRange: [231, 240],
                 pokemon: [
                     { id: 74, weight: 22, levelRange: [231, 240] },   // 小拳石
@@ -648,8 +648,8 @@ const REGIONS = {
             },
             {
                 id: 'johto_dark_cave',
-                name: '漆黑洞穴',
-                description: '城都地区的幽暗洞窟',
+                name: "Dark Cave",
+                description: "Caverna escura de Johto.",
                 levelRange: [241, 250],
                 pokemon: [
                     { id: 74, weight: 20, levelRange: [241, 250] },   // 小拳石
@@ -662,8 +662,8 @@ const REGIONS = {
             },
             {
                 id: 'johto_route27',
-                name: '27号道路',
-                description: '通往关都地区的长道路',
+                name: "Rota 27",
+                description: "Estrada longa rumo a Kanto.",
                 levelRange: [251, 260],
                 pokemon: [
                     { id: 189, weight: 18, levelRange: [251, 260] },  // 毽子棉
@@ -676,8 +676,8 @@ const REGIONS = {
             },
             {
                 id: 'johto_victory_road',
-                name: '城都冠军之路',
-                description: '通往石英联盟的最终试炼',
+                name: "Victory Road (Johto)",
+                description: "Última provação rumo à Liga Indigo.",
                 levelRange: [261, 270],
                 pokemon: [
                     { id: 221, weight: 25, levelRange: [261, 270] },  // 长毛猪
@@ -690,8 +690,8 @@ const REGIONS = {
             },
             {
                 id: 'johto_whirl_islands',
-                name: '漩涡列岛',
-                description: '传说中洛奇亚栖息的海底洞窟',
+                name: "Whirl Islands",
+                description: "Caverna submarina onde vive o lendário Lugia.",
                 levelRange: [271, 280],
                 pokemon: [
                     { id: 116, weight: 25, levelRange: [271, 280] },  // 墨海马
@@ -705,8 +705,8 @@ const REGIONS = {
             },
             {
                 id: 'johto_tin_tower',
-                name: '钟塔',
-                description: '圆朱市中供奉凤王的神圣塔楼',
+                name: "Bell Tower",
+                description: "Torre sagrada de Ecruteak City dedicada a Ho-Oh.",
                 levelRange: [281, 290],
                 pokemon: [
                     { id: 92, weight: 20, levelRange: [281, 290] },   // 鬼斯
@@ -721,8 +721,8 @@ const REGIONS = {
             },
             {
                 id: 'johto_mt_silver',
-                name: '白银山',
-                description: '城都地区最高峰，最强训练师的修炼圣地',
+                name: "Mt. Silver",
+                description: "Pico mais alto de Johto, onde treinam os melhores Treinadores.",
                 levelRange: [291, 300],
                 pokemon: [
                     { id: 221, weight: 18, levelRange: [291, 300] },   // 长毛猪
@@ -738,15 +738,15 @@ const REGIONS = {
     },
     hoenn: {
         id: 'hoenn',
-        name: '丰缘地区',
+        name: "Hoenn",
         nameEn: 'Hoenn',
-        description: '第三世代宝可梦的故乡，拥有广阔的海洋和丰富的自然环境。需要集齐城都地区所有宝可梦才能前往。',
+        description: "Terra da terceira geração, de mares vastos e natureza rica. Capture todos os Pokémon de Johto para entrar.",
         unlockCondition: { type: 'pokedex_complete', region: 'johto', range: [152, 251] },
         routes: [
             {
                 id: 'hoenn_route101',
-                name: '101号道路',
-                description: '未白镇到古辰镇之间的道路',
+                name: "Rota 101",
+                description: "Estrada entre Littleroot Town e Oldale Town.",
                 levelRange: [301, 315],
                 pokemon: [
                     { id: 263, weight: 35, levelRange: [301, 315] },  // 蛇纹熊
@@ -757,8 +757,8 @@ const REGIONS = {
             },
             {
                 id: 'hoenn_route102',
-                name: '102号道路',
-                description: '古辰镇到橙华市之间的道路',
+                name: "Rota 102",
+                description: "Estrada entre Oldale Town e Petalburg City.",
                 levelRange: [316, 330],
                 pokemon: [
                     { id: 270, weight: 25, levelRange: [316, 330] },  // 莲叶童子
@@ -770,8 +770,8 @@ const REGIONS = {
             },
             {
                 id: 'hoenn_petalburg_woods',
-                name: '橙华森林',
-                description: '橙华市附近的茂密森林',
+                name: "Petalburg Woods",
+                description: "Floresta densa perto de Petalburg City.",
                 levelRange: [331, 345],
                 pokemon: [
                     { id: 265, weight: 25, levelRange: [331, 345] },  // 刺尾虫
@@ -784,8 +784,8 @@ const REGIONS = {
             },
             {
                 id: 'hoenn_route104',
-                name: '104号道路',
-                description: '橙华市到卡那兹市之间的海岸道路',
+                name: "Rota 104",
+                description: "Estrada costeira entre Petalburg City e Rustboro City.",
                 levelRange: [346, 360],
                 pokemon: [
                     { id: 278, weight: 25, levelRange: [346, 360] },  // 长翅鸥
@@ -798,8 +798,8 @@ const REGIONS = {
             },
             {
                 id: 'hoenn_rustboro_tunnel',
-                name: '石之洞窟',
-                description: '卡那兹市附近的岩石洞窟',
+                name: "Granite Cave",
+                description: "Caverna rochosa de Hoenn.",
                 levelRange: [361, 375],
                 pokemon: [
                     { id: 304, weight: 25, levelRange: [361, 375] },  // 可可多拉
@@ -812,8 +812,8 @@ const REGIONS = {
             },
             {
                 id: 'hoenn_route110',
-                name: '110号道路',
-                description: '紫堇市到凯那市之间的长道路',
+                name: "Rota 110",
+                description: "Estrada longa entre Slateport City e Mauville City.",
                 levelRange: [376, 390],
                 pokemon: [
                     { id: 309, weight: 25, levelRange: [376, 390] },  // 落雷兽
@@ -826,8 +826,8 @@ const REGIONS = {
             },
             {
                 id: 'hoenn_route111',
-                name: '111号道路 (沙漠地带)',
-                description: '紫堇市北方的炎热沙漠',
+                name: "Rota 111 (Deserto)",
+                description: "Deserto escaldante ao norte de Mauville City.",
                 levelRange: [391, 405],
                 pokemon: [
                     { id: 328, weight: 25, levelRange: [391, 405] },  // 大颚蚁
@@ -840,8 +840,8 @@ const REGIONS = {
             },
             {
                 id: 'hoenn_route112',
-                name: '112号道路 (烟突山)',
-                description: '通往釜炎镇的火山道路',
+                name: "Rota 112 (Mt. Chimney)",
+                description: "Estrada vulcânica rumo a Lavaridge Town.",
                 levelRange: [406, 420],
                 pokemon: [
                     { id: 322, weight: 25, levelRange: [406, 420] },  // 呆火驼
@@ -854,8 +854,8 @@ const REGIONS = {
             },
             {
                 id: 'hoenn_route113',
-                name: '113号道路',
-                description: '釜炎镇到飞翠市之间被火山灰覆盖的道路',
+                name: "Rota 113",
+                description: "Estrada coberta de cinzas vulcânicas perto de Fallarbor Town.",
                 levelRange: [421, 435],
                 pokemon: [
                     { id: 327, weight: 20, levelRange: [421, 435] },  // 晃晃斑
@@ -868,8 +868,8 @@ const REGIONS = {
             },
             {
                 id: 'hoenn_route114',
-                name: '114号道路',
-                description: '流星瀑布附近的道路',
+                name: "Rota 114",
+                description: "Estrada perto de Meteor Falls.",
                 levelRange: [436, 450],
                 pokemon: [
                     { id: 333, weight: 25, levelRange: [436, 450] },  // 青绵鸟
@@ -882,8 +882,8 @@ const REGIONS = {
             },
             {
                 id: 'hoenn_meteor_falls',
-                name: '流星瀑布',
-                description: '传说中龙系宝可梦栖息的神秘洞窟',
+                name: "Meteor Falls",
+                description: "Caverna misteriosa onde vivem Pokémon do tipo Dragão.",
                 levelRange: [451, 465],
                 pokemon: [
                     { id: 371, weight: 25, levelRange: [451, 465] },  // 宝贝龙
@@ -896,8 +896,8 @@ const REGIONS = {
             },
             {
                 id: 'hoenn_route118',
-                name: '118号道路',
-                description: '凯那市东方的海岸道路',
+                name: "Rota 118",
+                description: "Estrada costeira a leste de Mauville City.",
                 levelRange: [466, 480],
                 pokemon: [
                     { id: 309, weight: 20, levelRange: [466, 480] },  // 落雷兽
@@ -910,8 +910,8 @@ const REGIONS = {
             },
             {
                 id: 'hoenn_route119',
-                name: '119号道路',
-                description: '天气研究所附近的热带雨林',
+                name: "Rota 119",
+                description: "Floresta tropical perto do Weather Institute.",
                 levelRange: [481, 495],
                 pokemon: [
                     { id: 357, weight: 20, levelRange: [481, 495] },  // 热带龙
@@ -924,8 +924,8 @@ const REGIONS = {
             },
             {
                 id: 'hoenn_route120',
-                name: '120号道路',
-                description: '茵郁市附近的神秘道路',
+                name: "Rota 120",
+                description: "Estrada misteriosa perto de Fortree City.",
                 levelRange: [496, 510],
                 pokemon: [
                     { id: 359, weight: 18, levelRange: [496, 510] },  // 阿勃梭鲁
@@ -938,8 +938,8 @@ const REGIONS = {
             },
             {
                 id: 'hoenn_route121',
-                name: '121号道路',
-                description: '绿岭市到凯那市的道路',
+                name: "Rota 121",
+                description: "Estrada que atravessa o centro de Hoenn.",
                 levelRange: [511, 525],
                 pokemon: [
                     { id: 353, weight: 18, levelRange: [511, 525] },  // 怨影娃娃
@@ -952,8 +952,8 @@ const REGIONS = {
             },
             {
                 id: 'hoenn_mt_pyre',
-                name: '送火山',
-                description: '宝可梦灵魂安息的圣山',
+                name: "Mt. Pyre",
+                description: "Montanha sagrada onde repousam as almas dos Pokémon.",
                 levelRange: [526, 540],
                 pokemon: [
                     { id: 353, weight: 20, levelRange: [526, 540] },  // 怨影娃娃
@@ -967,8 +967,8 @@ const REGIONS = {
             },
             {
                 id: 'hoenn_route124',
-                name: '124号水道',
-                description: '通往潜水区域的深海水道',
+                name: "Rota Marítima 124",
+                description: "Rota marítima com áreas de mergulho.",
                 levelRange: [541, 555],
                 pokemon: [
                     { id: 320, weight: 22, levelRange: [541, 555] },  // 吼吼鲸
@@ -981,8 +981,8 @@ const REGIONS = {
             },
             {
                 id: 'hoenn_shoal_cave',
-                name: '浅滩洞穴',
-                description: '琉璃市附近受潮汐影响的洞穴',
+                name: "Shoal Cave",
+                description: "Caverna afetada pelas marés.",
                 levelRange: [556, 570],
                 pokemon: [
                     { id: 363, weight: 25, levelRange: [556, 570] },  // 海豹球
@@ -995,8 +995,8 @@ const REGIONS = {
             },
             {
                 id: 'hoenn_route126',
-                name: '126号水道',
-                description: '通往海底洞窟的深海区域',
+                name: "Rota Marítima 126",
+                description: "Águas profundas que levam a uma caverna submarina.",
                 levelRange: [571, 585],
                 pokemon: [
                     { id: 341, weight: 20, levelRange: [571, 585] },  // 龙虾小兵
@@ -1010,8 +1010,8 @@ const REGIONS = {
             },
             {
                 id: 'hoenn_route128',
-                name: '128号水道',
-                description: '通往彩幽市的危险海域',
+                name: "Rota Marítima 128",
+                description: "Mar perigoso de Hoenn.",
                 levelRange: [586, 600],
                 pokemon: [
                     { id: 319, weight: 20, levelRange: [586, 600] },  // 巨牙鲨
@@ -1025,8 +1025,8 @@ const REGIONS = {
             },
             {
                 id: 'hoenn_victory_road',
-                name: '丰缘冠军之路',
-                description: '通往联盟的最终试炼',
+                name: "Victory Road (Hoenn)",
+                description: "Última provação rumo à Liga de Hoenn.",
                 levelRange: [601, 615],
                 pokemon: [
                     { id: 305, weight: 17, levelRange: [601, 615] },  // 可多拉
@@ -1041,8 +1041,8 @@ const REGIONS = {
             },
             {
                 id: 'hoenn_sealed_chamber',
-                name: '封印遗迹',
-                description: '隐藏在丰缘各处的古代遗迹',
+                name: "Sealed Chamber",
+                description: "Ruínas antigas escondidas por Hoenn.",
                 levelRange: [616, 630],
                 pokemon: [
                     { id: 344, weight: 24, levelRange: [616, 630] },  // 念力土偶
@@ -1057,8 +1057,8 @@ const REGIONS = {
             },
             {
                 id: 'hoenn_sky_pillar',
-                name: '天空之柱',
-                description: '传说中烈空坐栖息的高塔',
+                name: "Sky Pillar",
+                description: "Torre onde vive o lendário Rayquaza.",
                 levelRange: [631, 645],
                 pokemon: [
                     { id: 373, weight: 20, levelRange: [631, 645] },  // 暴飞龙
@@ -1072,8 +1072,8 @@ const REGIONS = {
             },
             {
                 id: 'hoenn_birth_island',
-                name: '诞生之岛',
-                description: '传说中代欧奇希斯降临的神秘小岛',
+                name: "Birth Island",
+                description: "Ilha misteriosa onde Deoxys aparece.",
                 levelRange: [646, 660],
                 pokemon: [
                     { id: 373, weight: 20, levelRange: [646, 660] },  // 暴飞龙
@@ -1091,15 +1091,15 @@ const REGIONS = {
     },
     sinnoh: {
         id: 'sinnoh',
-        name: '神奥地区',
+        name: "Sinnoh",
         nameEn: 'Sinnoh',
-        description: '第四世代宝可梦的家园，拥有雄伟的天冠山和神秘的时空传说。需要集齐丰缘地区所有宝可梦才能前往。',
+        description: "Terra da quarta geração, com o imponente Mt. Coronet e lendas do tempo e do espaço. Capture todos os Pokémon de Hoenn para entrar.",
         unlockCondition: { type: 'pokedex_complete', region: 'hoenn', range: [252, 386] },
         routes: [
             {
                 id: 'sinnoh_route201',
-                name: '201号道路',
-                description: '双叶镇到真砂镇之间的道路',
+                name: "Rota 201",
+                description: "Estrada entre Twinleaf Town e Sandgem Town.",
                 levelRange: [661, 680],
                 pokemon: [
                     { id: 396, weight: 35, levelRange: [661, 680] },  // 姆克儿
@@ -1110,8 +1110,8 @@ const REGIONS = {
             },
             {
                 id: 'sinnoh_route202',
-                name: '202号道路',
-                description: '真砂镇到祝庆市之间的道路',
+                name: "Rota 202",
+                description: "Estrada entre Sandgem Town e Jubilife City.",
                 levelRange: [681, 700],
                 pokemon: [
                     { id: 396, weight: 25, levelRange: [681, 700] },  // 姆克儿
@@ -1123,8 +1123,8 @@ const REGIONS = {
             },
             {
                 id: 'sinnoh_route204',
-                name: '204号道路',
-                description: '祝庆市到苑之镇之间的道路',
+                name: "Rota 204",
+                description: "Estrada entre Jubilife City e Floaroma Town.",
                 levelRange: [701, 720],
                 pokemon: [
                     { id: 406, weight: 22, levelRange: [701, 720] },  // 含羞苞
@@ -1137,8 +1137,8 @@ const REGIONS = {
             },
             {
                 id: 'sinnoh_ravaged_path',
-                name: '荒芜小道',
-                description: '连接204号道路两段的洞穴',
+                name: "Ravaged Path",
+                description: "Caverna que liga dois trechos da Rota 204.",
                 levelRange: [721, 740],
                 pokemon: [
                     { id: 41, weight: 25, levelRange: [721, 740] },   // 超音蝠
@@ -1151,8 +1151,8 @@ const REGIONS = {
             },
             {
                 id: 'sinnoh_route205',
-                name: '205号道路',
-                description: '苑之镇到百代森林之间的道路',
+                name: "Rota 205",
+                description: "Estrada entre Floaroma Town e Eterna Forest.",
                 levelRange: [741, 760],
                 pokemon: [
                     { id: 418, weight: 22, levelRange: [741, 760] },  // 泳圈鼬
@@ -1166,8 +1166,8 @@ const REGIONS = {
             },
             {
                 id: 'sinnoh_eterna_forest',
-                name: '百代森林',
-                description: '百代市附近的古老森林',
+                name: "Eterna Forest",
+                description: "Floresta antiga perto de Eterna City.",
                 levelRange: [761, 780],
                 pokemon: [
                     { id: 406, weight: 20, levelRange: [761, 780] },  // 含羞苞
@@ -1182,8 +1182,8 @@ const REGIONS = {
             },
             {
                 id: 'sinnoh_route206',
-                name: '206号道路（自行车道）',
-                description: '百代市到随意遗迹之间的下坡道路',
+                name: "Rota 206 (Cycling Road)",
+                description: "Ladeira longa que desce até a Wayward Cave.",
                 levelRange: [781, 800],
                 pokemon: [
                     { id: 434, weight: 22, levelRange: [781, 800] },  // 臭鼬噗
@@ -1196,8 +1196,8 @@ const REGIONS = {
             },
             {
                 id: 'sinnoh_wayward_cave',
-                name: '迷幻洞窟',
-                description: '206号道路下方隐藏的洞穴',
+                name: "Wayward Cave",
+                description: "Caverna escondida sob a Rota 206.",
                 levelRange: [801, 820],
                 pokemon: [
                     { id: 74, weight: 20, levelRange: [801, 820] },   // 小拳石
@@ -1210,8 +1210,8 @@ const REGIONS = {
             },
             {
                 id: 'sinnoh_route209',
-                name: '209号道路',
-                description: '随意镇到迷路市之间的道路',
+                name: "Rota 209",
+                description: "Estrada entre Solaceon Town e a Lost Tower.",
                 levelRange: [821, 840],
                 pokemon: [
                     { id: 431, weight: 20, levelRange: [821, 840] },  // 魅力喵
@@ -1225,8 +1225,8 @@ const REGIONS = {
             },
             {
                 id: 'sinnoh_lost_tower',
-                name: '失落之塔',
-                description: '迷路市附近的宝可梦灵魂安息之所',
+                name: "Lost Tower",
+                description: "Torre onde descansam as almas dos Pokémon.",
                 levelRange: [841, 860],
                 pokemon: [
                     { id: 92, weight: 22, levelRange: [841, 860] },   // 鬼斯
@@ -1239,8 +1239,8 @@ const REGIONS = {
             },
             {
                 id: 'sinnoh_route210',
-                name: '210号道路',
-                description: '通往神和镇的浓雾道路',
+                name: "Rota 210",
+                description: "Estrada coberta de névoa rumo a Celestic Town.",
                 levelRange: [861, 880],
                 pokemon: [
                     { id: 397, weight: 18, levelRange: [861, 880] },  // 姆克鸟
@@ -1253,8 +1253,8 @@ const REGIONS = {
             },
             {
                 id: 'sinnoh_route212',
-                name: '212号道路',
-                description: '帷幕市到水脉市之间的沼泽道路',
+                name: "Rota 212",
+                description: "Estrada pantanosa perto de Pastoria City.",
                 levelRange: [881, 900],
                 pokemon: [
                     { id: 453, weight: 22, levelRange: [881, 900] },  // 不良蛙
@@ -1267,8 +1267,8 @@ const REGIONS = {
             },
             {
                 id: 'sinnoh_great_marsh',
-                name: '大湿地',
-                description: '水脉市的广阔湿地保护区',
+                name: "Great Marsh",
+                description: "Grande reserva de pântano em Pastoria City.",
                 levelRange: [901, 920],
                 pokemon: [
                     { id: 453, weight: 18, levelRange: [901, 920] },  // 不良蛙
@@ -1282,8 +1282,8 @@ const REGIONS = {
             },
             {
                 id: 'sinnoh_route214',
-                name: '214号道路',
-                description: '帷幕市到水脉市东面的道路',
+                name: "Rota 214",
+                description: "Estrada ao sul de Veilstone City.",
                 levelRange: [921, 940],
                 pokemon: [
                     { id: 449, weight: 20, levelRange: [921, 940] },  // 沙河马
@@ -1297,8 +1297,8 @@ const REGIONS = {
             },
             {
                 id: 'sinnoh_route215',
-                name: '215号道路',
-                description: '帷幕市北方的雨天道路',
+                name: "Rota 215",
+                description: "Estrada chuvosa perto de Veilstone City.",
                 levelRange: [941, 960],
                 pokemon: [
                     { id: 404, weight: 22, levelRange: [941, 960] },  // 勒克猫
@@ -1311,8 +1311,8 @@ const REGIONS = {
             },
             {
                 id: 'sinnoh_mt_coronet_south',
-                name: '天冠山（南部）',
-                description: '神奥地区中央的雄伟山脉',
+                name: "Mt. Coronet (Sul)",
+                description: "Imponente montanha no centro de Sinnoh.",
                 levelRange: [961, 980],
                 pokemon: [
                     { id: 436, weight: 20, levelRange: [961, 980] },  // 铜镜怪
@@ -1327,8 +1327,8 @@ const REGIONS = {
             },
             {
                 id: 'sinnoh_route216',
-                name: '216号道路',
-                description: '通往切锋市的雪地道路',
+                name: "Rota 216",
+                description: "Estrada nevada rumo a Snowpoint City.",
                 levelRange: [981, 1000],
                 pokemon: [
                     { id: 459, weight: 25, levelRange: [981, 1000] },  // 雪笠怪
@@ -1341,8 +1341,8 @@ const REGIONS = {
             },
             {
                 id: 'sinnoh_lake_acuity',
-                name: '睿智湖',
-                description: '切锋市附近的神圣湖泊',
+                name: "Lake Acuity",
+                description: "Lago sagrado perto de Snowpoint City.",
                 levelRange: [1001, 1020],
                 pokemon: [
                     { id: 459, weight: 22, levelRange: [1001, 1020] },  // 雪笠怪
@@ -1357,8 +1357,8 @@ const REGIONS = {
             },
             {
                 id: 'sinnoh_route222',
-                name: '222号道路',
-                description: '通往水脉市的海岸道路',
+                name: "Rota 222",
+                description: "Estrada costeira perto de Sunyshore City.",
                 levelRange: [1021, 1040],
                 pokemon: [
                     { id: 423, weight: 20, levelRange: [1021, 1040] },  // 海兔兽
@@ -1373,8 +1373,8 @@ const REGIONS = {
             },
             {
                 id: 'sinnoh_mt_coronet_summit',
-                name: '天冠山（枪之柱）',
-                description: '天冠山顶峰，传说中时空扭曲之地',
+                name: "Mt. Coronet (Spear Pillar)",
+                description: "Topo do Mt. Coronet, onde o tempo e o espaço se distorcem.",
                 levelRange: [1041, 1060],
                 pokemon: [
                     { id: 444, weight: 20, levelRange: [1041, 1060] },  // 尖牙陆鲨
@@ -1389,8 +1389,8 @@ const REGIONS = {
             },
             {
                 id: 'sinnoh_victory_road',
-                name: '神奥冠军之路',
-                description: '通往神奥联盟的最终试炼',
+                name: "Victory Road (Sinnoh)",
+                description: "Última provação rumo à Liga de Sinnoh.",
                 levelRange: [1061, 1080],
                 pokemon: [
                     { id: 445, weight: 16, levelRange: [1061, 1080] },  // 烈咬陆鲨
@@ -1406,8 +1406,8 @@ const REGIONS = {
             },
             {
                 id: 'sinnoh_sendoff_spring',
-                name: '归途洞窟',
-                description: '通往反转世界入口的神秘洞窟',
+                name: "Turnback Cave",
+                description: "Caverna misteriosa que leva à entrada do Distortion World.",
                 levelRange: [1081, 1100],
                 pokemon: [
                     { id: 445, weight: 18, levelRange: [1081, 1100] },  // 烈咬陆鲨
@@ -1421,8 +1421,8 @@ const REGIONS = {
             },
             {
                 id: 'sinnoh_fullmoon_island',
-                name: '满月岛 & 新月岛',
-                description: '传说中蕾冠王与达克莱伊栖息的神秘岛屿',
+                name: "Fullmoon Island & Newmoon Island",
+                description: "Ilhas misteriosas de Cresselia e Darkrai.",
                 levelRange: [1101, 1120],
                 pokemon: [
                     { id: 445, weight: 18, levelRange: [1101, 1120] },  // 烈咬陆鲨
@@ -1437,8 +1437,8 @@ const REGIONS = {
             },
             {
                 id: 'sinnoh_hall_of_origin',
-                name: '创始之间',
-                description: '传说中阿尔宙斯降临的至高圣域',
+                name: "Hall of Origin",
+                description: "Santuário supremo onde Arceus desce.",
                 levelRange: [1121, 1140],
                 pokemon: [
                     { id: 445, weight: 16, levelRange: [1121, 1140] },  // 烈咬陆鲨
@@ -1456,15 +1456,15 @@ const REGIONS = {
     },
     unova: {
         id: 'unova',
-        name: '合众地区',
+        name: "Unova",
         nameEn: 'Unova',
-        description: '第五世代宝可梦的故乡，拥有繁华的都市与广袤的自然。需要集齐神奥地区所有宝可梦才能前往。',
+        description: "Terra da quinta geração, com grandes cidades e natureza imensa. Capture todos os Pokémon de Sinnoh para entrar.",
         unlockCondition: { type: 'pokedex_complete', region: 'sinnoh', range: [387, 493] },
         routes: [
             {
                 id: 'unova_route1',
-                name: '1号道路',
-                description: '鹿子镇到唐草镇之间的道路',
+                name: "Rota 1",
+                description: "Estrada entre Nuvema Town e Accumula Town.",
                 levelRange: [1141, 1165],
                 pokemon: [
                     { id: 504, weight: 35, levelRange: [1141, 1165] },  // 探探鼠
@@ -1475,8 +1475,8 @@ const REGIONS = {
             },
             {
                 id: 'unova_route2',
-                name: '2号道路',
-                description: '唐草镇到三曜市之间的道路',
+                name: "Rota 2",
+                description: "Estrada entre Accumula Town e Striaton City.",
                 levelRange: [1166, 1190],
                 pokemon: [
                     { id: 506, weight: 25, levelRange: [1166, 1190] },  // 小约克
@@ -1489,8 +1489,8 @@ const REGIONS = {
             },
             {
                 id: 'unova_dreamyard',
-                name: '梦之遗迹',
-                description: '三曜市郊外的神秘遗迹',
+                name: "Dreamyard",
+                description: "Ruínas misteriosas nos arredores de Striaton City.",
                 levelRange: [1191, 1215],
                 pokemon: [
                     { id: 517, weight: 25, levelRange: [1191, 1215] },  // 食梦梦
@@ -1503,8 +1503,8 @@ const REGIONS = {
             },
             {
                 id: 'unova_route3',
-                name: '3号道路',
-                description: '三曜市到七宝市之间的道路',
+                name: "Rota 3",
+                description: "Estrada entre Striaton City e Nacrene City.",
                 levelRange: [1216, 1240],
                 pokemon: [
                     { id: 522, weight: 22, levelRange: [1216, 1240] },  // 斑斑马
@@ -1518,8 +1518,8 @@ const REGIONS = {
             },
             {
                 id: 'unova_wellspring_cave',
-                name: '地下水脉穴',
-                description: '连接3号道路与4号道路的洞穴',
+                name: "Wellspring Cave",
+                description: "Caverna que liga a Rota 3 à Rota 4.",
                 levelRange: [1241, 1265],
                 pokemon: [
                     { id: 524, weight: 25, levelRange: [1241, 1265] },  // 石丸子
@@ -1532,8 +1532,8 @@ const REGIONS = {
             },
             {
                 id: 'unova_route4',
-                name: '4号道路（沙漠区）',
-                description: '七宝市到飞云市之间的沙漠道路',
+                name: "Rota 4 (Deserto)",
+                description: "Estrada desértica entre Nacrene City e Castelia City.",
                 levelRange: [1266, 1290],
                 pokemon: [
                     { id: 551, weight: 25, levelRange: [1266, 1290] },  // 黑眼鳄
@@ -1546,8 +1546,8 @@ const REGIONS = {
             },
             {
                 id: 'unova_pinwheel_forest',
-                name: '矢车之森',
-                description: '七宝市附近的茂密森林',
+                name: "Pinwheel Forest",
+                description: "Floresta densa perto de Nacrene City.",
                 levelRange: [1291, 1315],
                 pokemon: [
                     { id: 540, weight: 20, levelRange: [1291, 1315] },  // 虫宝包
@@ -1561,8 +1561,8 @@ const REGIONS = {
             },
             {
                 id: 'unova_skyarrow_bridge',
-                name: '天箭桥',
-                description: '连接飞云市的宏伟大桥',
+                name: "Skyarrow Bridge",
+                description: "Grande ponte que liga Castelia City.",
                 levelRange: [1316, 1340],
                 pokemon: [
                     { id: 520, weight: 22, levelRange: [1316, 1340] },  // 咕咕鸽
@@ -1576,8 +1576,8 @@ const REGIONS = {
             },
             {
                 id: 'unova_route5',
-                name: '5号道路',
-                description: '飞云市到帆巴市之间的道路',
+                name: "Rota 5",
+                description: "Estrada entre Castelia City e Nimbasa City.",
                 levelRange: [1341, 1365],
                 pokemon: [
                     { id: 510, weight: 20, levelRange: [1341, 1365] },  // 酷豹
@@ -1591,8 +1591,8 @@ const REGIONS = {
             },
             {
                 id: 'unova_desert_resort',
-                name: '古代城堡（沙漠度假区）',
-                description: '合众地区中心的广袤沙漠遗迹',
+                name: "Relic Castle (Desert Resort)",
+                description: "Vastas ruínas no deserto do centro de Unova.",
                 levelRange: [1366, 1390],
                 pokemon: [
                     { id: 551, weight: 20, levelRange: [1366, 1390] },  // 黑眼鳄
@@ -1607,8 +1607,8 @@ const REGIONS = {
             },
             {
                 id: 'unova_route6',
-                name: '6号道路',
-                description: '帆巴市到电气石洞穴之间的道路',
+                name: "Rota 6",
+                description: "Estrada de Nimbasa City até a Chargestone Cave.",
                 levelRange: [1391, 1415],
                 pokemon: [
                     { id: 585, weight: 20, levelRange: [1391, 1415] },  // 四季鹿
@@ -1622,8 +1622,8 @@ const REGIONS = {
             },
             {
                 id: 'unova_chargestone_cave',
-                name: '电气石洞穴',
-                description: '充满电气石的神秘洞穴',
+                name: "Chargestone Cave",
+                description: "Caverna misteriosa cheia de pedras elétricas.",
                 levelRange: [1416, 1440],
                 pokemon: [
                     { id: 599, weight: 22, levelRange: [1416, 1440] },  // 齿轮儿
@@ -1637,8 +1637,8 @@ const REGIONS = {
             },
             {
                 id: 'unova_route7',
-                name: '7号道路',
-                description: '帆巴市到吹寄市之间的塔楼道路',
+                name: "Rota 7",
+                description: "Estrada de torres entre Nimbasa City e Mistralton City.",
                 levelRange: [1441, 1465],
                 pokemon: [
                     { id: 586, weight: 20, levelRange: [1441, 1465] },  // 萌芽鹿
@@ -1652,8 +1652,8 @@ const REGIONS = {
             },
             {
                 id: 'unova_celestial_tower',
-                name: '天堂之塔',
-                description: '吹寄市附近的灵魂安息之所',
+                name: "Celestial Tower",
+                description: "Local de descanso das almas perto de Mistralton City.",
                 levelRange: [1466, 1490],
                 pokemon: [
                     { id: 607, weight: 25, levelRange: [1466, 1490] },  // 烛光灵
@@ -1667,8 +1667,8 @@ const REGIONS = {
             },
             {
                 id: 'unova_route8',
-                name: '8号道路（湿地）',
-                description: '吹寄市到雪花市之间的沼泽道路',
+                name: "Rota 8 (Pântano)",
+                description: "Estrada pantanosa entre Mistralton City e Icirrus City.",
                 levelRange: [1491, 1515],
                 pokemon: [
                     { id: 537, weight: 18, levelRange: [1491, 1515] },  // 蟾蜍王
@@ -1684,8 +1684,8 @@ const REGIONS = {
             },
             {
                 id: 'unova_twist_mountain',
-                name: '螺旋山',
-                description: '合众地区中心的螺旋状巨大山脉',
+                name: "Twist Mountain",
+                description: "Montanha gigante em espiral no centro de Unova.",
                 levelRange: [1516, 1540],
                 pokemon: [
                     { id: 526, weight: 20, levelRange: [1516, 1540] },  // 庞岩怪
@@ -1700,8 +1700,8 @@ const REGIONS = {
             },
             {
                 id: 'unova_route9',
-                name: '9号道路',
-                description: '帆巴市到双龙市之间的购物街道路',
+                name: "Rota 9",
+                description: "Estrada comercial rumo a Opelucid City.",
                 levelRange: [1541, 1565],
                 pokemon: [
                     { id: 560, weight: 18, levelRange: [1541, 1565] },  // 头巾混混
@@ -1717,8 +1717,8 @@ const REGIONS = {
             },
             {
                 id: 'unova_dragonspiral_tower',
-                name: '龙螺旋之塔',
-                description: '合众地区最古老的建筑，传说中龙之宝可梦沉睡之地',
+                name: "Dragonspiral Tower",
+                description: "Construção mais antiga de Unova, onde dorme o Pokémon Dragão lendário.",
                 levelRange: [1566, 1590],
                 pokemon: [
                     { id: 610, weight: 20, levelRange: [1566, 1590] },  // 牙牙
@@ -1735,8 +1735,8 @@ const REGIONS = {
             },
             {
                 id: 'unova_route10',
-                name: '10号道路',
-                description: '通往合众冠军之路的入口',
+                name: "Rota 10",
+                description: "Entrada da Victory Road de Unova.",
                 levelRange: [1591, 1615],
                 pokemon: [
                     { id: 553, weight: 18, levelRange: [1591, 1615] },  // 流氓鳄
@@ -1752,8 +1752,8 @@ const REGIONS = {
             },
             {
                 id: 'unova_victory_road',
-                name: '合众冠军之路',
-                description: '通往合众联盟的最终试炼',
+                name: "Victory Road (Unova)",
+                description: "Última provação rumo à Liga de Unova.",
                 levelRange: [1616, 1640],
                 pokemon: [
                     { id: 611, weight: 16, levelRange: [1616, 1640] },  // 斧牙龙
@@ -1770,8 +1770,8 @@ const REGIONS = {
             },
             {
                 id: 'unova_giant_chasm',
-                name: '巨人洞窟',
-                description: '传说中酋雷姆栖息的冰冷巨洞',
+                name: "Giant Chasm",
+                description: "Enorme caverna gelada onde vive Kyurem.",
                 levelRange: [1641, 1665],
                 pokemon: [
                     { id: 614, weight: 16, levelRange: [1641, 1665] },  // 冻原熊
@@ -1786,8 +1786,8 @@ const REGIONS = {
             },
             {
                 id: 'unova_n_castle',
-                name: 'N之城堡',
-                description: '等离子团的空中城堡，传说之龙沉眠之地',
+                name: "N's Castle",
+                description: "Castelo flutuante da Team Plasma, onde dormem os dragões lendários.",
                 levelRange: [1666, 1690],
                 pokemon: [
                     { id: 612, weight: 14, levelRange: [1666, 1690] },  // 双斧战龙
@@ -1804,8 +1804,8 @@ const REGIONS = {
             },
             {
                 id: 'unova_liberty_garden',
-                name: '自由花园 & 天涯之境',
-                description: '传说中幻之宝可梦栖息的神秘场所',
+                name: "Liberty Garden & Abundant Shrine",
+                description: "Lugar misterioso onde vivem Pokémon míticos.",
                 levelRange: [1691, 1715],
                 pokemon: [
                     { id: 612, weight: 14, levelRange: [1691, 1715] },  // 双斧战龙
@@ -1824,15 +1824,15 @@ const REGIONS = {
     },
     kalos: {
         id: 'kalos',
-        name: '卡洛斯地区',
+        name: "Kalos",
         nameEn: 'Kalos',
-        description: '第六世代宝可梦的故乡，以美丽的巴黎风格城市与Mega进化闻名。需要集齐合众地区所有宝可梦才能前往。',
+        description: "Terra da sexta geração, com cidades ao estilo parisiense e famosa pela Mega Evolução. Capture todos os Pokémon de Unova para entrar.",
         unlockCondition: { type: 'pokedex_complete', region: 'unova', range: [494, 649] },
         routes: [
             {
                 id: 'kalos_route2',
-                name: '2号道路',
-                description: '白檀市到朝香镇之间的森林小径',
+                name: "Rota 2",
+                description: "Trilha na floresta entre Santalune City e Aquacorde Town.",
                 levelRange: [1716, 1745],
                 pokemon: [
                     { id: 659, weight: 30, levelRange: [1716, 1745] },  // 掘掘兔
@@ -1844,8 +1844,8 @@ const REGIONS = {
             },
             {
                 id: 'kalos_santalune_forest',
-                name: '白檀森林',
-                description: '白檀市附近的茂密森林，虫系宝可梦乐园',
+                name: "Santalune Forest",
+                description: "Floresta densa perto de Santalune City, paraíso dos Pokémon do tipo Inseto.",
                 levelRange: [1746, 1775],
                 pokemon: [
                     { id: 664, weight: 25, levelRange: [1746, 1775] },  // 粉蝶虫
@@ -1858,8 +1858,8 @@ const REGIONS = {
             },
             {
                 id: 'kalos_route4',
-                name: '4号道路（花庭园）',
-                description: '密阿雷市南面的美丽花园道路',
+                name: "Rota 4 (Jardim de Flores)",
+                description: "Belo jardim ao sul de Lumiose City.",
                 levelRange: [1776, 1805],
                 pokemon: [
                     { id: 669, weight: 25, levelRange: [1776, 1805] },  // 花蓓蓓
@@ -1872,8 +1872,8 @@ const REGIONS = {
             },
             {
                 id: 'kalos_route5',
-                name: '5号道路',
-                description: '密阿雷市到海翼市之间的道路',
+                name: "Rota 5",
+                description: "Estrada entre Lumiose City e Cyllage City.",
                 levelRange: [1806, 1835],
                 pokemon: [
                     { id: 674, weight: 22, levelRange: [1806, 1835] },  // 顽皮熊猫
@@ -1886,8 +1886,8 @@ const REGIONS = {
             },
             {
                 id: 'kalos_route7',
-                name: '7号道路（要塞道路）',
-                description: '通往异世石碑的古道',
+                name: "Rota 7 (Fortaleza)",
+                description: "Estrada antiga que leva a uma estela misteriosa.",
                 levelRange: [1836, 1865],
                 pokemon: [
                     { id: 676, weight: 20, levelRange: [1836, 1865] },  // 多丽米亚
@@ -1901,8 +1901,8 @@ const REGIONS = {
             },
             {
                 id: 'kalos_connecting_cave',
-                name: '连接洞穴',
-                description: '连接7号道路和密阿雷市的洞窟',
+                name: "Connecting Cave",
+                description: "Caverna que liga a Rota 7 a Lumiose City.",
                 levelRange: [1866, 1895],
                 pokemon: [
                     { id: 679, weight: 25, levelRange: [1866, 1895] },  // 独剑鞘
@@ -1915,8 +1915,8 @@ const REGIONS = {
             },
             {
                 id: 'kalos_route8',
-                name: '8号道路（海岸线）',
-                description: '海翼市到古香市之间的海岸道路',
+                name: "Rota 8 (Costa)",
+                description: "Estrada costeira entre Cyllage City e Ambrette Town.",
                 levelRange: [1896, 1925],
                 pokemon: [
                     { id: 688, weight: 22, levelRange: [1896, 1925] },  // 龟脚脚
@@ -1930,8 +1930,8 @@ const REGIONS = {
             },
             {
                 id: 'kalos_route9',
-                name: '9号道路（碎石路）',
-                description: '古香市到映照洞穴之间的陡峭山路',
+                name: "Rota 9 (Cascalho)",
+                description: "Trilha íngreme de Ambrette Town até a Glittering Cave.",
                 levelRange: [1926, 1955],
                 pokemon: [
                     { id: 696, weight: 22, levelRange: [1926, 1955] },  // 宝宝暴龙
@@ -1944,8 +1944,8 @@ const REGIONS = {
             },
             {
                 id: 'kalos_glittering_cave',
-                name: '映照洞穴',
-                description: '蕴含化石的闪亮洞窟',
+                name: "Glittering Cave",
+                description: "Caverna brilhante cheia de fósseis.",
                 levelRange: [1956, 1985],
                 pokemon: [
                     { id: 703, weight: 25, levelRange: [1956, 1985] },  // 小碎钻
@@ -1959,8 +1959,8 @@ const REGIONS = {
             },
             {
                 id: 'kalos_route10',
-                name: '10号道路（石碑道路）',
-                description: '密阿雷市到荒凉镇之间的神秘道路',
+                name: "Rota 10 (Estelas)",
+                description: "Estrada misteriosa entre Lumiose City e Geosenge Town.",
                 levelRange: [1986, 2015],
                 pokemon: [
                     { id: 705, weight: 18, levelRange: [1986, 2015] },  // 黏美儿
@@ -1976,8 +1976,8 @@ const REGIONS = {
             },
             {
                 id: 'kalos_route11',
-                name: '11号道路（镜穴道路）',
-                description: '通往映照洞穴的崎岖道路',
+                name: "Rota 11 (Reflection Cave)",
+                description: "Estrada acidentada perto da Reflection Cave.",
                 levelRange: [2016, 2045],
                 pokemon: [
                     { id: 674, weight: 20, levelRange: [2016, 2045] },  // 顽皮熊猫
@@ -1991,8 +1991,8 @@ const REGIONS = {
             },
             {
                 id: 'kalos_route12',
-                name: '12号道路（海滨道路）',
-                description: '古香市南方的海滨道路',
+                name: "Rota 12 (Orla)",
+                description: "Estrada à beira-mar ao sul de Ambrette Town.",
                 levelRange: [2046, 2075],
                 pokemon: [
                     { id: 690, weight: 20, levelRange: [2046, 2075] },  // 垃垃藻
@@ -2006,8 +2006,8 @@ const REGIONS = {
             },
             {
                 id: 'kalos_route13',
-                name: '13号道路（荒地道路）',
-                description: '穿越干旱荒原的道路',
+                name: "Rota 13 (Terras Áridas)",
+                description: "Estrada que atravessa terras áridas.",
                 levelRange: [2076, 2105],
                 pokemon: [
                     { id: 694, weight: 22, levelRange: [2076, 2105] },  // 伞电蜥
@@ -2021,8 +2021,8 @@ const REGIONS = {
             },
             {
                 id: 'kalos_route14',
-                name: '14号道路（沼泽道路）',
-                description: '穿越潮湿沼泽的阴暗道路',
+                name: "Rota 14 (Pântano)",
+                description: "Estrada sombria que atravessa um pântano úmido.",
                 levelRange: [2106, 2135],
                 pokemon: [
                     { id: 704, weight: 22, levelRange: [2106, 2135] },  // 黏黏宝
@@ -2036,8 +2036,8 @@ const REGIONS = {
             },
             {
                 id: 'kalos_route15',
-                name: '15号道路（日照道路）',
-                description: '百刻市附近的荒野道路',
+                name: "Rota 15 (Sol)",
+                description: "Estrada selvagem perto de Anistar City.",
                 levelRange: [2136, 2165],
                 pokemon: [
                     { id: 668, weight: 18, levelRange: [2136, 2165] },  // 火炎狮
@@ -2051,8 +2051,8 @@ const REGIONS = {
             },
             {
                 id: 'kalos_frost_cavern',
-                name: '冰雪洞窟',
-                description: '卡洛斯地区北部的冰冷洞窟',
+                name: "Frost Cavern",
+                description: "Caverna gelada ao norte de Kalos.",
                 levelRange: [2166, 2195],
                 pokemon: [
                     { id: 712, weight: 22, levelRange: [2166, 2195] },  // 冰宝
@@ -2066,8 +2066,8 @@ const REGIONS = {
             },
             {
                 id: 'kalos_route17',
-                name: '17号道路（玛姆牛道路）',
-                description: '铲雪通行的雪原道路',
+                name: "Rota 17 (Mamoswine)",
+                description: "Campo nevado onde é preciso abrir caminho na neve.",
                 levelRange: [2196, 2225],
                 pokemon: [
                     { id: 712, weight: 22, levelRange: [2196, 2225] },  // 冰宝
@@ -2081,8 +2081,8 @@ const REGIONS = {
             },
             {
                 id: 'kalos_route18',
-                name: '18号道路（谷间道路）',
-                description: '映雪市到冠军之路之间的峡谷道路',
+                name: "Rota 18 (Vale)",
+                description: "Desfiladeiro entre Snowbelle City e a Victory Road.",
                 levelRange: [2226, 2255],
                 pokemon: [
                     { id: 706, weight: 18, levelRange: [2226, 2255] },  // 黏美龙
@@ -2096,8 +2096,8 @@ const REGIONS = {
             },
             {
                 id: 'kalos_route19',
-                name: '19号道路（大谷道路）',
-                description: '通往冠军之路的壮阔峡谷',
+                name: "Rota 19 (Grande Vale)",
+                description: "Grande desfiladeiro rumo à Victory Road.",
                 levelRange: [2256, 2285],
                 pokemon: [
                     { id: 706, weight: 16, levelRange: [2256, 2285] },  // 黏美龙
@@ -2112,8 +2112,8 @@ const REGIONS = {
             },
             {
                 id: 'kalos_victory_road',
-                name: '卡洛斯冠军之路',
-                description: '通往卡洛斯联盟的最终试炼',
+                name: "Victory Road (Kalos)",
+                description: "Última provação rumo à Liga de Kalos.",
                 levelRange: [2286, 2315],
                 pokemon: [
                     { id: 706, weight: 16, levelRange: [2286, 2315] },  // 黏美龙
@@ -2129,8 +2129,8 @@ const REGIONS = {
             },
             {
                 id: 'kalos_terminus_cave',
-                name: '终结洞窟',
-                description: '传说中基格尔德沉睡的深邃洞窟',
+                name: "Terminus Cave",
+                description: "Caverna profunda onde dorme Zygarde.",
                 levelRange: [2316, 2345],
                 pokemon: [
                     { id: 703, weight: 18, levelRange: [2316, 2345] },  // 小碎钻
@@ -2144,8 +2144,8 @@ const REGIONS = {
             },
             {
                 id: 'kalos_unknown_dungeon',
-                name: '未知洞窟',
-                description: '卡洛斯地区最深处的神秘洞穴',
+                name: "Unknown Dungeon",
+                description: "Caverna misteriosa nas profundezas de Kalos.",
                 levelRange: [2346, 2375],
                 pokemon: [
                     { id: 706, weight: 16, levelRange: [2346, 2375] },  // 黏美龙
@@ -2160,8 +2160,8 @@ const REGIONS = {
             },
             {
                 id: 'kalos_sea_spirits_den',
-                name: '海神洞窟 & 花园',
-                description: '传说中幻之宝可梦栖息的神秘场所',
+                name: "Sea Spirit's Den & Jardim",
+                description: "Lugar misterioso onde vivem Pokémon míticos.",
                 levelRange: [2376, 2410],
                 pokemon: [
                     { id: 706, weight: 14, levelRange: [2376, 2410] },  // 黏美龙
@@ -2181,15 +2181,15 @@ const REGIONS = {
     },
     alola: {
         id: 'alola',
-        name: '阿罗拉地区',
+        name: "Alola",
         nameEn: 'Alola',
-        description: '温暖的南国群岛，拥有独特的地区形态宝可梦和守护神。',
+        description: "Arquipélago tropical com Pokémon de formas regionais e Pokémon guardiões.",
         unlockCondition: { type: 'pokedex_complete', region: 'kalos', range: [650, 721] },
         routes: [
             {
                 id: 'alola_route1',
-                name: '1号道路',
-                description: '好奥乐市到利利小镇之间的道路',
+                name: "Rota 1",
+                description: "Estrada entre Iki Town e Hau'oli City.",
                 levelRange: [2411, 2460],
                 pokemon: [
                     { id: 722, weight: 25, levelRange: [2411, 2460] },  // 木木枭
@@ -2201,8 +2201,8 @@ const REGIONS = {
             },
             {
                 id: 'alola_route2',
-                name: '2号道路',
-                description: '好奥乐市郊外的道路',
+                name: "Rota 2",
+                description: "Estrada nos arredores de Hau'oli City.",
                 levelRange: [2461, 2520],
                 pokemon: [
                     { id: 744, weight: 25, levelRange: [2461, 2520] },  // 岩狗狗
@@ -2214,8 +2214,8 @@ const REGIONS = {
             },
             {
                 id: 'alola_route3',
-                name: '3号道路',
-                description: '美乐美乐岛的草地道路',
+                name: "Rota 3",
+                description: "Estrada de campos verdes da Melemele Island.",
                 levelRange: [2521, 2580],
                 pokemon: [
                     { id: 749, weight: 25, levelRange: [2521, 2580] },  // 泥驴仔
@@ -2227,8 +2227,8 @@ const REGIONS = {
             },
             {
                 id: 'alola_route4',
-                name: '4号道路',
-                description: '阿卡拉岛的热闹街道',
+                name: "Rota 4",
+                description: "Rua movimentada da Akala Island.",
                 levelRange: [2581, 2640],
                 pokemon: [
                     { id: 755, weight: 20, levelRange: [2581, 2640] },  // 睡睡菇
@@ -2240,8 +2240,8 @@ const REGIONS = {
             },
             {
                 id: 'alola_route5',
-                name: '5号道路',
-                description: '阿卡拉岛连接至皇家大道的道路',
+                name: "Rota 5",
+                description: "Estrada da Akala Island até a Royal Avenue.",
                 levelRange: [2641, 2700],
                 pokemon: [
                     { id: 723, weight: 15, levelRange: [2641, 2700] },  // 投羽枭
@@ -2255,8 +2255,8 @@ const REGIONS = {
             },
             {
                 id: 'alola_route6',
-                name: '6号道路',
-                description: '乌拉乌拉岛的道路',
+                name: "Rota 6",
+                description: "Estrada da Ula'ula Island.",
                 levelRange: [2701, 2800],
                 pokemon: [
                     { id: 737, weight: 20, levelRange: [2701, 2800] },  // 虫电宝
@@ -2269,8 +2269,8 @@ const REGIONS = {
             },
             {
                 id: 'alola_route7',
-                name: '7号道路',
-                description: '乌拉乌拉岛的海滨道路',
+                name: "Rota 7",
+                description: "Estrada litorânea da Ula'ula Island.",
                 levelRange: [2801, 2900],
                 pokemon: [
                     { id: 750, weight: 20, levelRange: [2801, 2900] },  // 重泥挽马
@@ -2283,8 +2283,8 @@ const REGIONS = {
             },
             {
                 id: 'alola_route8',
-                name: '8号道路',
-                description: '乌拉乌拉岛至波尼岛的道路',
+                name: "Rota 8",
+                description: "Estrada da Ula'ula Island até a Poni Island.",
                 levelRange: [2901, 3000],
                 pokemon: [
                     { id: 760, weight: 15, levelRange: [2901, 3000] },  // 穿着熊
@@ -2298,8 +2298,8 @@ const REGIONS = {
             },
             {
                 id: 'alola_route9',
-                name: '9号道路',
-                description: '波尼岛的山区道路',
+                name: "Rota 9",
+                description: "Estrada de montanha da Poni Island.",
                 levelRange: [3001, 3100],
                 pokemon: [
                     { id: 724, weight: 12, levelRange: [3001, 3100] },  // 狙射树枭
@@ -2315,8 +2315,8 @@ const REGIONS = {
             },
             {
                 id: 'alola_route10',
-                name: '10号道路',
-                description: '波尼岛的花园道路',
+                name: "Rota 10",
+                description: "Estrada de jardins da Poni Island.",
                 levelRange: [3101, 3200],
                 pokemon: [
                     { id: 777, weight: 15, levelRange: [3101, 3200] },  // 托戈德玛尔
@@ -2330,8 +2330,8 @@ const REGIONS = {
             },
             {
                 id: 'alola_route11',
-                name: '11号道路',
-                description: '波尼岛的深处道路',
+                name: "Rota 11",
+                description: "Estrada profunda da Poni Island.",
                 levelRange: [3201, 3300],
                 pokemon: [
                     { id: 784, weight: 15, levelRange: [3201, 3300] },  // 杖尾鳞甲龙
@@ -2347,8 +2347,8 @@ const REGIONS = {
             },
             {
                 id: 'alola_route12',
-                name: '12号道路',
-                description: '异兽出没的异次元区域',
+                name: "Rota 12",
+                description: "Dimensão distante onde vivem as Ultra Beasts.",
                 levelRange: [3301, 3400],
                 pokemon: [
                     { id: 793, weight: 15, levelRange: [3301, 3400] },  // 虚吾伊德
@@ -2362,8 +2362,8 @@ const REGIONS = {
             },
             {
                 id: 'alola_route13',
-                name: '13号道路',
-                description: '奈克洛兹玛的黑暗领域',
+                name: "Rota 13",
+                description: "Território sombrio de Necrozma.",
                 levelRange: [3401, 3500],
                 pokemon: [
                     { id: 800, weight: 20, levelRange: [3401, 3500] },  // 奈克洛兹玛
@@ -2376,8 +2376,8 @@ const REGIONS = {
             },
             {
                 id: 'alola_route14',
-                name: '14号道路',
-                description: '阿罗拉的极限之地',
+                name: "Rota 14",
+                description: "O limite extremo de Alola.",
                 levelRange: [3501, 3600],
                 pokemon: [
                     { id: 808, weight: 30, levelRange: [3501, 3600] },  // 美录坦
@@ -2390,15 +2390,15 @@ const REGIONS = {
     },
     galar: {
         id: 'galar',
-        name: '伽勒尔地区',
+        name: "Galar",
         nameEn: 'Galar',
-        description: '工业发达的地区，极巨化现象让宝可梦变得巨大化。',
+        description: "Região industrial onde o Dynamax deixa os Pokémon gigantes.",
         unlockCondition: { type: 'pokedex_complete', region: 'alola', range: [722, 809] },
         routes: [
             {
                 id: 'galar_route1',
-                name: '1号道路',
-                description: '木桩镇到机擎市之间的道路',
+                name: "Rota 1",
+                description: "Estrada entre Postwick e Motostoke.",
                 levelRange: [3601, 3800],
                 pokemon: [
                     { id: 810, weight: 15, levelRange: [3601, 3800] },  // 敲音猴
@@ -2412,8 +2412,8 @@ const REGIONS = {
             },
             {
                 id: 'galar_route2',
-                name: '2号道路',
-                description: '机擎市郊外的矿区道路',
+                name: "Rota 2",
+                description: "Estrada de mineração nos arredores de Motostoke.",
                 levelRange: [3801, 4000],
                 pokemon: [
                     { id: 829, weight: 15, levelRange: [3801, 4000] },  // 幼棉棉
@@ -2427,8 +2427,8 @@ const REGIONS = {
             },
             {
                 id: 'galar_route3',
-                name: '3号道路',
-                description: '伽勒尔矿山深处',
+                name: "Rota 3",
+                description: "Profundezas da mina de Galar.",
                 levelRange: [4001, 4200],
                 pokemon: [
                     { id: 835, weight: 15, levelRange: [4001, 4200] },  // 来电汪
@@ -2442,8 +2442,8 @@ const REGIONS = {
             },
             {
                 id: 'galar_route4',
-                name: '4号道路',
-                description: '旷野地带的开阔草原',
+                name: "Rota 4",
+                description: "Campos abertos da Wild Area.",
                 levelRange: [4201, 4400],
                 pokemon: [
                     { id: 840, weight: 15, levelRange: [4201, 4400] },  // 啃果虫
@@ -2457,8 +2457,8 @@ const REGIONS = {
             },
             {
                 id: 'galar_route5',
-                name: '5号道路',
-                description: '伽勒尔中部的城镇区域',
+                name: "Rota 5",
+                description: "Área urbana no centro de Galar.",
                 levelRange: [4401, 4600],
                 pokemon: [
                     { id: 841, weight: 12, levelRange: [4401, 4600] },  // 苹裹龙
@@ -2472,8 +2472,8 @@ const REGIONS = {
             },
             {
                 id: 'galar_route6',
-                name: '6号道路',
-                description: '拳关市至棘丘市之间的滨海道路',
+                name: "Rota 6",
+                description: "Estrada litorânea ao longo da costa de Galar.",
                 levelRange: [4601, 4800],
                 pokemon: [
                     { id: 846, weight: 15, levelRange: [4601, 4800] },  // 刺梭鱼
@@ -2487,8 +2487,8 @@ const REGIONS = {
             },
             {
                 id: 'galar_route7',
-                name: '7号道路',
-                description: '格拉球大草原的训练区域',
+                name: "Rota 7",
+                description: "Área de treino em uma grande campina.",
                 levelRange: [4801, 5000],
                 pokemon: [
                     { id: 852, weight: 12, levelRange: [4801, 5000] },  // 拳拳蛸
@@ -2502,8 +2502,8 @@ const REGIONS = {
             },
             {
                 id: 'galar_route8',
-                name: '8号道路',
-                description: '棘丘市附近的阴暗森林',
+                name: "Rota 8",
+                description: "Floresta sombria de Galar.",
                 levelRange: [5001, 5200],
                 pokemon: [
                     { id: 859, weight: 12, levelRange: [5001, 5200] },  // 捣蛋小妖
@@ -2517,8 +2517,8 @@ const REGIONS = {
             },
             {
                 id: 'galar_route9',
-                name: '9号道路',
-                description: '冠之雪原的入口地带',
+                name: "Rota 9",
+                description: "Entrada da Crown Tundra.",
                 levelRange: [5201, 5400],
                 pokemon: [
                     { id: 872, weight: 15, levelRange: [5201, 5400] },  // 雪吞虫
@@ -2532,8 +2532,8 @@ const REGIONS = {
             },
             {
                 id: 'galar_route10',
-                name: '10号道路',
-                description: '冠之雪原的冰冻深处',
+                name: "Rota 10",
+                description: "Fundo gelado da Crown Tundra.",
                 levelRange: [5401, 5600],
                 pokemon: [
                     { id: 878, weight: 15, levelRange: [5401, 5600] },  // 铜象
@@ -2547,8 +2547,8 @@ const REGIONS = {
             },
             {
                 id: 'galar_route11',
-                name: '11号道路',
-                description: '伽勒尔的化石遗迹地带',
+                name: "Rota 11",
+                description: "Área de ruínas de fósseis de Galar.",
                 levelRange: [5601, 5800],
                 pokemon: [
                     { id: 885, weight: 15, levelRange: [5601, 5800] },  // 多龙梅西亚
@@ -2561,8 +2561,8 @@ const REGIONS = {
             },
             {
                 id: 'galar_route12',
-                name: '12号道路',
-                description: '能量塔周边的龙之巢穴',
+                name: "Rota 12",
+                description: "Ninho de dragões ao redor da Energy Plant.",
                 levelRange: [5801, 6000],
                 pokemon: [
                     { id: 886, weight: 12, levelRange: [5801, 6000] },  // 多龙奇
@@ -2574,8 +2574,8 @@ const REGIONS = {
             },
             {
                 id: 'galar_route13',
-                name: '13号道路',
-                description: '铠之孤岛的修炼道场',
+                name: "Rota 13",
+                description: "Dojo de treino da Isle of Armor.",
                 levelRange: [6001, 6200],
                 pokemon: [
                     { id: 892, weight: 15, levelRange: [6001, 6200] },  // 武道熊师
@@ -2588,8 +2588,8 @@ const REGIONS = {
             },
             {
                 id: 'galar_route14',
-                name: '14号道路',
-                description: '洗翠地区的古老遗迹',
+                name: "Rota 14",
+                description: "Ruínas antigas de Hisui.",
                 levelRange: [6201, 6400],
                 pokemon: [
                     { id: 899, weight: 15, levelRange: [6201, 6400] },  // 诡角鹿
@@ -2602,8 +2602,8 @@ const REGIONS = {
             },
             {
                 id: 'galar_route15',
-                name: '15号道路',
-                description: '洗翠之巅——传说降临之地',
+                name: "Rota 15",
+                description: "Pico de Hisui, onde descem as lendas.",
                 levelRange: [6401, 6600],
                 pokemon: [
                     { id: 901, weight: 20, levelRange: [6401, 6600] },  // 月月熊
@@ -2617,15 +2617,15 @@ const REGIONS = {
     },
     paldea: {
         id: 'paldea',
-        name: '帕底亚地区',
+        name: "Paldea",
         nameEn: 'Paldea',
-        description: '广阔的伊比利亚风格地区，拥有太晶化现象和神秘的古来/未来宝可梦。',
+        description: "Vasta região de estilo ibérico, com Terastalização e Pokémon Paradoxo.",
         unlockCondition: { type: 'pokedex_complete', region: 'galar', range: [810, 905] },
         routes: [
             {
                 id: 'paldea_route1',
-                name: '南部第一区',
-                description: '桌台市南方的草原地带，御三家宝可梦出没',
+                name: "South Province (Area 1)",
+                description: "Campos ao sul de Mesagoza, onde aparecem os Pokémon iniciais.",
                 levelRange: [6601, 7100],
                 pokemon: [
                     { id: 906, weight: 12, levelRange: [6601, 7100] },  // 新叶喵
@@ -2641,8 +2641,8 @@ const REGIONS = {
             },
             {
                 id: 'paldea_route2',
-                name: '南部第二区',
-                description: '桌台市东南方的田园地带',
+                name: "South Province (Area 2)",
+                description: "Campos ao sudeste de Mesagoza.",
                 levelRange: [7101, 7600],
                 pokemon: [
                     { id: 922, weight: 12, levelRange: [7101, 7600] },  // 布土拨
@@ -2658,8 +2658,8 @@ const REGIONS = {
             },
             {
                 id: 'paldea_route3',
-                name: '西部第一区',
-                description: '帕底亚西部的山谷地带',
+                name: "West Province (Area 1)",
+                description: "Vale no oeste de Paldea.",
                 levelRange: [7601, 8100],
                 pokemon: [
                     { id: 935, weight: 12, levelRange: [7601, 8100] },  // 炭小侍
@@ -2675,8 +2675,8 @@ const REGIONS = {
             },
             {
                 id: 'paldea_route4',
-                name: '西部第二区',
-                description: '帕底亚西部的高原岩区',
+                name: "West Province (Area 2)",
+                description: "Planalto rochoso no oeste de Paldea.",
                 levelRange: [8101, 8600],
                 pokemon: [
                     { id: 942, weight: 12, levelRange: [8101, 8600] },  // 偶叫獒
@@ -2692,8 +2692,8 @@ const REGIONS = {
             },
             {
                 id: 'paldea_route5',
-                name: '东部第一区',
-                description: '帕底亚东部的沿海区域',
+                name: "East Province (Area 1)",
+                description: "Região costeira no leste de Paldea.",
                 levelRange: [8601, 9100],
                 pokemon: [
                     { id: 948, weight: 12, levelRange: [8601, 9100] },  // 原野水母
@@ -2709,8 +2709,8 @@ const REGIONS = {
             },
             {
                 id: 'paldea_route6',
-                name: '东部第二区',
-                description: '帕底亚东部的火山地带',
+                name: "East Province (Area 2)",
+                description: "Terra vulcânica no leste de Paldea.",
                 levelRange: [9101, 9600],
                 pokemon: [
                     { id: 953, weight: 12, levelRange: [9101, 9600] },  // 虫滚泥
@@ -2726,8 +2726,8 @@ const REGIONS = {
             },
             {
                 id: 'paldea_route7',
-                name: '北部第一区',
-                description: '帕底亚北部的冻土地带',
+                name: "North Province (Area 1)",
+                description: "Tundra congelada no norte de Paldea.",
                 levelRange: [9601, 10100],
                 pokemon: [
                     { id: 960, weight: 12, levelRange: [9601, 10100] },  // 海地鼠
@@ -2743,8 +2743,8 @@ const REGIONS = {
             },
             {
                 id: 'paldea_route8',
-                name: '北部第二区',
-                description: '帕底亚北部的雪山区域',
+                name: "North Province (Area 2)",
+                description: "Montanha nevada no norte de Paldea.",
                 levelRange: [10101, 10600],
                 pokemon: [
                     { id: 969, weight: 12, levelRange: [10101, 10600] },  // 晶光芽
@@ -2760,8 +2760,8 @@ const REGIONS = {
             },
             {
                 id: 'paldea_route9',
-                name: '帕底亚大坑洞入口',
-                description: '帕底亚中央大坑洞的入口区域',
+                name: "Great Crater (Entrada)",
+                description: "Entrada da grande cratera no centro de Paldea.",
                 levelRange: [10601, 11100],
                 pokemon: [
                     { id: 996, weight: 12, levelRange: [10601, 11100] },  // 凉脊龙
@@ -2777,8 +2777,8 @@ const REGIONS = {
             },
             {
                 id: 'paldea_route10',
-                name: '帕底亚大坑洞深处',
-                description: '大坑洞的深层区域，古来宝可梦出没',
+                name: "Great Crater (Fundo)",
+                description: "Zona profunda da cratera, onde vivem Pokémon Paradoxo do Passado.",
                 levelRange: [11101, 12000],
                 pokemon: [
                     { id: 984, weight: 10, levelRange: [11101, 12000] },  // 雄伟牙（古来种）
@@ -2793,8 +2793,8 @@ const REGIONS = {
             },
             {
                 id: 'paldea_route11',
-                name: '零区深处',
-                description: '帕底亚大坑洞最深处，未来种悖论宝可梦出没',
+                name: "Area Zero (Fundo)",
+                description: "Ponto mais profundo da cratera, onde vivem Pokémon Paradoxo do Futuro.",
                 levelRange: [12001, 13000],
                 pokemon: [
                     { id: 990, weight: 10, levelRange: [12001, 13000] },  // 铁辙迹（未来种）
@@ -2809,8 +2809,8 @@ const REGIONS = {
             },
             {
                 id: 'paldea_route12',
-                name: '灾厄之域',
-                description: '传说中四灾宝可梦封印之地',
+                name: "Domínio da Ruína",
+                description: "Local onde estão selados os quatro Pokémon lendários da Ruína.",
                 levelRange: [14001, 15000],
                 pokemon: [
                     { id: 1001, weight: 10, levelRange: [14001, 15000] },  // 古简蜗
@@ -2823,8 +2823,8 @@ const REGIONS = {
             },
             {
                 id: 'paldea_route13',
-                name: '蓝莓学园',
-                description: 'DLC蓝莓学园的特训区域，新伙伴登场',
+                name: "Blueberry Academy",
+                description: "Área de treino da Blueberry Academy (DLC), onde surgem novos parceiros.",
                 levelRange: [15001, 16000],
                 pokemon: [
                     { id: 1012, weight: 12, levelRange: [15001, 16000] },  // 斯魔茶
@@ -2840,8 +2840,8 @@ const REGIONS = {
             },
             {
                 id: 'paldea_route14',
-                name: '传说之路',
-                description: '帕底亚的终极区域，隐藏着最强的传说宝可梦',
+                name: "Caminho Lendário",
+                description: "Área final de Paldea, onde vive o mais forte Pokémon lendário.",
                 levelRange: [16001, 17000],
                 pokemon: [
                     { id: 1020, weight: 8, levelRange: [16001, 17000] },   // 破空焰
@@ -2860,15 +2860,15 @@ const REGIONS = {
     // ===================== 第10地区: Mega进化地区 (ID 1026-1073) =====================
     mega: {
         id: 'mega',
-        name: 'Mega进化地区',
+        name: "Mega Evolução",
         nameEn: 'Mega Evolution',
-        description: '超越极限的Mega进化之地，经典Mega宝可梦聚集于此。需完成帕底亚图鉴方可进入。',
+        description: "Terra além dos limites, onde se reúnem Mega Pokémon clássicos. Complete a Pokédex de Paldea para entrar.",
         unlockCondition: { type: 'pokedex_complete', region: 'paldea', range: [906, 1025] },
         routes: [
             {
                 id: 'mega_route1',
-                name: 'Mega觉醒之路',
-                description: '初代Mega进化的觉醒之地，关都初始御三家和虫系Mega汇聚于此',
+                name: "Trilha do Despertar Mega",
+                description: "Terra do despertar da primeira Mega Evolução, com iniciais de Kanto e Mega Insetos.",
                 levelRange: [17001, 18500],
                 pokemon: [
                     { id: 1026, weight: 12, levelRange: [17001, 18500] },  // Mega妙蛙花
@@ -2885,8 +2885,8 @@ const REGIONS = {
             },
             {
                 id: 'mega_route2',
-                name: 'Mega进化之森',
-                description: '暗藏强大Mega力量的森林，关都后期Mega宝可梦出没',
+                name: "Floresta da Mega Evolução",
+                description: "Floresta com grande poder Mega, onde aparecem Mega Pokémon tardios de Kanto.",
                 levelRange: [18501, 20000],
                 pokemon: [
                     { id: 1043, weight: 12, levelRange: [18501, 20000] },  // Mega巨钳螳螂
@@ -2903,8 +2903,8 @@ const REGIONS = {
             },
             {
                 id: 'mega_route3',
-                name: 'Mega岩浆峡谷',
-                description: '城都与丰缘强力Mega宝可梦栖息的灼热峡谷',
+                name: "Cânion de Lava Mega",
+                description: "Cânion escaldante onde vivem poderosos Mega Pokémon de Johto e Hoenn.",
                 levelRange: [20001, 21500],
                 pokemon: [
                     { id: 1051, weight: 12, levelRange: [20001, 21500] },  // Mega勾魂眼
@@ -2920,8 +2920,8 @@ const REGIONS = {
             },
             {
                 id: 'mega_route4',
-                name: 'Mega暴风海域',
-                description: '丰缘Mega后半部队驻守的狂风暴雨海域',
+                name: "Mar Tempestuoso Mega",
+                description: "Mar de ventos e chuvas onde ficam os Mega Pokémon finais de Hoenn.",
                 levelRange: [21501, 23000],
                 pokemon: [
                     { id: 1055, weight: 10, levelRange: [21501, 23000] },  // Mega雷电兽
@@ -2938,8 +2938,8 @@ const REGIONS = {
             },
             {
                 id: 'mega_route5',
-                name: 'Mega极光冰原',
-                description: '传说级Mega宝可梦与神奥Mega聚集的极寒之地',
+                name: "Campo de Gelo da Aurora Mega",
+                description: "Terra gélida com Mega Pokémon lendários e de Sinnoh.",
                 levelRange: [23001, 24500],
                 pokemon: [
                     { id: 1070, weight: 12, levelRange: [23001, 24500] },  // Mega雪暴王

@@ -9,32 +9,38 @@
 // ============================================================
 
 const ROSTER_MESSAGES = {
-    party_full: '⚠️ 队伍已满（最多6只）',
-    last_member: '⚠️ 队伍至少需要保留一只宝可梦',
-    active_member: '⚠️ 出战中的宝可梦不能离开队伍，请先换其他宝可梦出战',
-    tower_locked: '⚠️ 挑战塔进行中不能调整队伍',
-    busy: '⚠️ 离线结算中，请稍后再试',
-    pc_full: '⚠️ PC 已满',
-    box_full: '⚠️ 这个箱子已满',
-    in_party: '⚠️ 队伍中的宝可梦不能放生，请先放回 PC',
-    last_of_species: '⚠️ 每个物种至少要保留一只',
-    unknown_pokemon: '⚠️ 找不到这只宝可梦',
-    already_in_party: '⚠️ 已经在队伍中',
-    not_in_pc: '⚠️ 这只宝可梦不在 PC 中',
-    not_in_party: '⚠️ 这只宝可梦不在队伍中',
-    bad_index: '⚠️ 位置无效',
+    party_full: '⚠️ Equipe cheia (máximo de 6).',
+    last_member: '⚠️ A equipe precisa ter pelo menos 1 Pokémon.',
+    active_member: '⚠️ O Pokémon ativo não pode sair da equipe. Ative outro antes.',
+    tower_locked: '⚠️ Não dá para mudar a equipe durante a Torre de Desafio.',
+    busy: '⚠️ Calculando o progresso offline. Tente de novo em instantes.',
+    pc_full: '⚠️ PC cheio.',
+    box_full: '⚠️ Esta caixa está cheia.',
+    in_party: '⚠️ Quem está na equipe não pode ser liberado. Mova para o PC antes.',
+    last_of_species: '⚠️ Mantenha pelo menos 1 de cada espécie.',
+    unknown_pokemon: '⚠️ Pokémon não encontrado.',
+    already_in_party: '⚠️ Já está na equipe.',
+    not_in_pc: '⚠️ Este Pokémon não está no PC.',
+    not_in_party: '⚠️ Este Pokémon não está na equipe.',
+    bad_index: '⚠️ Posição inválida.',
 };
 
 function rosterMessage(code) {
-    return ROSTER_MESSAGES[code] || ('⚠️ 操作失败（' + code + '）');
+    return ROSTER_MESSAGES[code] || ('⚠️ Não foi possível (' + code + ').');
 }
 
-const IV_LABELS = { hp: '生命', atk: '攻击', def: '防御', spAtk: '特攻', spDef: '特防', speed: '速度' };
-const ABILITY_LABELS = { a1: '特性 1', a2: '特性 2', ha: '隐藏特性' };
+const IV_LABELS = { hp: 'HP', atk: 'Ataque', def: 'Defesa', spAtk: 'Atq. Esp.', spDef: 'Def. Esp.', speed: 'Veloc.' };
+const ABILITY_LABELS = { a1: 'Habilidade 1', a2: 'Habilidade 2', ha: 'Habilidade oculta' };
 const ORIGIN_LABELS = {
-    starter: '初始伙伴', wild: '野外捕获', evolution: '进化', legacy_migration: '旧存档',
-    egg: '孵化', gift: '赠送', debug: '调试', unknown: '未知',
+    starter: 'Inicial', wild: 'Capturado em rota', evolution: 'Evolução', legacy_migration: 'Save antigo',
+    egg: 'Chocado', gift: 'Presente', debug: 'Debug', unknown: 'Desconhecido',
 };
+
+// 新存档/旧存档里默认箱子名是“箱子 N”（存档数据不改），界面上显示成“Caixa N”
+function boxDisplayName(name) {
+    const m = /^箱子 (\d+)$/.exec(String(name));
+    return m ? 'Caixa ' + m[1] : String(name);
+}
 
 function genderSymbol(gender) {
     return gender === 'male' ? '♂' : gender === 'female' ? '♀' : '';
@@ -55,25 +61,25 @@ class PCView {
         this.root = document.getElementById('pc-container');
         if (!this.root) return;
         this.root.innerHTML = `
-            <h2>🖥️ PC 与队伍 <span id="pc-summary" class="pc-summary"></span></h2>
+            <h2>🖥️ PC e Equipe <span id="pc-summary" class="pc-summary"></span></h2>
             <div class="pc-section">
-                <h3>⚔️ 队伍 <span id="pc-party-count"></span></h3>
+                <h3>⚔️ Equipe <span id="pc-party-count"></span></h3>
                 <div id="pc-party" class="pc-party"></div>
             </div>
             <div class="pc-section">
                 <div class="pc-box-bar">
-                    <button class="setting-btn" data-pc-action="box-prev" title="上一个箱子">◀</button>
+                    <button class="setting-btn" data-pc-action="box-prev" title="Caixa anterior">◀</button>
                     <span id="pc-box-title" class="pc-box-title"></span>
-                    <button class="setting-btn" data-pc-action="box-next" title="下一个箱子">▶</button>
-                    <button class="setting-btn" data-pc-action="box-rename" title="给当前箱子改名">✏️ 改名</button>
-                    <button class="setting-btn" data-pc-action="box-add" title="新建箱子">➕ 新箱子</button>
-                    <button class="setting-btn" data-pc-action="tidy" title="每个物种只保留最强的一只（闪光、有昵称、队伍里的不受影响）">🧹 整理重复</button>
+                    <button class="setting-btn" data-pc-action="box-next" title="Próxima caixa">▶</button>
+                    <button class="setting-btn" data-pc-action="box-rename" title="Renomear esta caixa">✏️ Renomear</button>
+                    <button class="setting-btn" data-pc-action="box-add" title="Criar caixa">➕ Nova caixa</button>
+                    <button class="setting-btn" data-pc-action="tidy" title="Mantém só o mais forte de cada espécie (shiny, com apelido e da equipe ficam)">🧹 Limpar duplicatas</button>
                 </div>
-                <input type="text" id="pc-search-input" class="pc-search" placeholder="🔍 搜索 PC 里的宝可梦（名称/昵称/编号）" autocomplete="off">
+                <input type="text" id="pc-search-input" class="pc-search" placeholder="🔍 Buscar no PC (nome, apelido ou número)" autocomplete="off">
                 <div id="pc-grid" class="pc-grid"></div>
             </div>
             <div class="pc-section">
-                <h3>📋 个体详情</h3>
+                <h3>📋 Detalhes</h3>
                 <div id="pc-detail" class="pc-detail"></div>
             </div>`;
         this.root.addEventListener('click', (e) => {
@@ -94,7 +100,7 @@ class PCView {
         if (this.selectedUid && !this.game.roster.has(this.selectedUid)) this.selectedUid = null;
         const r = this.game.roster;
         this.root.querySelector('#pc-summary').textContent =
-            `共 ${r.count()} 只 · PC ${r.pc.count()}/${r.pc.totalCapacity()}${r.hasRoom() ? '' : ' · ⚠️ PC 已满，新宝可梦（闪光除外也一样）无法收下'}`;
+            `${ptNumber(r.count())} Pokémon · PC ${r.pc.count()}/${r.pc.totalCapacity()}${r.hasRoom() ? '' : ' · ⚠️ PC cheio: novos Pokémon não podem ser capturados'}`;
         this.renderParty();
         this.renderGrid();
         this.renderDetail();
@@ -128,7 +134,7 @@ class PCView {
         this.root.querySelector('#pc-party-count').textContent = `(${gs.party.length}/${PARTY_MAX})`;
         const free = PARTY_MAX - gs.party.length;
         const freeHint = free > 0
-            ? `<div class="pc-empty">还有 ${free} 个空位：${this.game.roster.pc.count() > 0 ? '在下面的箱子里点一只宝可梦，再点「加入队伍」。队伍里的伙伴会一起获得经验。' : '继续战斗，新捕获的伙伴会出现在下面的箱子里。'}</div>`
+            ? `<div class="pc-empty">${ptPlural(free, 'Falta', 'Faltam')} ${free} ${ptPlural(free, 'vaga', 'vagas')}: ${this.game.roster.pc.count() > 0 ? 'toque em um Pokémon nas caixas abaixo e depois em “Adicionar à equipe”. Quem está na equipe ganha EXP junto.' : 'continue batalhando: os Pokémon capturados aparecem nas caixas abaixo.'}</div>`
             : '';
         const html = gs.party.map((uid, i) => {
             const d = this.game.describeInstance(uid);
@@ -137,10 +143,10 @@ class PCView {
             return `<div class="pc-party-slot${isActive ? ' active' : ''}">
                 ${this._card(d)}
                 <div class="pc-party-actions">
-                    <button data-pc-action="party-up" data-index="${i}" ${i === 0 ? 'disabled' : ''} title="上移">▲</button>
-                    <button data-pc-action="party-down" data-index="${i}" ${i === gs.party.length - 1 ? 'disabled' : ''} title="下移">▼</button>
-                    <button data-pc-action="party-active" data-index="${i}" ${isActive ? 'disabled' : ''}>${isActive ? '⚔️ 出战中' : '出战'}</button>
-                    <button data-pc-action="to-pc" data-index="${i}" ${isActive || gs.party.length <= 1 ? 'disabled' : ''}>放回PC</button>
+                    <button data-pc-action="party-up" data-index="${i}" ${i === 0 ? 'disabled' : ''} title="Subir">▲</button>
+                    <button data-pc-action="party-down" data-index="${i}" ${i === gs.party.length - 1 ? 'disabled' : ''} title="Descer">▼</button>
+                    <button data-pc-action="party-active" data-index="${i}" ${isActive ? 'disabled' : ''}>${isActive ? '⚔️ Em batalha' : 'Ativar'}</button>
+                    <button data-pc-action="to-pc" data-index="${i}" ${isActive || gs.party.length <= 1 ? 'disabled' : ''}>Mover p/ PC</button>
                 </div>
             </div>`;
         }).join('');
@@ -159,24 +165,24 @@ class PCView {
         const title = this.root.querySelector('#pc-box-title');
         const grid = this.root.querySelector('#pc-grid');
         if (this.search) {
-            title.textContent = `🔍 搜索结果`;
+            title.textContent = `🔍 Resultados da busca`;
             const found = this.game.roster.pc.uids()
                 .map(uid => this.game.describeInstance(uid))
                 .filter(d => d && this._matches(d, this.search))
                 .sort((a, b) => a.speciesId - b.speciesId || b.level - a.level);
             grid.innerHTML = found.length
                 ? found.map(d => this._card(d)).join('')
-                : '<div class="pc-empty">没有匹配的宝可梦</div>';
+                : '<div class="pc-empty">Nenhum Pokémon encontrado.</div>';
             return;
         }
         if (!box) { grid.innerHTML = ''; return; }
         const used = box.slots.filter(u => u !== null).length;
-        title.textContent = `📦 ${box.name}（${this.boxIndex + 1}/${boxes.length}）${used}/${box.capacity}`;
+        title.textContent = `📦 ${boxDisplayName(box.name)} (${this.boxIndex + 1}/${boxes.length}) ${used}/${box.capacity}`;
         if (used === 0) {
             const total = this.game.roster.pc.count();
             grid.innerHTML = `<div class="pc-empty">${total === 0
-                ? 'PC 还是空的。击败野生宝可梦后，新捕获的宝可梦会被送到这里。'
-                : '这个箱子是空的，点 ▶ 看看别的箱子。'}</div>`;
+                ? 'O PC está vazio. Quando você capturar Pokémon, eles vêm para cá.'
+                : 'Esta caixa está vazia. Toque em ▶ para ver as outras.'}</div>`;
             return;
         }
         grid.innerHTML = box.slots.map(uid => {
@@ -188,12 +194,12 @@ class PCView {
     renderDetail() {
         const el = this.root.querySelector('#pc-detail');
         const d = this.selectedUid ? this.game.describeInstance(this.selectedUid) : null;
-        if (!d) { el.innerHTML = '<div class="pc-empty">点击上方的宝可梦查看详情</div>'; return; }
+        if (!d) { el.innerHTML = '<div class="pc-empty">Toque em um Pokémon acima para ver os detalhes.</div>'; return; }
         const gs = this.game.gameState;
         const route = d.originRoute ? this.game.getRoute(d.originRoute) : null;
         const ivRows = IV_KEYS.map(k => `<span class="pc-iv"><b>${IV_LABELS[k]}</b> ${d.ivs[k]}</span>`).join('');
-        const where = d.where === 'party' ? `队伍第 ${d.partyIndex + 1} 位`
-            : d.where === 'pc' ? `PC · ${escapeHtml(gs.pc.boxes[d.box].name)} 第 ${d.slot + 1} 格` : '—';
+        const where = d.where === 'party' ? `Equipe, posição ${d.partyIndex + 1}`
+            : d.where === 'pc' ? `PC · ${escapeHtml(boxDisplayName(gs.pc.boxes[d.box].name))}, espaço ${d.slot + 1}` : '—';
         let actions = '';
         if (d.where === 'pc') {
             const members = gs.party.map((uid, i) => {
@@ -201,34 +207,34 @@ class PCView {
                 return m ? `<option value="${i}">${i + 1}. ${escapeHtml(m.displayName)} Lv.${m.level} #${escapeHtml(m.uid)}</option>` : '';
             }).join('');
             const boxOptions = gs.pc.boxes.map((b, i) =>
-                `<option value="${i}" ${i === d.box ? 'selected' : ''}>${escapeHtml(b.name)}</option>`).join('');
-            actions += `<button class="setting-btn" data-pc-action="to-party" data-uid="${escapeHtml(d.uid)}">➕ 加入队伍</button>
+                `<option value="${i}" ${i === d.box ? 'selected' : ''}>${escapeHtml(boxDisplayName(b.name))}</option>`).join('');
+            actions += `<button class="setting-btn" data-pc-action="to-party" data-uid="${escapeHtml(d.uid)}">➕ Adicionar à equipe</button>
                 <span class="pc-inline"><select id="pc-swap-target">${members}</select>
-                <button class="setting-btn" data-pc-action="swap" data-uid="${escapeHtml(d.uid)}">🔄 换下该队员</button></span>
+                <button class="setting-btn" data-pc-action="swap" data-uid="${escapeHtml(d.uid)}">🔄 Trocar por este membro</button></span>
                 <span class="pc-inline"><select id="pc-move-target">${boxOptions}</select>
-                <button class="setting-btn" data-pc-action="move-box" data-uid="${escapeHtml(d.uid)}">📦 移到箱子</button></span>`;
+                <button class="setting-btn" data-pc-action="move-box" data-uid="${escapeHtml(d.uid)}">📦 Mover para a caixa</button></span>`;
         } else if (d.where === 'party') {
-            actions += `<button class="setting-btn" data-pc-action="to-pc" data-index="${d.partyIndex}">⬇️ 放回 PC</button>`;
+            actions += `<button class="setting-btn" data-pc-action="to-pc" data-index="${d.partyIndex}">⬇️ Mover para o PC</button>`;
         }
-        actions += `<button class="setting-btn" data-pc-action="rename" data-uid="${escapeHtml(d.uid)}">✏️ 改名</button>`;
-        if (d.where === 'pc') actions += `<button class="setting-btn danger" data-pc-action="release" data-uid="${escapeHtml(d.uid)}">放生</button>`;
+        actions += `<button class="setting-btn" data-pc-action="rename" data-uid="${escapeHtml(d.uid)}">✏️ Apelido</button>`;
+        if (d.where === 'pc') actions += `<button class="setting-btn danger" data-pc-action="release" data-uid="${escapeHtml(d.uid)}">Liberar</button>`;
         el.innerHTML = `<div class="pc-detail-head">
                 <div class="pc-card-sprite big">${this._spriteFor(d)}</div>
                 <div>
                     <div class="pc-detail-name">${d.shiny ? '✨ ' : ''}${escapeHtml(d.displayName)} ${genderSymbol(d.gender)}
                         <small>Lv.${d.level}</small></div>
-                    <div class="pc-detail-sub">${escapeHtml(d.name)} · ${d.types.map(t => TYPE_NAMES[t]).join('/')}${d.isPrimary ? ' · 图鉴代表' : ''}</div>
-                    <div class="pc-detail-sub">编号 #${escapeHtml(d.uid)} · ${where}</div>
+                    <div class="pc-detail-sub">${escapeHtml(d.name)} · ${d.types.map(t => TYPE_NAMES[t]).join('/')}${d.isPrimary ? ' · Principal da Pokédex' : ''}</div>
+                    <div class="pc-detail-sub">ID #${escapeHtml(d.uid)} · ${where}</div>
                 </div>
             </div>
-            <div class="pc-ivs">${ivRows}<span class="pc-iv total"><b>合计</b> ${d.ivTotal}/186（${d.ivPercent}%）</span></div>
+            <div class="pc-ivs">${ivRows}<span class="pc-iv total"><b>Total</b> ${d.ivTotal}/186 (${d.ivPercent}%)</span></div>
             <div class="pc-facts">
-                <span>性格：${escapeHtml(d.natureName)}</span>
-                <span>特性：${d.ability ? (ABILITY_LABELS[d.ability] || escapeHtml(d.ability)) : '—'}</span>
-                <span>性别：${d.gender === 'male' ? '♂ 雄性' : d.gender === 'female' ? '♀ 雌性' : '无/未知'}</span>
-                <span>来历：${ORIGIN_LABELS[d.origin] || '未知'}${route ? ' · ' + escapeHtml(route.name) : ''}</span>
-                <span>获得日期：${formatCaptureDate(d.caughtAt)}</span>
-                <span>战斗：${d.battles} 场</span>
+                <span>Natureza: ${escapeHtml(d.natureName)}</span>
+                <span>Habilidade: ${d.ability ? (ABILITY_LABELS[d.ability] || escapeHtml(d.ability)) : '—'}</span>
+                <span>Gênero: ${d.gender === 'male' ? '♂ Macho' : d.gender === 'female' ? '♀ Fêmea' : 'Sem gênero'}</span>
+                <span>Origem: ${ORIGIN_LABELS[d.origin] || 'Desconhecida'}${route ? ' · ' + escapeHtml(route.name) : ''}</span>
+                <span>Obtido em: ${formatCaptureDate(d.caughtAt)}</span>
+                <span>Batalhas: ${ptNumber(d.battles)}</span>
             </div>
             <div class="pc-actions">${actions}</div>`;
     }
@@ -265,39 +271,39 @@ class PCView {
                 this.boxIndex = Math.min(g.gameState.pc.boxes.length - 1, this.boxIndex + 1); this.renderGrid(); return;
             case 'tidy': {
                 const uids = g.previewReleaseDuplicates();
-                if (uids.length === 0) { this.ui.showToast('✨ 没有需要整理的重复宝可梦'); return; }
-                const ok = window.confirm(`将放生 ${uids.length} 只重复的宝可梦。\n每个物种会保留最强的一只；闪光、有昵称、队伍里的不受影响。\n放生后无法找回，确定吗？`);
+                if (uids.length === 0) { this.ui.showToast('✨ Não há duplicatas para limpar.'); return; }
+                const ok = window.confirm(`Liberar ${uids.length} ${ptPlural(uids.length, 'Pokémon duplicado', 'Pokémon duplicados')}?\nSó o mais forte de cada espécie fica. Shiny, com apelido e da equipe ficam.\nNão dá para desfazer.`);
                 if (!ok) return;
                 const r = g.releaseDuplicates();
-                this.ui.showToast(`🧹 已放生 ${r.released} 只`);
+                this.ui.showToast(`🧹 ${r.released} ${ptPlural(r.released, 'liberado', 'liberados')}`);
                 this._refreshAll();
                 return;
             }
             case 'box-add': {
                 const r = g.roster.pc.addBox('');
-                if (this._report(r, '已新建箱子')) { this.boxIndex = r.box; g.save(); this.render(); }
+                if (this._report(r, 'Caixa criada')) { this.boxIndex = r.box; g.save(); this.render(); }
                 return;
             }
             case 'box-rename': {
                 const box = g.gameState.pc.boxes[this.boxIndex];
-                const name = box ? window.prompt('箱子名称', box.name) : null;
+                const name = box ? window.prompt('Nome da caixa', boxDisplayName(box.name)) : null;
                 if (name !== null && g.roster.pc.renameBox(this.boxIndex, name).ok) { g.save(); this.renderGrid(); }
                 return;
             }
             case 'to-party':
-                if (this._report(g.partyAdd(data.uid), '已加入队伍')) this._refreshAll();
+                if (this._report(g.partyAdd(data.uid), 'Adicionado à equipe')) this._refreshAll();
                 return;
             case 'to-pc':
-                if (this._report(g.partyRemove(Number(data.index)), '已放回 PC')) this._refreshAll();
+                if (this._report(g.partyRemove(Number(data.index)), 'Movido para o PC')) this._refreshAll();
                 return;
             case 'swap': {
                 const sel = this.root.querySelector('#pc-swap-target');
-                if (this._report(g.partySwapWithPc(Number(sel ? sel.value : 0), data.uid), '已换下队员')) this._refreshAll();
+                if (this._report(g.partySwapWithPc(Number(sel ? sel.value : 0), data.uid), 'Troca feita')) this._refreshAll();
                 return;
             }
             case 'move-box': {
                 const sel = this.root.querySelector('#pc-move-target');
-                if (this._report(g.pcMoveToBox(data.uid, Number(sel ? sel.value : 0)), '已移动')) this.render();
+                if (this._report(g.pcMoveToBox(data.uid, Number(sel ? sel.value : 0)), 'Movido')) this.render();
                 return;
             }
             case 'party-up':
@@ -313,17 +319,17 @@ class PCView {
             case 'rename': {
                 const d = g.describeInstance(data.uid);
                 if (!d) return;
-                const name = window.prompt('昵称（留空恢复物种名，最多 ' + NICKNAME_MAX_LENGTH + ' 字）', d.nickname);
+                const name = window.prompt('Apelido (deixe vazio para usar o nome da espécie; máx. ' + NICKNAME_MAX_LENGTH + ' letras)', d.nickname);
                 if (name === null) return;
-                if (this._report(g.renamePokemon(data.uid, name), '昵称已更新')) this._refreshAll();
+                if (this._report(g.renamePokemon(data.uid, name), 'Apelido atualizado')) this._refreshAll();
                 return;
             }
             case 'release': {
                 const d = g.describeInstance(data.uid);
                 if (!d) return;
-                const ok = window.confirm(`确定放生 ${d.displayName}（Lv.${d.level}，IV ${d.ivPercent}%${d.shiny ? '，闪光' : ''}）吗？\n放生后无法找回。`);
+                const ok = window.confirm(`Liberar ${d.displayName} (Lv.${d.level}, IV ${d.ivPercent}%${d.shiny ? ', shiny' : ''})?\nNão dá para desfazer.`);
                 if (!ok) return;
-                if (this._report(g.releasePokemon(data.uid), '已放生')) { this.selectedUid = null; this._refreshAll(); }
+                if (this._report(g.releasePokemon(data.uid), 'Pokémon liberado')) { this.selectedUid = null; this._refreshAll(); }
                 return;
             }
         }

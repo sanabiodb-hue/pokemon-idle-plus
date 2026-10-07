@@ -182,7 +182,7 @@ function sanitizeRosterSection(raw, out) {
         }
     }
     if (party.length === 0) {
-        return { ok: false, error: '队伍中没有有效的已捕获宝可梦', warnings };
+        return { ok: false, error: 'A equipe do save não tem nenhum Pokémon capturado válido.', warnings };
     }
 
     // ---- PC：保留合法的格子位置，其余（含孤儿）按物种顺序补进空格 ----
