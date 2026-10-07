@@ -12,9 +12,9 @@ const ROOT = path.resolve(__dirname, '..');
 const DATA_FILES = ['js/pokemon-data.js', 'js/route-data.js', 'js/game-config.js'];
 const GAME_FILES = [
     'js/lzstring.min.js', 'js/util.js', 'js/pokemon-data.js', 'js/route-data.js',
-    'js/game-config.js', 'js/automation/clock.js', 'js/automation/events.js', 'js/analytics.js', 'js/pokemon-instance.js', 'js/automation/quality.js', 'js/automation/policy.js', 'js/automation/hunt-session.js', 'js/automation/capture.js', 'js/species-traits.js', 'js/party.js', 'js/pc.js',
+    'js/game-config.js', 'js/economy/config.js', 'js/automation/clock.js', 'js/automation/events.js', 'js/analytics.js', 'js/pokemon-instance.js', 'js/automation/quality.js', 'js/automation/policy.js', 'js/automation/hunt-session.js', 'js/automation/capture.js', 'js/species-traits.js', 'js/party.js', 'js/pc.js',
     'js/pokemon-validation.js', 'js/pokemon-migration.js', 'js/pokemon-roster.js',
-    'js/save-manager.js', 'js/game-core.js', 'js/guidance.js', 'js/automation/decision.js', 'js/automation/actions.js', 'js/automation/engine.js', 'js/automation/simulation.js', 'js/hunt-view.js',
+    'js/save-manager.js', 'js/game-core.js', 'js/guidance.js', 'js/economy/economy.js', 'js/automation/decision.js', 'js/automation/actions.js', 'js/automation/engine.js', 'js/automation/simulation.js', 'js/hunt-view.js',
 ];
 
 // 内存版 localStorage，可模拟容量上限与异常
@@ -115,6 +115,7 @@ function loadGameContext(opts = {}) {
   SystemClock, ManualClock, SimulationClock, EventBus, AUTOMATION_EVENT_TYPES, calculatePokemonQuality, QUALITY_GRADES,
   defaultAutomationPolicy, validateAutomationPolicy, sanitizeAutomationPolicy, sanitizeAutomationState, policyTargetsSpecies, shouldCapture, AUTOMATION_ACTION_TYPES, ActionDispatcher, decideAutomationActions, AutomationEngine, AUTOMATION_MAX_ACTIONS_PER_EVALUATION,
   createHuntSession, huntSessionTransition, huntSessionCanTransition, huntSessionDurationMs, huntSessionRecord, sanitizeHuntSession, HUNT_STAT_KEYS, HUNT_SESSION_STATES, huntStopMessage, huntStoppedByCondition, huntStopReasonShort, HUNT_STOP_REASONS,
+  ECONOMY_CONFIG, sanitizeEconomyState, BERRY_SEED_PRICE, TALENT_RESET_COST,
   MAX_POTIONS, INITIAL_POTIONS, POTION_HEAL_PERCENT, potionHealAmount,
   HuntView, huntFormatDuration, HUNT_STATE_VIEW,
   createSimulationRng, simulateHunt, huntEfficiency, buildHuntOfflineReport, recommendHuntNext, recommendHuntRoute,

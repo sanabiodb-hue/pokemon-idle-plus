@@ -301,6 +301,8 @@ function sanitizeSave(raw, now = Date.now()) {
     if (guide) out.guide = guide;
     // ---- 背包（消耗品）：没有这个字段 = 旧存档，读档后由 ensureInventory 补发初始药水 ----
     if (_isObj(raw.inventory)) out.inventory = { potions: _int(raw.inventory.potions, 0, MAX_POTIONS, 0) };
+    // ---- 经济累计数字（可选字段；没有 = 从未有过经济活动）----
+    if (_isObj(raw.economy)) out.economy = sanitizeEconomyState(raw.economy);
     // ---- 自动化（可选字段；没有 = 从未配置，保持默认关闭）----
     const automation = typeof sanitizeAutomationState === 'function' ? sanitizeAutomationState(raw.automation) : null;
     if (automation) out.automation = automation;

@@ -1700,7 +1700,7 @@ class GameCore {
 
         // 金币掉落
         let goldGained = 0;
-        if (this.isGoldUnlocked()) {
+        if (this.isMoneyEarningEnabled()) {
             goldGained = this.calculateGoldDrop(wildPokemon);
             this.addGold(goldGained);
         }
@@ -3407,7 +3407,7 @@ class GameCore {
 
     // 计算金币掉落
     calculateGoldDrop(wildPokemon) {
-        if (!this.isGoldUnlocked()) return 0;
+        if (!this.isMoneyEarningEnabled()) return 0;
         // 基础金币 = 等级开根号 * 2
         let gold = Math.floor(Math.sqrt(wildPokemon.level) * 2);
         // 金币加成徽章
@@ -3428,11 +3428,7 @@ class GameCore {
         return Math.max(1, gold);
     }
 
-    // 添加金币
-    addGold(amount) {
-        this.gameState.gold += amount;
-        this.gameState.stats.totalGold += amount;
-    }
+    // 添加金币：见 js/economy/economy.js（earnMoney / addGold 的唯一实现）
 
     // ===================== 宝石系统 =====================
     getGemQualityById(qualityId) {
@@ -3531,7 +3527,7 @@ class GameCore {
         const price = 1000;
         if (this.gameState.gold < price) return { success: false, message: `Moedas insuficientes (precisa de ${price}).` };
 
-        this.gameState.gold -= price;
+        this.spendMoney(price, 'gem_purchase');
         const gem = this.generateGem();
         // 新购宝石标记：用于背包内"NEW"提醒，查看后由UI清除
         gem.isNew = true;
@@ -3554,8 +3550,8 @@ class GameCore {
             return { success: false, message: `Moedas insuficientes (precisa de ${price}).` };
         }
 
+        this.spendMoney(count * price, 'gem_purchase');
         for (let i = 0; i < count; i++) {
-            this.gameState.gold -= price;
             const gem = this.generateGem();
             gem.isNew = true;
             this.gameState.gems.push(gem);
@@ -3832,8 +3828,8 @@ class GameCore {
         const buyCount = Math.min(bagRemain, affordable);
 
         if (buyCount > 0) {
+            this.spendMoney(buyCount * price, 'gem_purchase');
             for (let i = 0; i < buyCount; i++) {
-                this.gameState.gold -= price;
                 const gem = this.generateGem();
                 gem.isNew = true;
                 this.gameState.gems.push(gem);
@@ -4274,7 +4270,7 @@ class GameCore {
             return { success: false, message: `Moedas insuficientes. Redefinir custa ${TALENT_RESET_COST.toLocaleString()} Moedas.` };
         }
 
-        this.gameState.gold -= TALENT_RESET_COST;
+        this.spendMoney(TALENT_RESET_COST, 'talent_reset');
         // 保留 gemAttrChoice，重置天赋等级
         const gemChoice = this.gameState.talents?.gemAttrChoice;
         this.gameState.talents = {};
@@ -4331,7 +4327,7 @@ class GameCore {
         if (this.gameState.gold < BERRY_SEED_PRICE) {
             return { success: false, message: `Moedas insuficientes. A semente custa ${BERRY_SEED_PRICE.toLocaleString()} Moedas.` };
         }
-        this.gameState.gold -= BERRY_SEED_PRICE;
+        this.spendMoney(BERRY_SEED_PRICE, 'berry_seed');
         this.gameState.berryPlots.push({ berryId, plantedAt: this.now() });
         this.save();
         return { success: true };

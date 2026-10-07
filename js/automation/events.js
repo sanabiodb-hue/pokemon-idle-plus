@@ -16,6 +16,8 @@ const AUTOMATION_EVENT_TYPES = [
     'xp_gained', 'level_up', 'evolution', 'heal', 'hp_low',
     'route_changed', 'pokemon_switched',
     'automation_decision', 'automation_error', 'action_rejected', 'policy_changed',
+    'money_earned', 'money_spent', 'potion_bought', 'upgrade_purchased', 'hunt_completed',
+    'route_recommended', 'route_selected', 'analyzer_opened',
 ];
 
 class EventBus {
