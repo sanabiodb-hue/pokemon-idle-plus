@@ -4,7 +4,8 @@
 // ============================================================
 
 class GameCore {
-    constructor() {
+    // opts.headless：不创建 Worker 定时器、不监听页面可见性（模拟/估算用的临时实例）
+    constructor(opts = {}) {
         this.gameState = null;
         this.battleTimer = null;
         this.autoSaveTimer = null;
@@ -57,8 +58,10 @@ class GameCore {
             onConflict: () => { if (this.onSaveConflict) this.onSaveConflict(); },
             win: typeof window !== 'undefined' ? window : null,
         });
-        this._initWorkerTimer();
-        this._initVisibilityHandler();
+        if (!opts.headless) {
+            this._initWorkerTimer();
+            this._initVisibilityHandler();
+        }
         this._buildEvolutionCache();
     }
 
@@ -111,6 +114,7 @@ class GameCore {
     }
 
     _invalidateAllCaches() {
+        this._routeEstimates = null;      // 路线估算缓存
         this._mods = null;                // 升级修改器缓存（存档/导入/新游戏后等级可能变了）
         this._instanceStats.clear();
         this._dexBonus = null;

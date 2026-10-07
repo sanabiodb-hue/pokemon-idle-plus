@@ -14,7 +14,7 @@ const GAME_FILES = [
     'js/lzstring.min.js', 'js/util.js', 'js/pokemon-data.js', 'js/route-data.js',
     'js/game-config.js', 'js/economy/config.js', 'js/automation/clock.js', 'js/automation/events.js', 'js/analytics.js', 'js/pokemon-instance.js', 'js/automation/quality.js', 'js/automation/policy.js', 'js/automation/hunt-session.js', 'js/automation/capture.js', 'js/species-traits.js', 'js/party.js', 'js/pc.js',
     'js/pokemon-validation.js', 'js/pokemon-migration.js', 'js/pokemon-roster.js',
-    'js/save-manager.js', 'js/game-core.js', 'js/guidance.js', 'js/economy/economy.js', 'js/economy/shop.js', 'js/economy/upgrades.js', 'js/economy/analyzer.js', 'js/automation/decision.js', 'js/automation/actions.js', 'js/automation/engine.js', 'js/automation/simulation.js', 'js/hunt-view.js',
+    'js/save-manager.js', 'js/game-core.js', 'js/guidance.js', 'js/economy/economy.js', 'js/economy/shop.js', 'js/economy/upgrades.js', 'js/economy/analyzer.js', 'js/economy/route-compare.js', 'js/automation/decision.js', 'js/automation/actions.js', 'js/automation/engine.js', 'js/automation/simulation.js', 'js/hunt-view.js',
 ];
 
 // 内存版 localStorage，可模拟容量上限与异常
@@ -118,7 +118,7 @@ function loadGameContext(opts = {}) {
   ECONOMY_CONFIG, sanitizeEconomyState, sanitizeAnalyzerState, huntRates, goalMetric, emptyRouteAgg, sanitizeUpgradesState, SHOP_ITEMS, baseGoldPerWin, BERRY_SEED_PRICE, TALENT_RESET_COST,
   MAX_POTIONS, INITIAL_POTIONS, POTION_HEAL_PERCENT, potionHealAmount,
   HuntView, huntFormatDuration, HUNT_STATE_VIEW,
-  createSimulationRng, simulateHunt, huntEfficiency, buildHuntOfflineReport, recommendHuntNext, recommendHuntRoute,
+  createSimulationRng, createSimulationClone, simulateHunt, huntEfficiency, buildHuntOfflineReport, recommendHuntNext, recommendHuntRoute,
   Analytics, ANALYTICS_STORAGE_KEY, ANALYTICS_QUEUE_MAX, ANALYTICS_EVENT_NAMES, ANALYTICS_SESSION_GAP_MS,
   CAPTURE_DUPLICATE_POLICIES, DEFAULT_CAPTURE_DUPLICATE_POLICY, DUPLICATE_CAPTURE_RATE, DUPLICATE_SPECIES_CAP,
   MAX_POKEMON_LEVEL, MAX_SKILL_LEVEL, TOWER_MAX_FLOOR, GEM_BAG_MAX, BERRY_STAT_CAP

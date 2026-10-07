@@ -12,7 +12,7 @@ function getContext() {
 // opts: { ctx, seed, startTime, policy, routeId, starterLevel, party:[{speciesId, level, ivs}], potions, shinyRate, start }
 function createSimGame(opts = {}) {
     const ctx = opts.ctx || getContext();
-    const game = new ctx.GameCore();
+    const game = new ctx.GameCore({ headless: true });
     game._simMode = true;
     game.guideAutoUpdate = false;
     game.rng = ctx.createSimulationRng(opts.seed ?? 1);

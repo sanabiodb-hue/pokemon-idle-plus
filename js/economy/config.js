@@ -70,6 +70,15 @@ const ECONOMY_CONFIG = {
         minSampleMs: 10 * 60 * 1000,           // 真实数据至少要有这么长的样本才当作"实测"，否则显示"估算"
     },
 
+    // 路线对比 / 推荐
+    compare: {
+        estimateMs: 30 * 60 * 1000,            // 估算用的模拟时长
+        maxCandidates: 8,                      // 一次最多比较多少条路线
+        minWinRate: 50,                        // 胜率低于此值的路线不会被推荐为"最好"
+        levelBand: [0.3, 1.3],                 // 候选路线的最低等级 ∈ [队伍平均等级×0.3, ×1.3]
+        recommendMinGainPct: 5,                // 比当前路线至少好这么多才推荐换
+    },
+
     // 余额上限（防止数值溢出）
     maxMoney: Number.MAX_SAFE_INTEGER / 4,
 };

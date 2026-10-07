@@ -201,10 +201,19 @@ const AutomationMethods = {
     },
 
     // 界面"选择路线"的唯一入口：狩猎进行时走 CHANGE_ROUTE 动作；否则直接换路线并让会话（如果有）跟上
-    selectHuntRoute(routeId) {
+    selectHuntRoute(routeId, source = 'manual') {
         const check = this._checkRouteAccess(routeId);
         if (!check.ok) return check;
         if (routeId === this.gameState.currentRoute) return { ok: true, unchanged: true };
+        const result = this._applyHuntRoute(routeId);
+        if (result.ok) {
+            this._emit('route_selected', { route: routeId, source });
+            this._track('route_selected', { source });
+        }
+        return result;
+    },
+
+    _applyHuntRoute(routeId) {
         if (this.isHuntRunning()) return this.dispatchAutomationAction({ type: 'CHANGE_ROUTE', routeId });
         if (this._towerMode) return { ok: false, code: 'tower_mode', message: 'Saia da Torre de Desafio para trocar de rota.' };
         this.changeRoute(routeId, 'manual');

@@ -164,3 +164,36 @@ function recommendHuntRoute(game) {
         reason: best ? 'Inimigos no nível certo para a sua equipe.' : 'Rota mais acessível ainda não concluída.',
     };
 }
+
+
+// ---------- 估算用的临时副本 ----------
+// 复制当前存档到一个"无头"GameCore（无 Worker、不写存档、固定随机种子、模拟时钟），让它按玩家当前的
+// 队伍/升级/策略在指定路线上快速狩猎。原来的游戏对象不受任何影响。路线不可用时返回 null。
+function createSimulationClone(game, routeId, opts = {}) {
+    const access = game._checkRouteAccess(routeId);
+    if (!access.ok) return null;
+    const clone = new GameCore({ headless: true });
+    clone._simMode = true;
+    clone.guideAutoUpdate = false;
+    clone.rng = createSimulationRng(opts.seed === undefined ? 20240607 : opts.seed);
+    clone.clock = new SimulationClock(game.now());
+    clone.econCfg = game.econCfg || null;
+    clone.gameState = JSON.parse(JSON.stringify(game.gameState));
+    clone._invalidateAllCaches();
+    const gs = clone.gameState;
+    gs.currentRoute = routeId;
+    for (const k in REGIONS) if (REGIONS[k].routes.some(r => r.id === routeId)) gs.currentRegion = k;
+    gs.currentEnemy = null;
+    delete gs.battleHp;
+    delete gs.automation;
+    delete gs.analyzer;
+    gs.inventory = { potions: opts.potions || 99999 };           // 估算的是"每小时用多少药水"，不让药水耗尽中途停止
+    clone.roster.reconcile();
+    const policy = JSON.parse(JSON.stringify(game.getAutomationPolicy()));
+    policy.route.mode = 'stay';
+    policy.stopConditions = { timeLimitMinutes: 0, battleLimit: 0, shinyFound: false, routeComplete: false };
+    const set = clone.setAutomationPolicy(policy);
+    if (!set.ok) return null;
+    const start = clone.dispatchAutomationAction({ type: 'START_HUNT' });
+    return start.ok ? clone : null;
+}
