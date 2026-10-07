@@ -299,6 +299,9 @@ function sanitizeSave(raw, now = Date.now()) {
     // ---- 新手引导 / 目标进度（没有这个字段 = 老存档，由 GameCore.ensureGuide 判断是否老玩家）----
     const guide = typeof sanitizeGuideState === 'function' ? sanitizeGuideState(raw.guide) : null;
     if (guide) out.guide = guide;
+    // ---- 自动化（可选字段；没有 = 从未配置，保持默认关闭）----
+    const automation = typeof sanitizeAutomationState === 'function' ? sanitizeAutomationState(raw.automation) : null;
+    if (automation) out.automation = automation;
 
     out.settings = {};
     if (typeof se.autoSwitchBest === 'boolean') out.settings.autoSwitchBest = se.autoSwitchBest;

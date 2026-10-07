@@ -15,7 +15,7 @@ const AUTOMATION_EVENT_TYPES = [
     'capture_attempted', 'pokemon_captured', 'capture_skipped',
     'xp_gained', 'level_up', 'evolution', 'heal',
     'route_changed', 'pokemon_switched',
-    'automation_decision', 'automation_error',
+    'automation_decision', 'automation_error', 'policy_changed',
 ];
 
 class EventBus {
