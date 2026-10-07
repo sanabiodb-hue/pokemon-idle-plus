@@ -148,7 +148,7 @@ const GuidanceMethods = {
 
     _guideClaimSilently() {
         const g = this.gameState.guide;
-        const now = Date.now();
+        const now = this.now();
         for (const goal of GUIDE_GOALS) if (goal.current(this) >= goal.target) g.claimed[goal.id] = now;
     },
 
@@ -198,7 +198,7 @@ const GuidanceMethods = {
     // 检查并发放：新手引导步骤完成、目标达成。返回本次新完成的列表
     guideUpdate(opts = {}) {
         if (!this.gameState || this._isOfflineSimulating || this._guideBusy) return [];
-        const now = Date.now();
+        const now = this.now();
         if (!opts.force && now - (this._guideLastUpdate || 0) < GUIDE_UPDATE_MIN_INTERVAL_MS) return [];
         this._guideLastUpdate = now;
         const g = this.ensureGuide();

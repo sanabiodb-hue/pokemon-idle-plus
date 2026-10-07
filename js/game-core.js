@@ -21,6 +21,10 @@ class GameCore {
         this.rateTracker = { startTime: null, totalExp: 0, totalGold: 0 };
         // 随机数来源（测试时可替换为确定性序列）
         this.rng = Math.random;
+        // 时钟：默认是真实时间；模拟器/测试可以换成 ManualClock（见 automation/clock.js）
+        this.clock = new SystemClock();
+        // 内部事件总线（自动化引擎 / 界面 / 统计 / 报告共用；旧的 onBattleEvent 等回调保持不变）
+        this.bus = new EventBus({ now: () => this.now() });
         this.debug = false;
         // 性能缓存（见 _touchSpecies / _invalidateAllCaches）
         this._instanceStats = new Map();  // 个体 uid → calculateStats 结果（旧的“物种级缓存”现在按个体缓存）
@@ -37,7 +41,7 @@ class GameCore {
         this._offlineSummary = null;
         this._towerMode = false;
         // 个体名册：个体 / 队伍 / PC / 放生记录，并维护 caughtPokemon、team 这两个旧兼容视图
-        this.roster = new PokemonRoster(() => this.gameState);
+        this.roster = new PokemonRoster(() => this.gameState, { now: () => this.now() });
         // 名册里的变化（创建/放生/换主个体）要让属性缓存失效
         this.roster.onChange = (speciesId) => {
             if (speciesId === null) this._invalidateAllCaches();
@@ -57,6 +61,15 @@ class GameCore {
 
     _log(...args) {
         if (this.debug) console.log(...args);
+    }
+
+    // 当前时间（毫秒）。核心里所有“现在几点”都走这里，这样模拟器可以注入自己的时钟
+    now() { return this.clock.now(); }
+
+    // 发出内部事件。离线结算期间如果没人订阅就直接跳过（离线可能有几万场战斗，不白白构造事件）
+    _emit(type, payload) {
+        if (this._isOfflineSimulating && !this.bus.hasListeners()) return null;
+        return this.bus.emit(type, payload, { offline: this._isOfflineSimulating });
     }
 
     // 统计只是旁路：任何错误都不能影响游戏。离线结算期间不逐条记事件（只累加计数，结束时汇总成 offline_return）
@@ -197,7 +210,7 @@ class GameCore {
     // 更新速率跟踪器（每次获得经验/金币时调用）
     _updateRateTracker(exp, gold) {
         if (!this.rateTracker.startTime) {
-            this.rateTracker.startTime = Date.now();
+            this.rateTracker.startTime = this.now();
         }
         this.rateTracker.totalExp += exp;
         this.rateTracker.totalGold += gold;
@@ -208,7 +221,7 @@ class GameCore {
         if (!this.rateTracker.startTime || this.rateTracker.totalExp === 0) {
             return null; // 无数据
         }
-        const elapsedMs = Date.now() - this.rateTracker.startTime;
+        const elapsedMs = this.now() - this.rateTracker.startTime;
         if (elapsedMs < 1000) return null; // 不足1秒不计算
         const elapsedMin = elapsedMs / 60000;
         return {
@@ -298,7 +311,7 @@ class GameCore {
 
     _onPageHidden() {
         // 记录进入后台的时间，并立即落盘（防抖中的请求不能丢）
-        this._hiddenAt = Date.now();
+        this._hiddenAt = this.now();
         this.saveNow();
     }
 
@@ -310,7 +323,7 @@ class GameCore {
 
     _onPageVisible() {
         if (!this._hiddenAt) return;
-        const now = Date.now();
+        const now = this.now();
         const elapsed = now - this._hiddenAt;
         this._hiddenAt = null;
 
@@ -811,7 +824,7 @@ class GameCore {
                 currentEnemyIndex: 0,   // 当前打到第几只（0~5）
                 inBattle: false,        // 是否正在挑战中
             },
-            lastSave: Date.now(),
+            lastSave: this.now(),
         };
         // 个体名册：ownedPokemon / party / pc / released / speciesPrimary
         PokemonRoster.initState(this.gameState);
@@ -1066,7 +1079,7 @@ class GameCore {
     generateUID() {
         // 时间戳 + 自增计数器，兼顾速度与唯一性
         // 时间戳前缀保证不同会话不碰撞，自增后缀保证同批次不重复
-        return Date.now().toString(36) + '_' + (++this._uidCounter).toString(36);
+        return this.now().toString(36) + '_' + (++this._uidCounter).toString(36);
     }
 
     // ===================== 属性计算（简化公式） =====================
@@ -1531,6 +1544,7 @@ class GameCore {
 
         // 更新实际速率跟踪器
         this._updateRateTracker(expGained, goldGained);
+        this._emit('xp_gained', { amount: expGained, uid: activeInst ? activeInst.uid : null, gold: goldGained });
 
         // 胜利回血
         const healAmount = Math.floor(playerMaxHp * b.healPercent);
@@ -1539,6 +1553,7 @@ class GameCore {
         // 击败处理（捕获/IV更新/地区解锁/徽章）
         // 捕获闪光个体时 roster 会先把 shinyDex 写好，所以“是不是第一次闪光”要在击败处理之前记下
         const wasShinyKnown = !!state.shinyDex[wildPokemon.id];
+        this._emit('pokemon_defeated', { id: wildPokemon.id, level: wildPokemon.level, shiny: !!wildPokemon.isShiny, route: state.currentRoute });
         this.processDefeat(wildPokemon);
 
         // 统计：精确计数每场；事件只在第一场胜利和之后每 25 场记一次，避免刷屏
@@ -1564,6 +1579,7 @@ class GameCore {
         // 新手引导 / 目标：检查是否有新完成的（离线时在结算结束后统一检查）
         if (!sim && this.guideAutoUpdate) this.guideUpdate();
 
+        this._emit('battle_completed', { result: 'victory', enemyId: wildPokemon.id, xp: expGained, gold: goldGained, route: state.currentRoute });
         return { expGained, goldGained, healAmount, newPlayerHp, autoSwitchResult, anyLevelUp };
     }
 
@@ -1729,7 +1745,7 @@ class GameCore {
             enemyNextAttack: this.getAttackInterval(enemyStats.speed),
             playerTimer: restoredPlayerTimer,
             enemyTimer: restoredEnemyTimer,
-            lastTick: Date.now(),
+            lastTick: this.now(),
         };
         this._cacheBattleDerived();
 
@@ -1741,6 +1757,10 @@ class GameCore {
         if (this.analytics && !this._isOfflineSimulating) {
             try { this.analytics.oncePerSession('battle_start', { route: this.gameState.currentRoute }); } catch (e) { /* 忽略 */ }
         }
+        this._emit('battle_started', {
+            route: this.gameState.currentRoute, enemyId: wildPokemon.id, enemyLevel: wildPokemon.level,
+            enemyShiny: !!wildPokemon.isShiny, activeUid: this.roster.party.activeUid(),
+        });
 
         if (this.onBattleEvent) {
             this.onBattleEvent('start', this.currentBattle);
@@ -1855,7 +1875,7 @@ class GameCore {
         if (!battle.derived) this._cacheBattleDerived();
         const d = battle.derived;
 
-        const now = Date.now();
+        const now = this.now();
         const delta = now - battle.lastTick;
         battle.lastTick = now;
 
@@ -2012,7 +2032,7 @@ class GameCore {
         const delay = this._getNextBattleDelay(this.getAttackInterval(battle.playerStats.speed));
 
         // 短暂延迟后开始下一场战斗（记录计划时间，页面切回时可补偿）
-        this._nextBattleScheduledAt = Date.now() + delay;
+        this._nextBattleScheduledAt = this.now() + delay;
         this._nextBattleTimeout = setTimeout(() => {
             this._nextBattleTimeout = null;
             this._nextBattleScheduledAt = null;
@@ -2104,6 +2124,7 @@ class GameCore {
             if ((inst.level <= 10 || inst.level % 5 === 0) && this.roster.party.contains(inst.uid)) {
                 this._track('level_up', { id: inst.speciesId, level: inst.level });
             }
+            this._emit('level_up', { uid: inst.uid, id: inst.speciesId, from: startLevel, level: inst.level });
         }
 
         // 升级通知合并为一条（显示起始等级 → 最终等级）
@@ -2187,6 +2208,7 @@ class GameCore {
         this._touchInstance(inst);
         if (shinyRecorded) this._syncShinyInFamily(evo.id);
 
+        this._emit('evolution', { uid: inst.uid, from: baseId, to: evo.id, keptLevel: !firstRegistration, level: inst.level });
         this._count('evolutions');
         if (this.gameState.guide) this.gameState.guide.counters.evolutions++;
         this._track('evolution', { from: baseId, to: evo.id, kept_level: !firstRegistration, level: inst.level });
@@ -2729,9 +2751,11 @@ class GameCore {
                 }
             }
         }
-        const changed = this.gameState.currentRoute !== routeId;
+        const previousRoute = this.gameState.currentRoute;
+        const changed = previousRoute !== routeId;
         this.gameState.currentRoute = routeId;
         if (changed) {
+            this._emit('route_changed', { route: routeId, from: previousRoute, reason: 'manual' });
             this._track('route_change', { route: routeId });
             this.guideNote('routeChanged');
         }
@@ -2810,6 +2834,7 @@ class GameCore {
         if (!next) return null; // 全部完成，不切换
 
         // 切换到新地图
+        this._emit('route_changed', { route: next.routeId, from: this.gameState.currentRoute, reason: 'auto_complete' });
         this.gameState.currentRoute = next.routeId;
         this.gameState.currentRegion = next.regionKey;
         this.gameState.currentEnemy = null; // 清除当前敌方
@@ -2929,7 +2954,7 @@ class GameCore {
         this.roster.reconcile();   // 旧代码直接改了 team 时，保证 party/PC 在写盘前一致
         this._syncShinyFlags();    // 旧代码直接写 shinyDex 时，让主个体的闪光与之一致
         gs.schemaVersion = SAVE_SCHEMA_VERSION;
-        gs.lastSave = Date.now();
+        gs.lastSave = this.now();
 
         if (this.currentBattle) {
             if (this.currentBattle.playerCurrentHp > 0) {
@@ -4036,7 +4061,7 @@ class GameCore {
             return { success: false, message: `Moedas insuficientes. A semente custa ${BERRY_SEED_PRICE.toLocaleString()} Moedas.` };
         }
         this.gameState.gold -= BERRY_SEED_PRICE;
-        this.gameState.berryPlots.push({ berryId, plantedAt: Date.now() });
+        this.gameState.berryPlots.push({ berryId, plantedAt: this.now() });
         this.save();
         return { success: true };
     }
@@ -4046,7 +4071,7 @@ class GameCore {
         if (!this.isBerryUnlocked()) return { success: false, message: 'Sistema de Frutas ainda bloqueado.' };
         if (!BERRY_DATA[berryId]) return { success: false, message: 'Tipo de Fruta inválido.' };
         if (this.gameState.berryPlots.length >= BERRY_PLOT_MAX) return { success: false, message: 'Sem terreno livre.' };
-        this.gameState.berryPlots.push({ berryId, plantedAt: Date.now() });
+        this.gameState.berryPlots.push({ berryId, plantedAt: this.now() });
         this.save();
         return { success: true };
     }
@@ -4071,14 +4096,14 @@ class GameCore {
     isBerryRipe(plotIndex) {
         const plot = this.gameState.berryPlots[plotIndex];
         if (!plot) return false;
-        return (Date.now() - plot.plantedAt) >= this.getEffectiveBerryGrowTime();
+        return (this.now() - plot.plantedAt) >= this.getEffectiveBerryGrowTime();
     }
 
     // 获取种植槽剩余时间（毫秒）
     getBerryTimeLeft(plotIndex) {
         const plot = this.gameState.berryPlots[plotIndex];
         if (!plot) return 0;
-        const elapsed = Date.now() - plot.plantedAt;
+        const elapsed = this.now() - plot.plantedAt;
         return Math.max(0, this.getEffectiveBerryGrowTime() - elapsed);
     }
 
@@ -4339,7 +4364,7 @@ class GameCore {
             enemyNextAttack: this.getAttackInterval(enemyStats.speed),
             playerTimer: 0,
             enemyTimer: 0,
-            lastTick: Date.now(),
+            lastTick: this.now(),
         };
         this._cacheBattleDerived();
 
