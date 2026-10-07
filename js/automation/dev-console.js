@@ -1,5 +1,5 @@
 // Ferramenta de teste manual da automação (antes da aba "Caça" existir): use no console do navegador.
-//   caca.iniciar({ capture: { minQualityPercent: 60 }, route: { mode: 'switchWhenComplete' } })
+//   caca.iniciar({ capture: { minQualityPercent: 60 }, route: { mode: 'switchWhenComplete' } })   // a interface oficial agora é a aba Caça
 //   caca.status()      caca.eventos(20)      caca.pausar()   caca.retomar()   caca.parar()
 //   caca.politica()    (política atual)      caca.politica({ ... })  (altera, valida antes de salvar)
 // Não decide nada: só chama a API pública do GameCore (dispatchAutomationAction / setAutomationPolicy).

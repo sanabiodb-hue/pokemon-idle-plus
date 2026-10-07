@@ -464,3 +464,54 @@ neutralizados (as únicas diferenças são chamadas `ptPlural`, `ptNumber` e `to
 <p align="center">
   Made with ❤️ by <strong>jinwind</strong>
 </p>
+
+## 🎯 Fase 5A: motor de automação e aba "Caça" (sem mudança de schema)
+
+O jogador configura uma operação de caça e a equipe trabalha sozinha (online e offline). **Desligada por padrão**: sem política/sessão o jogo se comporta exatamente como antes.
+
+### Fluxo
+
+```
+GAME STATE → POLÍTICA → ENGINE → DECISÃO → AÇÃO → REGRAS DO NÚCLEO → MUDANÇA DE ESTADO → EVENTO → UI/relatórios
+```
+
+| Peça | Arquivo | Papel |
+|---|---|---|
+| Relógio injetável | `js/automation/clock.js` | `SystemClock`, `ManualClock`, `SimulationClock` (a simulação não depende de tempo real) |
+| Barramento de eventos | `js/automation/events.js` | multi-assinante, nomes validados, buffer circular |
+| Qualidade | `js/automation/quality.js` | `calculatePokemonQuality` → nota S–D, pontos e % |
+| Política | `js/automation/policy.js` | captura, cura (`heal.whenHpBelowPercent`, `onNoPotions`), rota (`stay`/`switchWhenComplete`/`stopWhenComplete`), `stopConditions` (`timeLimitMinutes`, `battleLimit`, `shinyFound`, `routeComplete`); validação estrita + saneamento |
+| Sessão | `js/automation/hunt-session.js` | estados `idle/running/paused/stopped/finished`, estatísticas acumuladas, mensagens de parada em pt-BR |
+| Decisão | `js/automation/capture.js`, `decision.js` | **funções puras** (`shouldCapture`, `decideAutomationActions`): mesmo snapshot → mesma decisão |
+| Ações | `js/automation/actions.js` | `ActionDispatcher`: valida **antes** de mutar; ação inválida não altera estado |
+| Engine | `js/automation/engine.js` | driver ao vivo: assina o barramento só com caçada rodando; avalia no fim da batalha, no início do encontro e quando o HP cai do limite |
+| Simulação | `js/automation/simulation.js` | `simulateHunt` (síncrono, determinístico por semente), relatório offline, recomendações |
+| Interface | `js/hunt-view.js` | só desenha e pede ações; assina eventos apenas com a aba aberta |
+
+### Dois drivers, as mesmas regras
+
+* **Live**: o loop de 50 ms do jogo; o engine reage aos eventos (`battle_completed`, `hp_low`, `battle_started`…).
+* **Fast**: `_fastBattleStep` (antigo `_runOfflineBatch` refatorado) usa as **mesmas** fórmulas, geração de inimigos, `_processVictoryRewards`, captura, evolução e **o mesmo** `decideAutomationActions`. É usado no offline real e no simulador. Sem caçada, o offline é idêntico ao anterior.
+* Fechar e reabrir com a caçada rodando: a sessão volta **pausada** (`pausedByReload`); o offline roda a caçada pelo driver rápido, mostra o relatório "Durante sua ausência" e a deixa pausada.
+
+### Poções (primeiro consumível)
+
+`gameState.inventory.potions` (10 iniciais; saves antigos recebem 10 uma vez). `usePotion` no núcleo recupera 50% do HP máximo e reanima o Pokémon caído. Sem poções e `onNoPotions: 'stop'` → "Caça interrompida: sem poções." (`rest` e compra de poções ficam para a fase de economia). A regeneração antiga continua valendo fora da caçada.
+
+### Benchmark
+
+```
+node tools/bench-automation.js          # 1 / 100 / 1000 sessões, 10 min / 1 h / 4 h / 24 h, política A × B
+node tools/bench-automation.js --quick
+```
+
+Referência (Node 22, uma máquina de CI): 24 h simuladas em ~1 s (≈31 mil batalhas); ~33 mil batalhas/s; 1000 sessões de 1 h em ~39 s.
+
+### Caminho de evolução (apenas documentação; nada disso existe ainda)
+
+`Simulation Engine` (hoje: `_fastBattleStep` + decisão pura) → `Authoritative Backend` (mesmas funções puras e regras rodando no servidor; o cliente só envia política/ações) → `WebSocket` (eventos do barramento como mensagens) → `Clients`.
+Candidatos a serviços separados: servidor autoritativo de simulação (worker), banco para política/sessões/relatórios, serviço de analytics (o barramento já emite eventos limpos e pequenos).
+
+### Testes
+
+`tests/automation-*.test.js`, `tests/hunt-view.test.js` (DOM falso em `tests/helpers/fake-dom.js`) e o smoke com Chromium (aba Caça em 360×640 e 1280×800, sem rolagem horizontal, iniciar/pausar/parar, motivo, offline).

@@ -12,6 +12,7 @@ class GameCore {
         this.onBattleEvent = null; // UI回调
         this.onCatch = null;
         this.analytics = null;         // 测试期统计（见 analytics.js）；main.js 注入，测试里为空
+        this.onHuntEvent = null;       // 自动化狩猎的重要通知（停止原因等）：(kind, data)，界面据此弹提示
         this.onGuideEvent = null;      // 引导步骤/目标完成时的回调（界面据此弹出奖励卡片）
         this.guideAutoUpdate = true;   // 战斗/队伍/路线变化后是否自动检查引导与目标（测试可关闭，避免奖励经验干扰精确断言）
         this.onLevelUp = null;

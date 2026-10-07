@@ -178,7 +178,7 @@ body {
 }
 
 .tab-btn {
-    width: 20%;
+    width: calc(100% / 6);
     padding: 12px 0;
     background: none;
     border: none;
@@ -194,14 +194,14 @@ body {
     box-sizing: border-box;
 }
 
-/* 第二排最后一个按钮（第9个）占20% */
-.tab-btn:nth-child(n+6) {
+/* 11 个页签：每行 6 个 */
+.tab-btn:nth-child(n+7) {
     border-bottom: none;
     border-top: none;
 }
 
-/* 第一排5个去掉下边框用分隔线代替 */
-.tab-btn:nth-child(-n+5) {
+/* 第一排 6 个用分隔线代替下边框 */
+.tab-btn:nth-child(-n+6) {
     border-bottom: 1px solid var(--border);
 }
 
@@ -4817,3 +4817,71 @@ body {
 /* Cartões do PC: a linha “#id · natureza · IV%” é o que diferencia dois Pokémon iguais — deixa quebrar em vez de cortar */
 .pc-card-sub { white-space: normal; overflow: visible; text-overflow: clip; word-break: break-word; }
 .pc-card { align-items: flex-start; }
+
+
+/* ============ 自动狩猎页签（Caça）· 手机优先 ============ */
+#tab-hunt { overflow-x: hidden; }
+#hunt-container { width: 100%; max-width: 640px; margin: 0 auto; padding: 8px 12px 24px; box-sizing: border-box; display: flex; flex-direction: column; gap: 12px; }
+#hunt-container h2 { margin: 4px 0; font-size: 20px; }
+#hunt-container * { box-sizing: border-box; }
+.hunt-card { background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 12px; padding: 12px; min-width: 0; }
+.hunt-card h3 { margin: 14px 0 8px; font-size: 15px; }
+.hunt-card h3:first-child { margin-top: 0; }
+.hunt-card h3 small { color: var(--text-secondary); font-weight: normal; }
+.hunt-state { display: flex; align-items: center; gap: 8px; font-size: 18px; font-weight: bold; margin-bottom: 10px; }
+.hunt-state-icon { font-size: 22px; }
+.hunt-buttons { display: flex; gap: 8px; flex-wrap: wrap; }
+.hunt-btn { flex: 1 1 120px; min-height: 48px; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--border); background: var(--bg-card); color: var(--text-primary); font-size: 15px; font-weight: bold; cursor: pointer; }
+.hunt-btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+.hunt-btn.danger { background: transparent; border-color: var(--danger); color: var(--danger); }
+.hunt-btn:hover { filter: brightness(1.1); }
+.hunt-notice { margin-top: 10px; padding: 10px; border-radius: 8px; background: rgba(255,255,255,0.05); font-size: 14px; line-height: 1.4; }
+.hunt-notice.condition { background: rgba(231, 76, 60, 0.15); border: 1px solid var(--danger); }
+.hunt-notice.soft { font-size: 13px; color: var(--text-secondary); }
+.hunt-stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-top: 12px; }
+.hunt-stat { background: var(--bg-primary); border-radius: 8px; padding: 8px 6px; text-align: center; min-width: 0; }
+.hunt-stat-value { display: block; font-size: 15px; font-weight: bold; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hunt-stat-label { display: block; font-size: 11px; color: var(--text-secondary); margin-top: 2px; }
+.hunt-potions { margin-top: 10px; font-size: 14px; }
+.hunt-field { display: flex; flex-direction: column; gap: 4px; margin: 8px 0; font-size: 14px; }
+.hunt-field select, .hunt-card input[type=number] { width: 100%; min-height: 40px; padding: 6px 8px; border-radius: 8px; background: var(--bg-primary); color: var(--text-primary); border: 1px solid var(--border); font-size: 14px; }
+.hunt-card input[type=range] { width: 100%; }
+.hunt-route-info { display: flex; flex-direction: column; gap: 4px; font-size: 14px; color: var(--text-secondary); margin: 6px 0; }
+.hunt-route-info strong { color: var(--text-primary); }
+.hunt-rec { margin: 8px 0; padding: 8px 10px; border-radius: 8px; background: rgba(243, 156, 18, 0.12); font-size: 13px; line-height: 1.4; }
+.hunt-link { background: none; border: none; color: var(--accent-light); cursor: pointer; font-size: 14px; padding: 6px 0; text-decoration: underline; }
+.hunt-sub { margin: 10px 0 6px; font-size: 13px; color: var(--text-secondary); }
+.hunt-chips, .hunt-tags { display: flex; flex-wrap: wrap; gap: 6px; }
+.hunt-chip { display: inline-flex; align-items: center; gap: 4px; max-width: 100%; padding: 4px 8px; border-radius: 16px; border: 1px solid var(--border); background: var(--bg-primary); color: var(--text-primary); font-size: 13px; cursor: pointer; }
+.hunt-chip.prio { border-color: var(--warning); }
+.hunt-chip img { width: 28px; height: 28px; image-rendering: pixelated; }
+.hunt-chip-unknown { width: 28px; text-align: center; }
+.hunt-tag { display: inline-flex; align-items: center; gap: 4px; padding: 4px 8px; border-radius: 12px; background: var(--bg-primary); font-size: 13px; }
+.hunt-tag button { background: none; border: none; color: var(--text-secondary); cursor: pointer; }
+.hunt-members { display: flex; flex-direction: column; gap: 8px; }
+.hunt-member { display: flex; gap: 10px; align-items: center; padding: 8px; border-radius: 10px; background: var(--bg-primary); border: 1px solid transparent; min-width: 0; }
+.hunt-member.active { border-color: var(--accent); }
+.hunt-member img { width: 48px; height: 48px; image-rendering: pixelated; flex-shrink: 0; }
+.hunt-member-info { flex: 1; min-width: 0; font-size: 13px; }
+.hunt-member-name { font-weight: bold; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hunt-badge { font-size: 11px; background: var(--accent); color: #fff; border-radius: 8px; padding: 1px 6px; margin-left: 4px; }
+.hunt-member-meta { color: var(--text-secondary); margin: 2px 0; }
+.hunt-grade { font-weight: bold; color: var(--text-primary); }
+.hunt-grade.g-S { color: #f1c40f; } .hunt-grade.g-A { color: #2ecc71; } .hunt-grade.g-B { color: #3498db; }
+.hunt-hp { height: 8px; background: rgba(255,255,255,0.12); border-radius: 4px; overflow: hidden; }
+.hunt-hp-fill { height: 100%; transition: width 0.3s; }
+.hunt-hp-fill.ok { background: var(--hp-green); } .hunt-hp-fill.mid { background: var(--hp-yellow); } .hunt-hp-fill.low { background: var(--hp-red); }
+.hunt-hp-none { color: var(--text-secondary); font-size: 12px; }
+.hunt-check, .hunt-radio { display: flex; align-items: center; gap: 8px; min-height: 36px; font-size: 14px; cursor: pointer; }
+.hunt-check input, .hunt-radio input { width: 20px; height: 20px; flex-shrink: 0; }
+.hunt-radios { display: flex; flex-direction: column; }
+.hunt-limit { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 4px 0; font-size: 14px; }
+.hunt-limit .hunt-check { flex: 0 0 auto; }
+.hunt-limit input[type=number] { width: 90px; flex: 0 0 90px; }
+.hunt-hint { margin-top: 10px; font-size: 12px; color: var(--text-secondary); }
+@media (min-width: 600px) {
+    .hunt-stats { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+}
+.hunt-activity { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; font-size: 13px; }
+.hunt-activity li { padding: 6px 8px; border-radius: 8px; background: var(--bg-primary); overflow-wrap: anywhere; }
+.hunt-time { color: var(--text-secondary); font-size: 11px; margin-right: 4px; }

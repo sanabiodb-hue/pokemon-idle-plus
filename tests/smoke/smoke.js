@@ -159,6 +159,92 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
             await context.close();
         }
 
+        // ---------- B2. aba Caça: configurar, iniciar, pausar, parar, motivo, relatório offline (mobile e desktop) ----------
+        for (const vp of [{ name: 'celular 360x640', width: 360, height: 640 }, { name: 'desktop 1280x800', width: 1280, height: 800 }]) {
+            const { page, context } = await newPage(() => localStorage.setItem('pokemon_idle_tutorial_done', '1'), { viewport: { width: vp.width, height: vp.height } });
+            await page.goto(base);
+            await page.waitForFunction(() => typeof game !== 'undefined' && game.currentBattle, null, { timeout: 10000 });
+            const noOverflow = async () => page.evaluate(() => {
+                const c = document.getElementById('hunt-container');
+                return document.documentElement.scrollWidth <= window.innerWidth + 1 && c.scrollWidth <= c.clientWidth + 1;
+            });
+            await page.locator('#tab-nav [data-tab="tab-hunt"]').click();
+            await page.waitForSelector('#hunt-container [data-hunt-action="start"]');
+            check(`Caça ${vp.name}: aba abre com rota, equipe, captura, cura e condições`, await page.evaluate(() => ['#hunt-status', '#hunt-route', '#hunt-team', '#hunt-settings'].every(sel => document.querySelector(sel).innerText.length > 10) && /Captura/.test(document.getElementById('hunt-settings').innerText) && /Cura/.test(document.getElementById('hunt-settings').innerText) && /Poções/.test(document.getElementById('hunt-status').innerText)));
+            check(`Caça ${vp.name}: sem rolagem horizontal`, await noOverflow());
+            // configurar pela interface
+            await page.locator('input[data-hunt-limit="battleLimit"]').check();
+            await page.locator('input[data-hunt-policy="stopConditions.battleLimit"]').fill('3');
+            await page.locator('input[data-hunt-policy="stopConditions.battleLimit"]').blur();
+            await page.locator('input[data-hunt-policy="capture.enabled"]').uncheck();
+            await page.locator('input[data-hunt-policy="capture.enabled"]').check();
+            await page.evaluate(() => { const r = document.querySelector('input[data-hunt-policy="capture.minQualityPercent"]'); r.value = '40'; r.dispatchEvent(new Event('change', { bubbles: true })); });
+            await page.locator('input[data-hunt-policy="heal.whenHpBelowPercent"]').fill('25');
+            await page.locator('input[data-hunt-policy="heal.whenHpBelowPercent"]').blur();
+            await page.locator('select[data-hunt-route]').selectOption('kanto_route2');
+            const pol = await page.evaluate(() => ({ p: game.getAutomationPolicy(), route: game.gameState.currentRoute }));
+            check(`Caça ${vp.name}: configuração pela interface chega à política e à rota`, pol.p.stopConditions.battleLimit === 3 && pol.p.capture.minQualityPercent === 40 && pol.p.heal.whenHpBelowPercent === 25 && pol.p.capture.enabled === true && pol.route === 'kanto_route2', JSON.stringify(pol));
+            // iniciar / pausar / retomar
+            await page.locator('[data-hunt-action="start"]').click();
+            await page.waitForFunction(() => /Caçando/.test(document.querySelector('.hunt-state-label').textContent));
+            check(`Caça ${vp.name}: iniciar mostra 🟢 Caçando`, await page.evaluate(() => game.isHuntRunning()));
+            await page.locator('[data-hunt-action="pause"]').click();
+            await page.waitForFunction(() => /Pausada/.test(document.querySelector('.hunt-state-label').textContent));
+            await page.locator('input[data-hunt-policy="stopConditions.shinyFound"]').check();   // alterar a política com a caçada pausada
+            check(`Caça ${vp.name}: pausar mostra 🟡 e dá para alterar a política`, await page.evaluate(() => game.getAutomationPolicy().stopConditions.shinyFound === true && game.getHuntSession().state === 'paused'));
+            await page.locator('[data-hunt-action="resume"]').click();
+            await page.waitForFunction(() => /Caçando/.test(document.querySelector('.hunt-state-label').textContent));
+            // para sozinha no limite de batalhas, com o motivo na tela
+            await page.waitForFunction(() => game.getHuntSession().state === 'stopped', null, { timeout: 90000 });
+            await page.waitForFunction(() => /Parada por condição/.test(document.querySelector('.hunt-state-label').textContent), null, { timeout: 5000 });
+            const stopped = await page.evaluate(() => ({ notice: document.querySelector('.hunt-notice').innerText, battles: game.getHuntSession().stats.battles }));
+            check(`Caça ${vp.name}: parada automática mostra 🔴, "Caça encerrada" e o motivo`, /Caça encerrada/.test(stopped.notice) && /limite de 3 batalhas atingido/.test(stopped.notice) && stopped.battles === 3, JSON.stringify(stopped));
+            const statsText = await page.locator('.hunt-stats').innerText();
+            check(`Caça ${vp.name}: estatísticas visíveis (tempo, batalhas, capturas, EXP, poções, dinheiro, eficiência)`, ['Tempo', 'Batalhas', 'Vitórias', 'Capturas', 'Shinies', 'EXP ganha', 'Poções usadas', 'Dinheiro ganho', 'Eficiência'].every(t => statsText.includes(t)), statsText.slice(0, 160));
+            // iniciar de novo e parar manualmente
+            await page.locator('input[data-hunt-limit="battleLimit"]').uncheck();
+            await page.locator('[data-hunt-action="start"]').click();
+            await page.waitForFunction(() => game.isHuntRunning());
+            await page.locator('[data-hunt-action="stop"]').click();
+            await page.waitForFunction(() => /Parada/.test(document.querySelector('.hunt-state-label').textContent) && !/condição/.test(document.querySelector('.hunt-state-label').textContent));
+            check(`Caça ${vp.name}: parar manualmente mostra ⚪ Parada`, await page.evaluate(() => game.getHuntSession().stopReason === 'manual'));
+            check(`Caça ${vp.name}: sem rolagem horizontal ao final`, await noOverflow());
+            // a Torre recusa entrar com a caçada rodando
+            await page.locator('[data-hunt-action="start"]').click();
+            await page.waitForFunction(() => game.isHuntRunning());
+            check(`Caça ${vp.name}: Torre recusa entrada com a caçada rodando`, await page.evaluate(() => { const r = game.enterTower(); return r.success === false && /caçada/.test(r.message); }));
+            await context.close();
+        }
+
+        // fechar e reabrir com a caçada rodando: relatório "Durante sua ausência", sessão pausada, retomar
+        {
+            const { page, context } = await newPage(() => localStorage.setItem('pokemon_idle_tutorial_done', '1'), { viewport: { width: 360, height: 640 } });
+            await page.goto(base);
+            await page.waitForFunction(() => typeof game !== 'undefined' && game.currentBattle, null, { timeout: 10000 });
+            await page.evaluate(() => { game.setAutomationPolicy({ heal: { enabled: false } }); game.dispatchAutomationAction({ type: 'START_HUNT' }); });
+            await sleep(1500);
+            await page.evaluate(() => {
+                const st = JSON.parse(JSON.stringify(game.gameState));
+                st.lastSave = Date.now() - 20 * 60 * 1000;
+                localStorage.setItem('pokemon_idle_save', SaveCodec.encodePayload(JSON.stringify(st)));
+                game.saver.cancelPending();
+                game.saveNow = () => ({ ok: true }); game.saver.flush = () => ({ ok: true });
+            });
+            await page.reload();
+            await page.waitForSelector('#offline-report:not(.hidden)', { timeout: 30000 });
+            const rep = await page.locator('#offline-report').innerText();
+            check('Caça: relatório offline mostra "Durante sua ausência", poções, motivo/estado e recomendação', /Durante sua ausência/.test(rep) && /Poções usadas/.test(rep) && /Próxima recomendação/.test(rep) && /pausada/.test(rep), rep.slice(0, 200));
+            await page.locator('.offline-report-close').click();
+            await sleep(500);
+            check('Caça: sessão volta pausada depois do offline', await page.evaluate(() => game.getHuntSession().state === 'paused' && !game.isHuntRunning()));
+            await page.locator('#tab-nav [data-tab="tab-hunt"]').click();
+            await page.waitForFunction(() => /Pausada/.test(document.querySelector('.hunt-state-label').textContent));
+            await page.locator('[data-hunt-action="resume"]').click();
+            await page.waitForFunction(() => /Caçando/.test(document.querySelector('.hunt-state-label').textContent));
+            check('Caça: depois do offline dá para retomar', await page.evaluate(() => game.isHuntRunning()));
+            await context.close();
+        }
+
         // ---------- C. 恶意导入：HTML/JS 不得进入页面 ----------
         {
             const { page, context } = await newPage(() => localStorage.setItem('pokemon_idle_tutorial_done', '1'));

@@ -15,6 +15,8 @@ class GameUI {
         this.pcView = new PCView(this);
         this.guideView = new GuideView(this);
         this.game.onGuideEvent = (e) => this.guideView.onGuideEvent(e);
+        this.huntView = new HuntView(this);
+        this.game.onHuntEvent = (kind, data) => { try { this.huntView.onHuntEvent(kind, data); } catch (e) { /* 提示失败不影响游戏 */ } };
         this._setupBetaSettings();
     }
 
@@ -343,6 +345,7 @@ class GameUI {
                 return;
             }
         }
+        if (this.currentTab === 'tab-hunt' && tabId !== 'tab-hunt' && this.huntView) this.huntView.onHide();
         this.currentTab = tabId;
         document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
         document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
@@ -362,6 +365,7 @@ class GameUI {
             this.guideView.clearPcBadge();
             this.pcView.render();
         }
+        if (tabId === 'tab-hunt') this.huntView.onShow();
         if (tabId === 'tab-settings') this.renderSettings();
         if (tabId === 'tab-battle') {
             this.renderTeam();
@@ -2296,6 +2300,7 @@ class GameUI {
             div.textContent = text;
             report.appendChild(div);
         };
+        if (summary.hunt) this._renderHuntOfflineReport(summary.hunt, addLine);
         addLine(`⏱ Tempo offline: ${this._formatOfflineTime(totalMs)}`);
         addLine(`⚔️ Batalhas: ${ptNumber(summary.battles)}`);
         if (summary.expGained > 0) addLine(`📊 EXP ganho: ${ptNumber(summary.expGained)}`);
@@ -2334,6 +2339,20 @@ class GameUI {
         report.appendChild(btn);
     }
 
+    // 狩猎在你离开期间的结果（"Durante sua ausência"）
+    _renderHuntOfflineReport(h, addLine) {
+        addLine('🎯 Durante sua ausência', 'highlight');
+        addLine(`⚔️ Batalhas: ${ptNumber(h.battles)} (${ptNumber(h.victories)} ${ptPlural(h.victories, 'vitória', 'vitórias')}, ${ptNumber(h.defeats)} ${ptPlural(h.defeats, 'derrota', 'derrotas')})`);
+        addLine(`📊 EXP: ${ptNumber(h.xp)}`);
+        addLine(`🎒 Capturas: ${ptNumber(h.captures)}`);
+        addLine(`✨ Shinies: ${ptNumber(h.shinies)}`, h.shinies > 0 ? 'highlight' : '');
+        addLine(`🧪 Poções usadas: ${ptNumber(h.potionsUsed)} (restam ${ptNumber(h.potionsLeft)})`);
+        addLine(`🪙 Dinheiro: ${ptNumber(h.money)}`);
+        if (h.state === 'stopped') addLine(`🔴 Motivo da parada: ${h.reasonShort || 'encerrada'}`, 'highlight');
+        else if (h.state === 'paused') addLine('🟡 A caçada ficou pausada. Retome na aba Caça quando quiser.');
+        if (h.nextRecommendation) addLine(`👉 Próxima recomendação: ${h.nextRecommendation}`, 'highlight');
+    }
+
     _hideOfflineOverlay(battles, totalMs, summary) {
         const overlay = this._offlineOverlay;
         if (!overlay) return;
@@ -2352,8 +2371,8 @@ class GameUI {
         }
 
         // 时间较长或有重要事件时，保留一份可阅读的结算报告
-        const showReport = !!summary && battles > 0 &&
-            (summary.events.length > 0 || summary.newCatches.length > 0 || (summary.duplicateCatches || []).length > 0 || totalMs >= 5 * 60 * 1000);
+        const showReport = !!summary && (battles > 0 || !!summary.hunt) &&
+            (!!summary.hunt || summary.events.length > 0 || summary.newCatches.length > 0 || (summary.duplicateCatches || []).length > 0 || totalMs >= 5 * 60 * 1000);
         if (showReport) {
             this._setOfflineReportMode(true);
             this._renderOfflineReport(totalMs, summary);

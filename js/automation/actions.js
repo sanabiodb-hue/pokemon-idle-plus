@@ -99,6 +99,7 @@ const AUTOMATION_ACTION_HANDLERS = {
             game._emit('hunt_stopped', { id: s.id, reason, message: huntStopMessage(s), durationMs: huntSessionDurationMs(s, game.now()), stats: { ...s.stats } });
             game.save();
             game._automationSync();
+            if (game.onHuntEvent) game.onHuntEvent('stopped', { reason, message: huntStopMessage(s), byCondition: huntStoppedByCondition(s) });
             return { reason };
         },
     },
