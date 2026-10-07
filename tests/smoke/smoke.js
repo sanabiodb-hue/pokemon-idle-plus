@@ -90,6 +90,9 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
             });
             check('存档写入为 LZ 格式并带 schemaVersion=3', saved.raw === 'LZ:' && saved.version === 3, JSON.stringify(saved));
             // 防抖：连续战斗 12 秒，写入次数应远小于“每场胜利一次”
+            // 先暂停战斗：战斗自己（新敌人出现、捕获等）也会请求存档，会让“恰好 1 次”随时序抖动
+            await page.evaluate(() => game.stopBattle());
+            await page.waitForFunction(() => !game.saver.hasPending(), null, { timeout: 15000 });
             const w0 = await page.evaluate(() => window.__mainWrites);
             await page.evaluate(() => { for (let i = 0; i < 50; i++) game.save(); });
             // 等待防抖写入完成（用条件等待而不是固定 sleep：机器繁忙时浏览器定时器可能被推迟）
@@ -97,6 +100,7 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
             const w1 = await page.evaluate(() => window.__mainWrites);
             const dbg = await page.evaluate(() => ({ pending: game.saver.hasPending(), paused: game.saver.paused, timer: !!game.saver._timer, first: game.saver._firstRequestAt, now: Date.now(), err: game.saver.lastError, writes: game.saver.stats }));
             check('50 次 save() 请求被合并为 1 次写入', w1 - w0 === 1, `写入 ${w1 - w0} 次 ${JSON.stringify(dbg)}`);
+            await page.evaluate(() => game.startBattle());
             // 切换所有标签页不报错
             for (const tab of ['tab-map', 'tab-pokedex', 'tab-settings', 'tab-battle']) {
                 await page.evaluate((t) => gameUI.switchTab(t), tab);
@@ -119,7 +123,7 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
                 from: game.loadReport.fromVersion, ver: game.gameState.schemaVersion,
                 owned: game.roster.count(), problems: game.roster.checkIntegrity(),
             }));
-            check('旧版(v1)存档在浏览器里可加载并迁移为个体', loaded.caught === 190 && loaded.from === 1 && loaded.ver === 3 && loaded.owned === 190 && loaded.problems.length === 0, JSON.stringify(loaded));
+            check('旧版(v1)存档在浏览器里可加载并迁移为个体', loaded.caught === 190 && loaded.from === 1 && loaded.ver === 3 && loaded.owned >= 190 && loaded.problems.length === 0, JSON.stringify(loaded));
             // 把存储里的 lastSave 拨回 1 小时前，再刷新页面触发“页面加载时的离线结算”
             await page.evaluate(() => {
                 const st = JSON.parse(JSON.stringify(game.gameState));
@@ -228,15 +232,17 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
                 party: game.gameState.party.length, boxes: game.gameState.pc.boxes.length,
                 problems: game.roster.checkIntegrity(), origin: game.roster.primaryOf(25).origin,
             }));
-            check('v2 存档迁移为个体（190 只、队伍 5、PC 箱子 7、不变量全部成立）',
-                mig.from === 2 && mig.ver === 3 && mig.owned === 190 && mig.party === 5 && mig.boxes === 7 && mig.problems.length === 0 && mig.origin === 'legacy_migration', JSON.stringify(mig));
+            // 离线结算会在加载时跑真实战斗：可能新捕获同种个体（>190）、箱子变多、队伍里的宝可梦进化，所以只检查下限与不变量
+            check('v2 存档迁移为个体（至少 190 只、队伍 5、PC 箱子 ≥7、不变量全部成立）',
+                mig.from === 2 && mig.ver === 3 && mig.owned >= 190 && mig.party === 5 && mig.boxes >= 7 && mig.problems.length === 0 && mig.origin === 'legacy_migration', JSON.stringify(mig));
 
-            // 第二只皮卡丘（昵称里带 HTML）进队伍：界面按个体显示，且不能注入
-            await page.evaluate(() => {
-                const r = game.roster.create({ speciesId: 25, level: 30, ivs: { hp: 31, atk: 31, def: 31, spAtk: 31, spDef: 31, speed: 31 }, shiny: true, nickname: '<img src=x onerror=window.__pwned2=1>', rng: Math.random });
+            // 队伍首位物种的第二只（昵称里带 HTML）进队伍：界面按个体显示，且不能注入
+            const dupSpecies = await page.evaluate(() => game.gameState.team[0]);
+            await page.evaluate((sp) => {
+                const r = game.roster.create({ speciesId: sp, level: 30, ivs: { hp: 31, atk: 31, def: 31, spAtk: 31, spDef: 31, speed: 31 }, shiny: true, nickname: '<img src=x onerror=window.__pwned2=1>', rng: Math.random });
                 game.roster.moveToParty(r.instance.uid);
                 gameUI.renderTeam();
-            });
+            }, dupSpecies);
             await sleep(300);
             const ui = await page.evaluate(() => ({
                 slots: document.querySelectorAll('#team-list .team-slot').length,
@@ -244,7 +250,7 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
                 pwned: window.__pwned2, evilImgs: document.querySelectorAll('img[src="x"]').length,
                 party: game.gameState.team.slice(),
             }));
-            check('队伍面板显示 6 只（含同物种的两只皮卡丘）', ui.slots === 6 && ui.party.filter(id => id === 25).length === 2, JSON.stringify({ slots: ui.slots, party: ui.party }));
+            check('队伍面板显示 6 只（含同物种的两只）', ui.slots === 6 && ui.party.filter(id => id === dupSpecies).length === 2, JSON.stringify({ slots: ui.slots, party: ui.party }));
             check('个体昵称显示为纯文本，没有脚本执行', ui.pwned === undefined && ui.evilImgs === 0 && /img src=x on/.test(ui.text) && !ui.text.includes('<img'));
 
             // 导出 → 清空 → 通过界面导入：个体完整往返
@@ -258,11 +264,12 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
             check('导入后名册不变量成立且战斗继续', afterProblems.length === 0 && await page.evaluate(() => !!game.currentBattle));
 
             // 保存后刷新：个体仍在（含昵称）
+            const ownedBefore = await page.evaluate(() => game.roster.count());
             await page.evaluate(() => game.saveNow());
             await page.reload();
             await page.waitForFunction(() => typeof game !== 'undefined' && game.currentBattle, null, { timeout: 15000 });
-            const reloaded = await page.evaluate(() => ({ owned: game.roster.count(), ver: game.loadReport.fromVersion, nick: game.roster.ofSpecies(25).map(i => i.nickname) }));
-            check('保存并刷新后个体仍在（含净化后的昵称）', reloaded.owned === 191 && reloaded.ver === 3 && reloaded.nick.includes('img src=x on'), JSON.stringify(reloaded));
+            const reloaded = await page.evaluate((sp) => ({ owned: game.roster.count(), ver: game.loadReport.fromVersion, nick: game.roster.ofSpecies(sp).map(i => i.nickname) }), dupSpecies);
+            check('保存并刷新后个体仍在（含净化后的昵称）', reloaded.owned >= ownedBefore && reloaded.ver === 3 && reloaded.nick.includes('img src=x on'), JSON.stringify({ ...reloaded, ownedBefore }));
             await context.close();
         }
 

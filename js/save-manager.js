@@ -300,6 +300,7 @@ function sanitizeSave(raw, now = Date.now()) {
     if (typeof se.autoSwitchBest === 'boolean') out.settings.autoSwitchBest = se.autoSwitchBest;
     if (SAVE_ONESHOT_STRATEGIES.includes(se.oneShotStrategy)) out.settings.oneShotStrategy = se.oneShotStrategy;
     if (typeof se.autoRouteSwitch === 'boolean') out.settings.autoRouteSwitch = se.autoRouteSwitch;
+    if (CAPTURE_DUPLICATE_POLICIES.includes(se.captureDuplicates)) out.settings.captureDuplicates = se.captureDuplicates;
     if (SAVE_ROUTE_CONDITIONS.includes(se.routeSwitchCondition)) out.settings.routeSwitchCondition = se.routeSwitchCondition;
     if (SAVE_THEMES.includes(se.theme)) out.settings.theme = se.theme;
 

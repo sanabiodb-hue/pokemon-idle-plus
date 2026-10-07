@@ -12,6 +12,7 @@ class GameUI {
         this.pokedexSortDesc = true; // true = 从高到低, false = 从低到高
         this._createOfflineOverlay();
         this.setupEventListeners();
+        this.pcView = new PCView(this);
     }
 
     // 创建离线模拟进度遮罩层
@@ -213,6 +214,9 @@ class GameUI {
         // 一击必杀策略单选框
         this._initOneShotStrategy();
 
+        // 重复捕获策略单选框
+        this._initCaptureDuplicates();
+
         // 自动切换地图设置（直接开放）
         this._initAutoRouteSetting();
 
@@ -350,6 +354,7 @@ class GameUI {
         if (tabId === 'tab-talent') this.renderTalentPage();
         if (tabId === 'tab-tower') this.renderTowerPage();
         if (tabId === 'tab-pokedex') this.renderPokedex();
+        if (tabId === 'tab-pc') this.pcView.render();
         if (tabId === 'tab-settings') this.renderSettings();
         if (tabId === 'tab-battle') {
             this.renderTeam();
@@ -392,6 +397,10 @@ class GameUI {
                 break;
             case 'evolved':
                 this.showEvolutionNotification(data);
+                break;
+            case 'captureBlocked':
+                this.addBattleLog(`⚠️ PC 已满，错过了一只闪光 ${data.name}！`, 'shiny');
+                this.showToast('⚠️ PC 已满，无法收下闪光宝可梦');
                 break;
             case 'shinyEvolved':
                 this.addBattleLog(`✨ ${data.oldName} 的闪光形态传递给了 ${data.newName}！`, 'shiny');
@@ -781,15 +790,10 @@ class GameUI {
         }
         teamList.innerHTML = '<h3 style="font-size:14px;margin-bottom:4px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap"><span>⚔️ 战斗队伍 (' + this.game.gameState.team.length + '/6)</span>' + rateHtml + '</h3>';
 
-        // 出战宝可梦排在最前面，其余按等级从高到低排序
+        // 按队伍顺序显示（可以用 ▲▼ 调整顺序），出战者高亮
         const activeIdx = this.game.gameState.activePokemonIndex;
-        const restIndices = this.game.gameState.team.map((_, i) => i).filter(i => i !== activeIdx);
-        restIndices.sort((a, b) => {
-            const levelA = this.game.getPartyInstance(a)?.level || 1;
-            const levelB = this.game.getPartyInstance(b)?.level || 1;
-            return levelB - levelA;
-        });
-        const renderOrder = [activeIdx, ...restIndices];
+        const renderOrder = this.game.gameState.team.map((_, i) => i);
+        const partySize = renderOrder.length;
 
         renderOrder.forEach((index) => {
             const inst = this.game.getPartyInstance(index);
@@ -836,10 +840,12 @@ class GameUI {
                     <div class="slot-info">
                         <div class="slot-name">${shinyNamePrefix}${escapeHtml(pokemon.name)} ${isActive ? '⚔️' : ''} <small style="color:var(--text-secondary);font-weight:normal">Lv.${pokemon.level}</small>${skillBadgeHtml}</div>
                         <div class="slot-type-nature">${typeBadges}</div>
+                        <div class="slot-traits" title="个体编号 · 性别 · 性格 · 个体值">#${escapeHtml(inst.uid)} ${genderSymbol(inst.gender)} ${escapeHtml(getNature(inst.nature).name)} · IV ${Math.round(ivTotal(inst.ivs) / (IV_KEYS.length * 31) * 100)}%</div>
                     </div>
                     <div class="team-slot-actions">
+                        ${partySize > 1 ? `<button ${index === 0 ? 'disabled' : ''} onclick="gameUI.moveTeamMember(${index}, -1)" title="上移">▲</button><button ${index === partySize - 1 ? 'disabled' : ''} onclick="gameUI.moveTeamMember(${index}, 1)" title="下移">▼</button>` : ''}
                         ${!isActive ? `<button onclick="gameUI.setActive(${index})">出战</button>` : ''}
-                        ${!isActive && this.game.gameState.team.length > 1 ? `<button class="remove-btn" onclick="gameUI.removeFromTeam(${index})">移除</button>` : ''}
+                        ${!isActive && partySize > 1 ? `<button class="remove-btn" onclick="gameUI.removeFromTeam(${index})">放回PC</button>` : ''}
                     </div>
                 </div>
                 <div class="team-stats-wrapper">
@@ -890,10 +896,21 @@ class GameUI {
     }
 
     removeFromTeam(index) {
-        if (this.game.removeFromTeam(index)) {
+        const r = this.game.partyRemove(index);
+        if (r.ok) {
             this.renderTeam();
-            this.showToast('宝可梦已离开队伍');
+            if (this.currentTab === 'tab-pc') this.pcView.render();
+            this.showToast('宝可梦已放回 PC');
+        } else {
+            this.showToast(rosterMessage(r.code));
         }
+    }
+
+    // 队伍面板的 ▲▼：把第 index 位向前/向后挪一格
+    moveTeamMember(index, delta) {
+        const r = this.game.partyReorder(index, index + delta);
+        if (r.ok) this.renderTeam();
+        else this.showToast(rosterMessage(r.code));
     }
 
     addToTeamFromPokedex(pokemonId) {
@@ -942,6 +959,28 @@ class GameUI {
                 this.showToast(`⚡ 一击必杀策略: ${labels[radio.value]}`);
             });
         });
+    }
+
+    // 重复捕获策略：遇到已拥有的宝可梦时是否收为新的个体
+    _initCaptureDuplicates() {
+        const radios = document.querySelectorAll('input[name="capture-duplicates"]');
+        if (!radios.length) return;
+        radios.forEach(radio => {
+            radio.addEventListener('change', () => {
+                if (!radio.checked) return;
+                this.game.gameState.settings = this.game.gameState.settings || {};
+                this.game.gameState.settings.captureDuplicates = radio.value;
+                this.game.save();
+                const labels = { all: '有几率收为新个体', better: '只收个体值更高的', off: '不收重复' };
+                this.showToast(`🎒 重复捕获: ${labels[radio.value]}`);
+            });
+        });
+        this._syncCaptureDuplicates();
+    }
+
+    _syncCaptureDuplicates() {
+        const policy = this.game.getCaptureDuplicatePolicy();
+        document.querySelectorAll('input[name="capture-duplicates"]').forEach(r => { r.checked = r.value === policy; });
     }
 
     // 一击必杀策略：联动显示/隐藏
@@ -1941,6 +1980,8 @@ class GameUI {
         const radios = document.querySelectorAll('input[name="oneshot-strategy"]');
         radios.forEach(r => { r.checked = r.value === savedStrategy; });
 
+        this._syncCaptureDuplicates();
+
         // 同步地图切换条件
         this._syncRouteSwitchConditionVisibility();
         const savedCondition = this.game.gameState.settings?.routeSwitchCondition || '6v_shiny';
@@ -2101,7 +2142,7 @@ class GameUI {
     _describeOfflineEvent(ev) {
         const d = ev.data || {};
         switch (ev.event) {
-            case 'evolved': return `🌟 ${d.oldName} 进化成了 ${d.newName}`;
+            case 'evolved': return `🌟 ${d.oldName} 进化成了 ${d.newName}${d.keptLevel ? '' : '（新登记，Lv.1）'}`;
             case 'shinyEvolved': return `✨ ${d.newName} 获得了闪光形态`;
             case 'shinySpread': return `✨ ${d.sourceName} 的闪光传播给了 ${d.targetName}`;
             case 'shinyDefeated': return `✨ 获得了 ${d.name} 的闪光形态`;
@@ -2140,6 +2181,10 @@ class GameUI {
             const names = summary.newCatches.slice(0, 12).map(c => c.name).join('、');
             const more = summary.newCatches.length > 12 ? ` 等 ${summary.newCatches.length} 只` : '';
             addLine(`🆕 新捕获：${names}${more}`, 'highlight');
+        }
+        if (summary.duplicateCatches && summary.duplicateCatches.length > 0) {
+            const shinyCount = summary.duplicateCatches.filter(c => c.shiny).length;
+            addLine(`🎒 新增个体：${summary.duplicateCatches.length} 只已放入 PC${shinyCount ? `（其中闪光 ${shinyCount} 只）` : ''}`, 'highlight');
         }
         if (summary.ivUpgrades > 0) addLine(`💎 个体值提升：${summary.ivUpgrades} 次`);
         if (summary.levelUps.length > 0) {
@@ -2182,7 +2227,7 @@ class GameUI {
 
         // 时间较长或有重要事件时，保留一份可阅读的结算报告
         const showReport = !!summary && battles > 0 &&
-            (summary.events.length > 0 || summary.newCatches.length > 0 || totalMs >= 5 * 60 * 1000);
+            (summary.events.length > 0 || summary.newCatches.length > 0 || (summary.duplicateCatches || []).length > 0 || totalMs >= 5 * 60 * 1000);
         if (showReport) {
             this._setOfflineReportMode(true);
             this._renderOfflineReport(totalMs, summary);
@@ -2324,10 +2369,12 @@ class GameUI {
 
     showCatchNotification(pokemon) {
         // 构建捕获信息
-        let message = `捕获了 ${pokemon.name}`;
-        
+        let message = `捕获了 ${pokemon.shiny ? '✨闪光 ' : ''}${pokemon.name}`;
+
         if (pokemon.isFirstCatch) {
             message += ` (首次捕获！)`;
+        } else if (pokemon.isDuplicate) {
+            message += ` (又一只！已放入 PC，编号 #${pokemon.uid})`;
         } else if (pokemon.updatedStats && pokemon.updatedStats.length > 0) {
             const statNames = {
                 hp: '体力', atk: '攻击', def: '防御', 
@@ -2340,9 +2387,11 @@ class GameUI {
         }
         
         this.addBattleLog(message, 'catch');
+        if (pokemon.isDuplicate && pokemon.shiny) this.showToast(`✨ 捕获了一只闪光 ${pokemon.name}！`);
 
-        // 刷新队伍
+        // 刷新队伍 / PC
         this.scheduleRenderTeam();
+        if (this.currentTab === 'tab-pc') this.pcView.render();
     }
 
     showLevelUpNotification(pokemon) {
@@ -2356,7 +2405,9 @@ class GameUI {
 
     showEvolutionNotification(data) {
         // 改为显示在战斗日志中
-        this.addBattleLog(`🌟 ${data.oldName} 进化成了 ${data.newName}！等级重置为 Lv.1`, 'evolution');
+        const tail = data.keptLevel ? `保留等级 Lv.${data.pokemon.level}` : '新登记的形态，等级重置为 Lv.1';
+        this.addBattleLog(`🌟 ${data.oldName} 进化成了 ${data.newName}！${tail}`, 'evolution');
+        if (this.currentTab === 'tab-pc') this.pcView.render();
     }
 
     showConfirmDialog(title, message, onConfirm) {

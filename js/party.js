@@ -108,6 +108,21 @@ class PartyManager {
         return { ok: true };
     }
 
+    // 把 from 位置的成员挪到 to 位置（其余顺序依次顺延）；出战的仍是同一只
+    move(from, to) {
+        const st = this.state;
+        const n = st.party.length;
+        if (![from, to].every(x => Number.isInteger(x) && x >= 0 && x < n)) return { ok: false, code: 'bad_index' };
+        if (from === to) return { ok: true };
+        const activeUid = st.party[st.activePokemonIndex];
+        const [uid] = st.party.splice(from, 1);
+        st.party.splice(to, 0, uid);
+        const i = st.party.indexOf(activeUid);
+        st.activePokemonIndex = i === -1 ? 0 : i;
+        this.syncTeamMirror();
+        return { ok: true };
+    }
+
     setActive(index) {
         const st = this.state;
         if (!Number.isInteger(index) || index < 0 || index >= st.party.length) return { ok: false, code: 'bad_index' };

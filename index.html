@@ -285,6 +285,11 @@
                 </div>
             </div>
 
+            <!-- Tab: PC 与队伍（个体管理） -->
+            <div id="tab-pc" class="tab-content">
+                <div id="pc-container"></div>
+            </div>
+
             <!-- Tab 6: 设置界面 -->
             <div id="tab-settings" class="tab-content">
                 <div id="settings-container">
@@ -313,6 +318,12 @@
                             <p class="setting-radio-label">📋 切换条件：</p>
                             <label class="setting-radio"><input type="radio" name="route-switch-condition" value="6v_shiny"> ✨ 全部6V且闪光后切换</label>
                             <label class="setting-radio"><input type="radio" name="route-switch-condition" value="6v_only"> 🎯 全部6V后切换</label>
+                        </div>
+                        <div id="capture-duplicates-group" class="setting-radio-group">
+                            <p class="setting-radio-label">🎒 遇到已拥有的宝可梦时：</p>
+                            <label class="setting-radio"><input type="radio" name="capture-duplicates" value="all"> 有几率收为新的个体（默认，闪光必收）</label>
+                            <label class="setting-radio"><input type="radio" name="capture-duplicates" value="better"> 只收个体值总和更高的（闪光必收）</label>
+                            <label class="setting-radio"><input type="radio" name="capture-duplicates" value="off"> 不收（只提升图鉴代表的个体值，旧版行为）</label>
                         </div>
                         <button id="btn-upgrade-all-skills" class="setting-btn" style="display:none; margin-top: 12px;">⚡ 一键升级技能</button>
                     </div>
@@ -467,6 +478,7 @@
             <button class="tab-btn talent-tab-btn" data-tab="tab-talent"><span class="tab-icon">🌟</span><span class="tab-label">天赋</span></button>
             <button class="tab-btn tower-tab-btn" data-tab="tab-tower"><span class="tab-icon">🏝️</span><span class="tab-label">挑战</span></button>
             <button class="tab-btn" data-tab="tab-pokedex"><span class="tab-icon">📖</span><span class="tab-label">图鉴</span></button>
+            <button class="tab-btn" data-tab="tab-pc"><span class="tab-icon">🖥️</span><span class="tab-label">PC</span></button>
             <button class="tab-btn" data-tab="tab-settings"><span class="tab-icon">⚙️</span><span class="tab-label">设置</span></button>
         </nav>
     </div>
@@ -486,6 +498,7 @@
     <script src="js/pokemon-roster.js"></script>
     <script src="js/save-manager.js"></script>
     <script src="js/game-core.js"></script>
+    <script src="js/pc-view.js"></script>
     <script src="js/ui.js"></script>
     <script src="js/main.js"></script>
 </body>

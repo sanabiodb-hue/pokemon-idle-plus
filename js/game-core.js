@@ -2466,6 +2466,124 @@ class GameCore {
         return this.roster.moveToPc(uid).ok;
     }
 
+    // ===================== 队伍 / PC 服务（界面调用，统一返回 { ok, code, ... }）=====================
+    // 挑战塔进行中不允许改动队伍（塔里的血量比例按当前出战者计算）。
+    _rosterEditBlocked() {
+        if (!this.gameState) return 'no_game';
+        if (this._towerMode) return 'tower_locked';
+        if (this._isOfflineSimulating) return 'busy';
+        return null;
+    }
+
+    // 队伍改动之后：对齐旧视图、让进行中的战斗按新的出战个体/队友加成重新计算，并请求存档
+    _afterRosterEdit() {
+        this.roster.reconcile();
+        if (this.currentBattle && !this._towerMode) this.setActivePokemon(this.gameState.activePokemonIndex);
+        this.save();
+    }
+
+    // 把 PC 里的某只个体加入队伍（队尾）。同物种可以有多只同时在队伍里
+    partyAdd(uid) {
+        const blocked = this._rosterEditBlocked();
+        if (blocked) return { ok: false, code: blocked };
+        this.roster.reconcile();
+        const r = this.roster.moveToParty(uid);
+        if (r.ok) this._afterRosterEdit();
+        return r;
+    }
+
+    // 把队伍里第 index 位放回 PC（出战者和最后一只不能移出）
+    partyRemove(index) {
+        const blocked = this._rosterEditBlocked();
+        if (blocked) return { ok: false, code: blocked };
+        this.roster.reconcile();
+        const uid = this.gameState.party[index];
+        if (uid === undefined) return { ok: false, code: 'bad_index' };
+        const r = this.roster.moveToPc(uid);
+        if (r.ok) this._afterRosterEdit();
+        return r;
+    }
+
+    // 用 PC 里的个体换下队伍里第 index 位（换下的那只放进同一个 PC 格子）
+    partySwapWithPc(index, pcUid) {
+        const blocked = this._rosterEditBlocked();
+        if (blocked) return { ok: false, code: blocked };
+        this.roster.reconcile();
+        const r = this.roster.swapPartyWithPc(index, pcUid);
+        if (r.ok) this._afterRosterEdit();
+        return r;
+    }
+
+    // 调整队伍顺序：把第 from 位挪到第 to 位（出战的仍是同一只）
+    partyReorder(from, to) {
+        const blocked = this._rosterEditBlocked();
+        if (blocked) return { ok: false, code: blocked };
+        this.roster.reconcile();
+        const r = this.roster.party.move(from, to);
+        if (r.ok && from !== to) this._afterRosterEdit();
+        return r;
+    }
+
+    // PC 内部整理：把 PC 里的一只移到另一个箱子的第一个空格
+    pcMoveToBox(uid, boxIndex) {
+        const pc = this.roster.pc;
+        const box = this.gameState.pc.boxes[boxIndex];
+        if (!box) return { ok: false, code: 'bad_box' };
+        const slot = box.slots.indexOf(null);
+        if (slot === -1) return { ok: false, code: 'box_full' };
+        const r = pc.move(uid, boxIndex, slot);
+        if (r.ok) this.save();
+        return r;
+    }
+
+    renamePokemon(uid, nickname) {
+        const r = this.roster.setNickname(uid, nickname);
+        if (r.ok) this.save();
+        return r;
+    }
+
+    // 放生（只能放生 PC 里的；每个物种至少保留一只）。放生的记录写进 released
+    releasePokemon(uid) {
+        const r = this.roster.release(uid, { reason: 'release' });
+        if (r.ok) { this._dexBonus = null; this.save(); }
+        return r;
+    }
+
+    // 界面用的个体快照（界面不需要知道 ownedPokemon/party/pc 的内部结构）
+    describeInstance(uid) {
+        const inst = this.roster.get(uid);
+        if (!inst) return null;
+        const data = POKEMON_DATA[inst.speciesId];
+        const where = this.roster.locate(uid);
+        const total = ivTotal(inst.ivs);
+        return {
+            uid: inst.uid,
+            speciesId: inst.speciesId,
+            name: data.name,
+            nickname: inst.nickname,
+            displayName: getInstanceDisplayName(inst),
+            types: data.types,
+            level: inst.level,
+            ivs: { ...inst.ivs },
+            ivTotal: total,
+            ivPercent: Math.round(total / (IV_KEYS.length * 31) * 100),
+            nature: inst.nature,
+            natureName: getNature(inst.nature).name,
+            gender: inst.gender,
+            ability: inst.ability,
+            shiny: inst.shiny,
+            origin: inst.origin,
+            originRoute: inst.originRoute,
+            caughtAt: inst.caughtAt,
+            battles: inst.battles,
+            isPrimary: this.roster.isPrimary(inst),
+            where: where ? where.where : null,
+            partyIndex: where && where.where === 'party' ? where.index : null,
+            box: where && where.where === 'pc' ? where.box : null,
+            slot: where && where.where === 'pc' ? where.slot : null,
+        };
+    }
+
     // ===================== 地图 =====================
     getRoute(routeId) {
         for (const regionKey in REGIONS) {
