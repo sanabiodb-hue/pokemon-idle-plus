@@ -2250,6 +2250,8 @@ class GameCore {
     // 击败后处理：首次捕获或更新个体值
     // 捕获入口：先问"要不要收"（默认永远收，与旧版一致；自动化狩猎进行时由策略决定），再走原有捕获规则
     processDefeat(wildPokemon) {
+        if (wildPokemon._captureResolved) return null;      // 同一只野生宝可梦只结算一次捕获（防重复个体/重复奖励）
+        wildPokemon._captureResolved = true;
         const decision = this.decideCapture(wildPokemon);
         const q = decision.quality;
         this._emit('capture_attempted', {
@@ -2779,7 +2781,7 @@ class GameCore {
         return null;
     }
 
-    changeRoute(routeId) {
+    changeRoute(routeId, reason = 'manual') {
         // 检查路线所在地区是否已解锁
         for (const regionKey in REGIONS) {
             const region = REGIONS[regionKey];
@@ -2795,7 +2797,7 @@ class GameCore {
         const changed = previousRoute !== routeId;
         this.gameState.currentRoute = routeId;
         if (changed) {
-            this._emit('route_changed', { route: routeId, from: previousRoute, reason: 'manual' });
+            this._emit('route_changed', { route: routeId, from: previousRoute, reason });
             this._track('route_change', { route: routeId });
             this.guideNote('routeChanged');
         }

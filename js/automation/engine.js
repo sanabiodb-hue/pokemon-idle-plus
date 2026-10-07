@@ -21,6 +21,24 @@ const AutomationMethods = {
         return a && a.session ? a.session : null;
     },
 
+    // ---------- 动作 ----------
+    // 所有自动化动作（开始/停止狩猎、换队员、换路线……）的唯一入口：校验 → 执行 → 发事件
+    dispatchAutomationAction(action) {
+        if (!this._dispatcher) this._dispatcher = new ActionDispatcher(this);
+        return this._dispatcher.dispatch(action);
+    },
+
+    // 路线是否存在且所在地区已解锁（changeRoute 本身不校验路线是否存在）
+    _checkRouteAccess(routeId) {
+        if (typeof routeId !== 'string' || !routeId) return { ok: false, code: 'invalid_route', message: 'Rota inválida.' };
+        for (const regionKey in REGIONS) {
+            if (REGIONS[regionKey].routes.some(r => r.id === routeId)) {
+                return this.isRegionUnlocked(regionKey) ? { ok: true } : { ok: false, code: 'route_locked', message: 'Essa rota ainda está bloqueada.' };
+            }
+        }
+        return { ok: false, code: 'invalid_route', message: 'Rota inválida.' };
+    },
+
     // 严格校验后才会保存；无效策略不改变任何状态。返回 { ok, errors, policy }
     setAutomationPolicy(raw) {
         const result = validateAutomationPolicy(raw);
