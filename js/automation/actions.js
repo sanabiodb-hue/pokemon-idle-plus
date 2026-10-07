@@ -50,6 +50,7 @@ const AUTOMATION_ACTION_HANDLERS = {
             gs.automation.session = session;
             game._emit('hunt_started', { id: session.id, route: session.routeId });
             game.save();
+            game._automationSync();
             return { sessionId: session.id };
         },
     },
@@ -61,6 +62,7 @@ const AUTOMATION_ACTION_HANDLERS = {
             huntSessionTransition(s, 'paused', game.now());
             game._emit('hunt_paused', { id: s.id });
             game.save();
+            game._automationSync();
             return {};
         },
     },
@@ -77,6 +79,7 @@ const AUTOMATION_ACTION_HANDLERS = {
             huntSessionTransition(s, 'running', game.now());
             game._emit('hunt_resumed', { id: s.id });
             game.save();
+            game._automationSync();
             return {};
         },
     },
@@ -92,6 +95,7 @@ const AUTOMATION_ACTION_HANDLERS = {
             huntSessionTransition(s, 'stopped', game.now(), reason);
             game._emit('hunt_stopped', { id: s.id, reason, durationMs: huntSessionDurationMs(s, game.now()), stats: { ...s.stats } });
             game.save();
+            game._automationSync();
             return { reason };
         },
     },

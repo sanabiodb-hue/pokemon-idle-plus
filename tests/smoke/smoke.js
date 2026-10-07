@@ -109,6 +109,21 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
             await context.close();
         }
 
+        // ---------- A2. 自动化（阶段 5A）：用控制台工具开始/暂停/结束一次狩猎 ----------
+        {
+            const { page, context } = await newPage(() => { localStorage.setItem('pokemon_idle_tutorial_done', '1'); });
+            await page.goto(base);
+            await page.waitForFunction(() => typeof game !== 'undefined' && game.currentBattle, null, { timeout: 10000 });
+            const startMsg = await page.evaluate(() => caca.iniciar({ stopConditions: { maxBattles: 3 } }));
+            check('Automação: caçada inicia pelo console', startMsg === 'Caçada iniciada.', String(startMsg));
+            await page.waitForFunction(() => caca.status().estado === 'stopped' || caca.status().batalhas >= 3, null, { timeout: 60000 }).catch(() => {});
+            const st = await page.evaluate(() => caca.status());
+            check('Automação: caçada para sozinha ao atingir o limite de batalhas', st.estado === 'stopped' && st.motivoParada === 'max_battles' && st.batalhas === 3, JSON.stringify(st));
+            const sync = await page.evaluate(() => ({ listeners: game.bus.hasListeners(), battling: !!game.currentBattle }));
+            check('Automação: após parar, o jogo continua no modo normal sem assinantes', !sync.listeners && sync.battling, JSON.stringify(sync));
+            await context.close();
+        }
+
         // ---------- B. 旧版存档 + 1 小时离线：结算报告 ----------
         {
             const legacy = fs.readFileSync(path.join(ROOT, 'tests/fixtures/legacy-localstorage.txt'), 'utf8');

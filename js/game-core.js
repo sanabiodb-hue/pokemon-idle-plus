@@ -1672,7 +1672,8 @@ class GameCore {
             this.save();
 
             // 自动更换最优宝可梦出战
-            if (this.gameState.settings?.autoSwitchBest && this.gameState.team.length > 1) {
+            // 自动化狩猎进行时，换人由引擎按策略决定（SWITCH_POKEMON），这里不再按旧设置自动换
+            if (!this.isHuntRunning() && this.gameState.settings?.autoSwitchBest && this.gameState.team.length > 1) {
                 const bestIndex = this.getBestTeamMemberForEnemy(wildPokemon);
                 if (bestIndex !== -1 && bestIndex !== this.gameState.activePokemonIndex) {
                     this.gameState.activePokemonIndex = bestIndex;
@@ -1955,6 +1956,9 @@ class GameCore {
                 if (battle.playerCurrentHp <= 0) {
                     battle.playerCurrentHp = 0;
                     if (d.activeInst) d.activeInst.stats.faints++;
+                    this._emit('battle_completed', {
+                        result: 'defeat', enemyId: this.gameState.currentEnemy ? this.gameState.currentEnemy.id : null, xp: 0, gold: 0, route: this.gameState.currentRoute, tower: !!this._towerMode,
+                    });
                     if (this.onBattleEvent) {
                         this.onBattleEvent('playerFainted', {});
                     }
@@ -2865,6 +2869,7 @@ class GameCore {
 
     // 自动切换到下一个未完成的地图（无需徽章，直接开放）
     tryAutoRouteSwitch() {
+        if (this.isHuntRunning()) return null;                 // 自动化狩猎进行时，换路线由策略（route.mode）决定
         if (!this.gameState.settings?.autoRouteSwitch) return null;
         if (!this.gameState.currentRoute) return null;
 
