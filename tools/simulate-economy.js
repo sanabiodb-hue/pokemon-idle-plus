@@ -52,6 +52,7 @@ function createPlayer(profileKey, buildKey, opts = {}) {
     game._simMode = true;
     if (profile.badge) game.gameState.badges.kanto = { unlocked: true, gem: null };
     unlockRegions(game, ctx, profile.regions);
+    game._invalidateAllCaches();
     game.gameState.upgrades = { ...profile.upgrades };
     game._invalidateModifiers();
     game.gameState.gold = 0;
@@ -78,8 +79,9 @@ function chooseUpgrade(game, build) {
         if (game.getUpgradeMissing(id).length) continue;
         return id;
     }
-    for (const u of game.getUpgradeCatalog()) if (!u.maxed && !u.locked && u.build === 'support') return u.id;
-    return null;
+    // alvo no máximo: segue com o upgrade disponível mais barato (apoio primeiro, depois os outros estilos)
+    const rest = game.getUpgradeCatalog().filter(u => !u.maxed && !u.locked).sort((a, b) => a.cost - b.cost);
+    return rest.length ? rest[0].id : null;
 }
 
 function runPlayer(profileKey, buildKey, opts = {}) {
@@ -87,13 +89,16 @@ function runPlayer(profileKey, buildKey, opts = {}) {
     const { game, ctx, build } = p;
     const horizons = opts.horizons || HORIZONS;
     const total = Math.max(...horizons.map(h => h[1]));
-    const tickMs = opts.tickMs || (total > 2 * DAY ? 15 * MIN : 5 * MIN);
-    const routeEveryMs = opts.routeEveryMs || (total > 2 * DAY ? 6 * HOUR : HOUR);
+    // passo e reavaliação de rota: finos no primeiro dia (onde a progressão é mais rápida), mais grossos depois
+    const tickFor = (el) => opts.tickMs || (el < DAY ? 5 * MIN : 15 * MIN);
+    const routeEveryFor = (el) => opts.routeEveryMs || (el < DAY ? HOUR : 3 * HOUR);
     const t0 = game.now();
     const log = { firstPurchaseMs: null, secondUpgradeMs: null, unlockMs: {}, potionsBought: 0, potionSpend: 0, upgradeSpend: 0, upgradesBought: 0, stoppedMs: 0 };
+    log.purchaseTimes = [];
     game.bus.on('upgrade_purchased', () => {
         log.upgradesBought++;
         const t = game.now() - t0;
+        log.purchaseTimes.push(t);
         if (log.firstPurchaseMs === null) log.firstPurchaseMs = t;
         if (log.upgradesBought === 2) log.secondUpgradeMs = t;
     });
@@ -101,6 +106,8 @@ function runPlayer(profileKey, buildKey, opts = {}) {
     game.bus.on('money_spent', (e) => { if (e.reason === 'upgrade_purchase') log.upgradeSpend += e.amount; });
 
     let potionsPerTick = 3;
+    log.maxWaitMs = 0;                                   // pior espera até conseguir pagar o upgrade disponível mais barato
+    let lastMoneyEarned = game.gameState.economy.earned, incomeEma = 0;
     let lastRouteEval = -Infinity;
     const snapshots = [];
     const series = [];                                    // (hora, xp acumulado) para achar cruzamentos
@@ -136,7 +143,7 @@ function runPlayer(profileKey, buildKey, opts = {}) {
             checkUnlocks();
         }
         // 3) rota por objetivo (a cada routeEveryMs)
-        if (elapsed - lastRouteEval >= routeEveryMs) {
+        if (elapsed - lastRouteEval >= routeEveryFor(elapsed)) {
             lastRouteEval = elapsed;
             const cmp = game.compareRoutes();
             const rec = game.recommendRouteForGoal(build.goal, cmp);
@@ -176,7 +183,7 @@ function runPlayer(profileKey, buildKey, opts = {}) {
     let lastSnapXp = 0, lastSnapMoney = 0;
     while (elapsed < total) {
         manage();
-        const step = Math.min(tickMs, total - elapsed);
+        const step = Math.min(tickFor(elapsed), total - elapsed);
         const before = game.getHuntSession() ? { ...game.getHuntSession().stats } : null;
         const r = ctx.simulateHunt(game, step);
         if (!r.ok) break;
@@ -189,6 +196,17 @@ function runPlayer(profileKey, buildKey, opts = {}) {
             game.clock.advance(step - r.simulatedMs);                  // parada no meio do intervalo: o tempo restante passa parado
         }
         elapsed += step;
+        {   // espera pelo próximo upgrade mais barato, na renda recente
+            const earned = game.gameState.economy.earned;
+            const perHour = (earned - lastMoneyEarned) / (step / HOUR);
+            lastMoneyEarned = earned;
+            incomeEma = incomeEma === 0 ? perHour : 0.7 * incomeEma + 0.3 * perHour;
+            const avail = game.getUpgradeCatalog().filter(u => !u.maxed && !u.locked);
+            if (avail.length && incomeEma > 0) {
+                const cheapest = Math.min(...avail.map(u => u.cost));
+                log.maxWaitMs = Math.max(log.maxWaitMs, Math.max(0, cheapest - game.getMoney()) / incomeEma * HOUR);
+            }
+        }
         void before; void s; void potionUsedTotal;
         series.push([elapsed / HOUR, game.gameState.stats.totalExp - xpStart]);
         while (nextHorizon < horizons.length && elapsed >= horizons[nextHorizon][1] - 1) {
@@ -201,6 +219,10 @@ function runPlayer(profileKey, buildKey, opts = {}) {
             nextHorizon++;
         }
     }
+    // maior intervalo sem comprar nada (de 0 até a última compra e até o fim da simulação)
+    let gap = 0, prev = 0;
+    for (const t of log.purchaseTimes.concat([total])) { gap = Math.max(gap, t - prev); prev = t; }
+    log.maxGapMs = gap;
     return { profile: p.profileKey, build: p.buildKey, snapshots, log, series };
 }
 
@@ -266,11 +288,39 @@ function printComparison(cmp) {
     console.log('\nTempos: ');
     for (const b of keys) {
         const l = cmp.runs[b].log;
-        console.log(`  ${BUILDS[b].label.padEnd(12)} 1ª compra: ${dur(l.firstPurchaseMs)} | 2º upgrade: ${dur(l.secondUpgradeMs)} | passa "sem upgrades" em XP: ${cmp.crossings[b] === undefined ? '—' : cmp.crossings[b] === null ? 'nunca' : cmp.crossings[b].toFixed(1) + ' h'} | parado sem poções: ${dur(l.stoppedMs)}`);
+        console.log(`  ${BUILDS[b].label.padEnd(12)} 1ª compra: ${dur(l.firstPurchaseMs)} | 2º upgrade: ${dur(l.secondUpgradeMs)} | passa "sem upgrades" em XP: ${cmp.crossings[b] === undefined ? '—' : cmp.crossings[b] === null ? 'nunca' : cmp.crossings[b].toFixed(1) + ' h'} | maior intervalo sem comprar: ${dur(l.maxGapMs)} | maior espera pelo mais barato: ${dur(l.maxWaitMs)} | parado sem poções: ${dur(l.stoppedMs)}`);
     }
     const last = cmp.runs[keys[0]].snapshots.at(-1);
     if (last) console.log(`  Custo efetivo da poção (gasto ÷ usadas): ${keys.map(b => BUILDS[b].label + ' ' + fmt(cmp.runs[b].snapshots.at(-1).effectivePotionCost)).join(' | ')}`);
     console.log('  Desbloqueios (quando o requisito foi cumprido):', keys.filter(b => b !== 'none').map(b => BUILDS[b].label + ': ' + Object.entries(cmp.runs[b].log.unlockMs).map(([id, t]) => id.replace('hunt_', '').replace('_efficiency', '').replace('potion_', 'pot_') + '=' + dur(t)).join(', ')).join(' || '));
+}
+
+// Tabela em Markdown: Horizonte × métrica × build (para o README / relatório de balanceamento)
+function toMarkdown(res) {
+    const lines = [];
+    for (const p of Object.keys(res)) {
+        const cmp = res[p];
+        const keys = Object.keys(cmp.runs);
+        lines.push(`### ${PROFILES[p].label}`, '', `| Horizonte | Métrica | ${keys.map(k => BUILDS[k].label).join(' | ')} |`, `|---|---|${keys.map(() => '---').join('|')}|`);
+        const n = cmp.runs[keys[0]].snapshots.length;
+        for (let i = 0; i < n; i++) {
+            const label = cmp.runs[keys[0]].snapshots[i].label;
+            const row = (name, fn) => lines.push(`| ${name === 'Moedas' ? label : ''} | ${name} | ${keys.map(k => fn(cmp.runs[k].snapshots[i])).join(' | ')} |`);
+            row('Moedas', sn => short(sn.moneyEarned));
+            row('XP', sn => short(sn.xp));
+            row('Poções (usadas/compradas)', sn => `${short(sn.potionsUsed)}/${short(sn.potionsBought)}`);
+            row('Upgrades', sn => String(sn.upgrades));
+        }
+        lines.push('', `Melhor por horizonte: ${cmp.winners.map(w => `${w.label}: XP ${w.xp ? BUILDS[w.xp.build].label : '—'} · moedas ${w.moneyEarned ? BUILDS[w.moneyEarned.build].label : '—'}`).join(' | ')}`, '');
+        lines.push('| Build | 1ª compra | 2º upgrade | maior intervalo sem comprar | maior espera pelo mais barato | passa "sem upgrades" em XP | parado sem poções | custo efetivo da poção |', '|---|---|---|---|---|---|---|---|');
+        for (const k of keys) {
+            const l = cmp.runs[k].log;
+            const x = cmp.crossings[k];
+            lines.push(`| ${BUILDS[k].label} | ${dur(l.firstPurchaseMs)} | ${dur(l.secondUpgradeMs)} | ${dur(l.maxGapMs)} | ${dur(l.maxWaitMs)} | ${k === 'none' ? '—' : x === null ? 'nunca' : x === undefined ? '—' : x.toFixed(1) + ' h'} | ${dur(l.stoppedMs)} | ${fmt(cmp.runs[k].snapshots.at(-1).effectivePotionCost)} |`);
+        }
+        lines.push('', `Desbloqueios (quando os requisitos foram cumpridos): ${keys.filter(k => k !== 'none').map(k => BUILDS[k].label + ' — ' + Object.entries(cmp.runs[k].log.unlockMs).map(([id, t]) => id + ' ' + dur(t)).join(', ')).join(' · ')}`, '');
+    }
+    return lines.join('\n');
 }
 
 function runAll(opts = {}) {
@@ -289,8 +339,9 @@ if (require.main === module) {
     if (arg('profile')) opts.profiles = arg('profile').split(',');
     if (arg('build')) opts.builds = ['none'].concat(arg('build').split(','));
     const res = runAll(opts);
+    if (args.includes('--markdown')) { console.log(toMarkdown(res)); return; }
     if (args.includes('--json')) console.log(JSON.stringify(res, (k, v) => (k === 'series' ? undefined : v), 2));
     else for (const p of Object.keys(res)) printComparison(res[p]);
 }
 
-module.exports = { PROFILES, BUILDS, HORIZONS, createPlayer, runPlayer, compareBuilds, runAll, printComparison };
+module.exports = { toMarkdown, PROFILES, BUILDS, HORIZONS, createPlayer, runPlayer, compareBuilds, runAll, printComparison };

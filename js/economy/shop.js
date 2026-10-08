@@ -35,6 +35,23 @@ const ShopMethods = {
         return peak;
     },
 
+    // 定价等级：进度等级，但不超过"已解锁路线里最高的等级"——收入是由能去的路线决定的，
+    // 不能让价格跟着宝可梦等级一路涨到收入够不着（例如被困在关都最后一张图的玩家）
+    _pricingCap() {
+        if (this._pricingCapCache) return this._pricingCapCache;
+        let cap = 1;
+        for (const key in REGIONS) {
+            if (!this.isRegionUnlocked(key)) continue;
+            for (const r of REGIONS[key].routes) if (r.levelRange && r.levelRange[1] > cap) cap = r.levelRange[1];
+        }
+        this._pricingCapCache = cap;
+        return cap;
+    },
+
+    getPricingLevel() {
+        return Math.min(this.getProgressLevel(), this._pricingCap());
+    },
+
     getPotionHealPercent() {
         return Math.min(1, POTION_HEAL_PERCENT * this.getModifier('potion_heal').mult);
     },
@@ -45,7 +62,7 @@ const ShopMethods = {
 
     getPotionPrice() {
         const cfg = this.getEconomyConfig().potion;
-        return Math.max(cfg.basePrice, Math.ceil(cfg.winsPerPotion * baseGoldPerWin(this.getProgressLevel())));
+        return Math.max(cfg.basePrice, Math.ceil(cfg.winsPerPotion * baseGoldPerWin(this.getPricingLevel())));
     },
 
     // 商店目录（界面只读这个）

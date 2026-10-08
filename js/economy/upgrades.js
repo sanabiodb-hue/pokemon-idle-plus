@@ -2,7 +2,7 @@
 // 升级引擎 + 修改器注册表（挂在 GameCore 上的 mixin）
 //
 // 修改器：核心里所有"被加成"的数值都通过 getModifier(stat) 取得，来源目前只有升级（以后可以接道具/天赋）。
-//   getModifier('exp' | 'gold' | 'battle_delay' | 'potion_heal' | 'potion_capacity') → { mult, add }
+//   getModifier('exp' | 'gold' | 'battle_tempo' | 'potion_heal' | 'potion_capacity') → { mult, add }
 //   Live 与 Fast 两个驱动走同一批核心函数，所以自动共用同一套修改器。
 // 升级购买是原子的：校验 → spendMoney('upgrade_purchase') → 升级 → 清缓存 → 发 upgrade_purchased。
 // ============================================================
@@ -53,7 +53,7 @@ const UpgradeMethods = {
     // 进度缩放：升级价格跟着"进度等级"走（和药水价格同一套逻辑），这样升级永远是"几小时收入"的量级
     _upgradeCostScale() {
         const ref = this.getEconomyConfig().upgradeCostScale.referenceLevel;
-        return Math.max(1, baseGoldPerWin(this.getProgressLevel()) / baseGoldPerWin(ref));
+        return Math.max(1, baseGoldPerWin(this.getPricingLevel()) / baseGoldPerWin(ref));
     },
 
     getUpgradeCost(id) {
@@ -61,7 +61,11 @@ const UpgradeMethods = {
         if (!def) return null;
         const level = this.getUpgradeLevel(id);
         if (level >= def.maxLevel) return null;
-        return Math.ceil(def.cost.base * Math.pow(def.cost.growth, level) * this._upgradeCostScale());
+        // 前期（lateFrom 级之前）按 growth 增长，之后按更陡的 lateGrowth：前几级保持顺滑，满级需要很长时间
+        const c = def.cost;
+        const early = c.lateFrom === undefined ? level : Math.min(level, c.lateFrom);
+        const late = Math.max(0, level - early);
+        return Math.ceil(c.base * Math.pow(c.growth, early) * Math.pow(c.lateGrowth || c.growth, late) * this._upgradeCostScale());
     },
 
     // 还没满足的前置条件（空数组 = 已解锁）

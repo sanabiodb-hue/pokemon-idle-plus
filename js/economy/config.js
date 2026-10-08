@@ -23,7 +23,7 @@ const ECONOMY_CONFIG = {
     },
 
     // 升级（阶段 6 的 5 个）：花钱买"效率"。所有效果通过修改器注册表（modifiers.js）生效，核心里没有 if 升级X。
-    //   cost(n) = ceil(base × growth^n × 进度缩放)，n = 当前等级（买下一级的价格）
+    //   cost(n) = ceil(base × growth^min(n,lateFrom) × lateGrowth^max(0,n−lateFrom) × 进度缩放)，n = 当前等级（买下一级的价格）
     //   effects：stat 是修改器名；kind 'mult' = 1 + perLevel×等级（delay 类用 1 − perLevel×等级，不低于 floor）；'add' = perLevel×等级
     //   requires：[{ id, level }]，全部满足才解锁
     // 数值是起点，最终由 tools/simulate-economy.js 的模拟结果校准。
@@ -32,31 +32,31 @@ const ECONOMY_CONFIG = {
         heal_efficiency: {
             id: 'heal_efficiency', name: 'Eficiência de Cura', icon: '💊', build: 'support',
             description: 'Cada poção recupera mais HP, então você gasta menos poções.',
-            maxLevel: 10, cost: { base: 150, growth: 1.45 }, requires: [],
+            maxLevel: 10, cost: { base: 150, growth: 1.3 }, requires: [],
             effects: [{ stat: 'potion_heal', kind: 'mult', perLevel: 0.08, unit: '% de cura' }],
         },
         potion_capacity: {
             id: 'potion_capacity', name: 'Capacidade de Poções', icon: '🎒', build: 'support',
             description: 'Aumenta quantas poções você consegue guardar: caçadas longas e offline aguentam mais.',
-            maxLevel: 10, cost: { base: 120, growth: 1.4 }, requires: [],
+            maxLevel: 10, cost: { base: 120, growth: 1.25 }, requires: [],
             effects: [{ stat: 'potion_cap', kind: 'add', perLevel: 6, unit: ' poções' }],
         },
         hunt_speed: {
             id: 'hunt_speed', name: 'Velocidade de Caça', icon: '⚡', build: 'speed',
-            description: 'Reduz o intervalo entre um encontro e o próximo.',
-            maxLevel: 15, cost: { base: 300, growth: 1.5 }, requires: [{ id: 'heal_efficiency', level: 2 }],
-            effects: [{ stat: 'battle_delay', kind: 'delay', perLevel: 0.04, floor: 0.4, unit: '% de intervalo' }],
+            description: 'Acelera o ritmo de toda a caçada (lutas e intervalo entre encontros): mais batalhas por hora, com o mesmo resultado.',
+            maxLevel: 15, cost: { base: 650, growth: 1.3, lateFrom: 8, lateGrowth: 1.55 }, requires: [{ id: 'heal_efficiency', level: 2 }, { id: 'potion_capacity', level: 2 }],
+            effects: [{ stat: 'battle_tempo', kind: 'delay', perLevel: 0.02, floor: 0.7, unit: '% de tempo por luta' }],
         },
         hunt_xp: {
             id: 'hunt_xp', name: 'XP de Caça', icon: '📚', build: 'xp',
             description: 'Aumenta a EXP ganha ao vencer.',
-            maxLevel: 20, cost: { base: 400, growth: 1.5 }, requires: [{ id: 'potion_capacity', level: 2 }],
+            maxLevel: 20, cost: { base: 400, growth: 1.3, lateFrom: 10, lateGrowth: 1.5 }, requires: [{ id: 'heal_efficiency', level: 2 }, { id: 'potion_capacity', level: 2 }],
             effects: [{ stat: 'exp', kind: 'mult', perLevel: 0.05, unit: '% de EXP' }],
         },
         hunt_profit: {
             id: 'hunt_profit', name: 'Lucro de Caça', icon: '💰', build: 'money',
             description: 'Aumenta as moedas ganhas ao vencer.',
-            maxLevel: 20, cost: { base: 500, growth: 1.5 }, requires: [{ id: 'heal_efficiency', level: 2 }, { id: 'potion_capacity', level: 2 }],
+            maxLevel: 20, cost: { base: 500, growth: 1.3, lateFrom: 10, lateGrowth: 1.5 }, requires: [{ id: 'heal_efficiency', level: 2 }, { id: 'potion_capacity', level: 2 }],
             effects: [{ stat: 'gold', kind: 'mult', perLevel: 0.05, unit: '% de moedas' }],
         },
     },
@@ -75,6 +75,7 @@ const ECONOMY_CONFIG = {
         estimateMs: 30 * 60 * 1000,            // 估算用的模拟时长
         maxCandidates: 8,                      // 一次最多比较多少条路线
         minWinRate: 50,                        // 胜率低于此值的路线不会被推荐为"最好"
+        maxHealCostShare: 0.5,                 // 治疗成本占该路线收入的比例上限：超过就不可持续，不会被推荐为"最好"（但仍会列出并给出警告）
         levelBand: [0.3, 1.3],                 // 候选路线的最低等级 ∈ [队伍平均等级×0.3, ×1.3]
         recommendMinGainPct: 5,                // 比当前路线至少好这么多才推荐换
     },

@@ -69,7 +69,7 @@ test('loja: preço, efeito, estoque; comprar 1/5/10 pelo núcleo; sem dinheiro d
 });
 
 test('upgrades: nível, efeito atual → próximo, custo claro ("gastar $X para ir de A para B"), requisitos', () => {
-    const { dom, game, view, ui } = setup();
+    const { dom, game, view, ui, ctx } = setup();
     view.showSection('upgrades');
     const t = dom.text('hunt-upgrades');
     for (const name of ['Eficiência de Cura', 'Capacidade de Poções', 'Velocidade de Caça', 'XP de Caça', 'Lucro de Caça']) assert.match(t, new RegExp(name));
@@ -83,7 +83,8 @@ test('upgrades: nível, efeito atual → próximo, custo claro ("gastar $X para 
     view.eco.handleAction('buy-upgrade', { id: 'heal_efficiency' });
     assert.equal(game.getUpgradeLevel('heal_efficiency'), 1);
     assert.match(dom.text('hunt-upgrades'), /Nv\. 1 ?\/10 · \+8% de cura/);
-    assert.match(dom.text('hunt-upgrades'), /Gastar \$218 para ir de \+8% de cura para \+16% de cura/);
+    const second = Math.ceil(ctx.ECONOMY_CONFIG.upgrades.heal_efficiency.cost.base * ctx.ECONOMY_CONFIG.upgrades.heal_efficiency.cost.growth);
+    assert.match(dom.text('hunt-upgrades'), new RegExp(`Gastar \\$${second} para ir de \\+8% de cura para \\+16% de cura`));
     view.eco.handleAction('buy-upgrade', { id: 'hunt_speed' });
     assert.match(ui.toasts.at(-1), /ainda está bloqueado/);
     assert.equal(game.getUpgradeLevel('hunt_speed'), 0);

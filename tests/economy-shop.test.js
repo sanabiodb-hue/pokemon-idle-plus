@@ -5,9 +5,11 @@ const assert = require('node:assert/strict');
 const { newGame, plain } = require('./helpers/game');
 
 const setLevel = (game, lv) => { game.roster.primaryOf(25).level = lv; };
+const unlockAll = (game) => { for (let id = 1; id <= 1025; id++) game.gameState.pokedex[id] = 'caught'; game._invalidateAllCaches(); };
 
 test('preço da poção cresce com o progresso (tabela inicial) e nunca fica abaixo do preço base', () => {
     const { game, ctx } = newGame();
+    unlockAll(game);
     const cfg = ctx.ECONOMY_CONFIG.potion;
     const expected = [[5, 40], [100, 200], [1000, 630], [10000, 2000], [24500, 3130]];
     for (const [lv, price] of expected) {
@@ -21,6 +23,7 @@ test('preço da poção cresce com o progresso (tabela inicial) e nunca fica aba
 
 test('o preço só sobe: perder nível (ex.: evolução que reinicia o nível) não barateia a poção', () => {
     const { game } = newGame();
+    unlockAll(game);
     setLevel(game, 2000);
     const high = game.getPotionPrice();
     setLevel(game, 1);
@@ -159,4 +162,14 @@ test('loop de poção: caçada para sem poções, comprar libera e uma nova caç
     assert.equal(game.getPotions(), 4, 'uma poção usada pela cura automática');
     assert.equal(game.isHuntRunning(), true);
     game.stopBattle();
+});
+
+test('o preço acompanha a renda que o jogador consegue ter: limitado ao nível das rotas já desbloqueadas', () => {
+    const { game } = newGame();
+    setLevel(game, 10000);                                   // só Kanto liberado (rotas até o nível 135)
+    assert.equal(game.getPricingLevel(), 135);
+    assert.equal(game.getPotionPrice(), 230);                // 10 × ouro por vitória no nível 135
+    assert.equal(game.gameState.economy.progressLevel, 10000, 'o recorde de nível continua registrado');
+    unlockAll(game);
+    assert.equal(game.getPotionPrice(), 2000, 'liberando as regiões, o preço acompanha');
 });

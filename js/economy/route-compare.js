@@ -94,6 +94,7 @@ const RouteCompareMethods = {
         const cfg = this.getEconomyConfig().compare;
         if (rates.winRate < cfg.minWinRate) w.push({ code: 'low_win_rate', text: `Taxa de vitória baixa (${Math.round(rates.winRate)}%).` });
         if (rates.healCostPerHour > rates.moneyPerHour && rates.healCostPerHour > 0) w.push({ code: 'potion_burn', text: 'O custo de cura passa do dinheiro que a rota rende: você perde moedas a cada hora.' });
+        else if (rates.healCostPerHour > rates.moneyPerHour * cfg.maxHealCostShare) w.push({ code: 'potion_heavy_cost', text: `As poções consomem mais de ${Math.round(cfg.maxHealCostShare * 100)}% do dinheiro que a rota rende.` });
         else if (rates.potionsPerHour > this.getPotionCapacity() * 2) w.push({ code: 'potion_heavy', text: 'Consome muitas poções por hora; o estoque acaba rápido.' });
         return w;
     },
@@ -113,7 +114,10 @@ const RouteCompareMethods = {
                 warnings: m ? this._routeWarnings(m.rates) : [],
             };
         }).filter(Boolean);
-        const viable = rows.filter(r => r.rates && r.rates.winRate >= this.getEconomyConfig().compare.minWinRate && r.rates.battlesPerHour > 0);
+        const cfg = this.getEconomyConfig().compare;
+        // 可推荐 = 胜率够高 且 治疗成本撑得住（药水开销不超过收入的一定比例），否则新手会被"XP 很高但药水烧钱"的路线拖垮
+        const viable = rows.filter(r => r.rates && r.rates.winRate >= cfg.minWinRate && r.rates.battlesPerHour > 0 &&
+            r.rates.healCostPerHour <= r.rates.moneyPerHour * cfg.maxHealCostShare);
         const best = {};
         for (const goal of this.getEconomyConfig().analyzer.goals) {
             let top = null;

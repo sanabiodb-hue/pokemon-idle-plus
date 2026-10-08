@@ -24,8 +24,7 @@ test('catálogo: exatamente os 5 upgrades aprovados, com build e requisitos', ()
     assert.equal(by.heal_efficiency.locked, false);
     assert.equal(by.potion_capacity.locked, false);
     assert.equal(by.hunt_speed.locked, true);
-    assert.deepEqual(plain(by.hunt_speed.missing.map(m => [m.id, m.level, m.have])), [['heal_efficiency', 2, 0]]);
-    assert.equal(by.hunt_profit.missing.length, 2);
+    for (const id of ['hunt_speed', 'hunt_xp', 'hunt_profit']) assert.deepEqual(plain(by[id].missing.map(m => [m.id, m.level, m.have])), [['heal_efficiency', 2, 0], ['potion_capacity', 2, 0]], id);
     assert.match(by.hunt_xp.effectNext, /\+5% de EXP/);
 });
 
@@ -37,7 +36,8 @@ test('custo crescente: segue a fórmula base × growth^nível × escala de progr
     for (let lv = 0; lv < def.maxLevel; lv++) {
         setLv(game, 'hunt_xp', lv);
         const cost = game.getUpgradeCost('hunt_xp');
-        assert.equal(cost, Math.ceil(def.cost.base * Math.pow(def.cost.growth, lv)));
+        const early = Math.min(lv, def.cost.lateFrom ?? lv), late = lv - early;
+        assert.equal(cost, Math.ceil(def.cost.base * Math.pow(def.cost.growth, early) * Math.pow(def.cost.lateGrowth || def.cost.growth, late)));
         assert.ok(cost > last);
         last = cost;
     }
@@ -48,10 +48,12 @@ test('custo crescente: segue a fórmula base × growth^nível × escala de progr
 test('escala de progresso: o mesmo upgrade custa mais quando o jogador está mais avançado', () => {
     const { game } = newGame();
     const c5 = game.getUpgradeCost('heal_efficiency');
+    for (let id = 1; id <= 1025; id++) game.gameState.pokedex[id] = 'caught';
+    game._invalidateAllCaches();
     game.roster.primaryOf(25).level = 10000;
     const c10k = game.getUpgradeCost('heal_efficiency');
     assert.equal(c5, 150);
-    assert.equal(c10k, 150 * 50);
+    assert.equal(c10k, 150 * 50, 'preço base × escala (nível 10000 → ×50)');
 });
 
 test('comprar: gasta o custo, sobe 1 nível, registra razão e emite upgrade_purchased + money_spent', () => {
@@ -68,21 +70,18 @@ test('comprar: gasta o custo, sobe 1 nível, registra razão e emite upgrade_pur
     assert.equal(seen[0].upgrade, 'heal_efficiency');
 });
 
-test('requisitos: bloqueado não compra e não gasta; ao cumprir, desbloqueia', () => {
+test('requisitos: os três estilos pedem Cura 2 e Capacidade 2; bloqueado não compra nem gasta; ao cumprir, desbloqueia', () => {
     const { game } = newGame();
     rich(game);
     const before = game.getMoney();
-    assert.equal(game.buyUpgrade('hunt_speed').code, 'locked');
+    for (const id of ['hunt_speed', 'hunt_xp', 'hunt_profit']) assert.equal(game.buyUpgrade(id).code, 'locked', id);
     assert.equal(game.getMoney(), before);
-    assert.equal(game.getUpgradeLevel('hunt_speed'), 0);
-    game.buyUpgrade('heal_efficiency');
-    assert.equal(game.buyUpgrade('hunt_speed').code, 'locked', 'ainda falta nível 2');
-    game.buyUpgrade('heal_efficiency');
-    assert.equal(game.buyUpgrade('hunt_speed').ok, true);
-    assert.equal(game.buyUpgrade('hunt_profit').code, 'locked', 'lucro pede também capacidade 2');
-    game.buyUpgrade('potion_capacity'); game.buyUpgrade('potion_capacity');
-    assert.equal(game.buyUpgrade('hunt_profit').ok, true);
-    assert.equal(game.buyUpgrade('hunt_xp').ok, true);
+    game.buyUpgrade('heal_efficiency'); game.buyUpgrade('heal_efficiency');
+    assert.equal(game.buyUpgrade('hunt_speed').code, 'locked', 'ainda falta Capacidade 2');
+    game.buyUpgrade('potion_capacity');
+    assert.equal(game.buyUpgrade('hunt_xp').code, 'locked');
+    game.buyUpgrade('potion_capacity');
+    for (const id of ['hunt_speed', 'hunt_xp', 'hunt_profit']) assert.equal(game.buyUpgrade(id).ok, true, id);
 });
 
 test('nível máximo, dinheiro insuficiente, id inválido e offline: nada muda', () => {
@@ -126,7 +125,7 @@ test('invariante: nível só sobe com pagamento — soma dos custos = gasto regi
 });
 
 test('compra reentrante (de dentro do evento) paga cada nível separadamente', () => {
-    const { game } = newGame();
+    const { game, ctx } = newGame();
     rich(game, 100000);
     let again = 0;
     game.bus.on('upgrade_purchased', () => { if (again++ < 2) game.buyUpgrade('potion_capacity'); });
@@ -134,13 +133,14 @@ test('compra reentrante (de dentro do evento) paga cada nível separadamente', (
     game.buyUpgrade('potion_capacity');
     const level = game.getUpgradeLevel('potion_capacity');
     assert.equal(level, 3);
-    const expected = [0, 1, 2].reduce((a, n) => a + Math.ceil(120 * Math.pow(1.4, n)), 0);
+    const def = ctx.ECONOMY_CONFIG.upgrades.potion_capacity;
+    const expected = [0, 1, 2].reduce((a, n) => a + Math.ceil(def.cost.base * Math.pow(def.cost.growth, n)), 0);   // potion_capacity não tem fase tardia nestes 3 níveis
     assert.equal(m0 - game.getMoney(), expected);
 });
 
 test('modificadores: registro único, valores por upgrade e padrão neutro', () => {
     const { game } = newGame();
-    for (const stat of ['exp', 'gold', 'battle_delay', 'potion_heal', 'potion_cap']) assert.deepEqual(plain(game.getModifier(stat)), { mult: 1, add: 0 }, stat);
+    for (const stat of ['exp', 'gold', 'battle_tempo', 'potion_heal', 'potion_cap']) assert.deepEqual(plain(game.getModifier(stat)), { mult: 1, add: 0 }, stat);
     assert.deepEqual(plain(game.getModifier('desconhecido')), { mult: 1, add: 0 });
     setLv(game, 'hunt_xp', 10);
     setLv(game, 'hunt_profit', 4);
@@ -149,11 +149,11 @@ test('modificadores: registro único, valores por upgrade e padrão neutro', () 
     setLv(game, 'potion_capacity', 3);
     assert.ok(Math.abs(game.getModifier('exp').mult - 1.5) < 1e-9);
     assert.ok(Math.abs(game.getModifier('gold').mult - 1.2) < 1e-9);
-    assert.ok(Math.abs(game.getModifier('battle_delay').mult - 0.8) < 1e-9);
+    assert.ok(Math.abs(game.getModifier('battle_tempo').mult - 0.9) < 1e-9);
     assert.ok(Math.abs(game.getModifier('potion_heal').mult - 1.4) < 1e-9);
     assert.equal(game.getModifier('potion_cap').add, 18);
     setLv(game, 'hunt_speed', 15);
-    assert.ok(Math.abs(game.getModifier('battle_delay').mult - 0.4) < 1e-9, 'piso do intervalo');
+    assert.ok(Math.abs(game.getModifier('battle_tempo').mult - 0.7) < 1e-9, 'piso do ritmo');
 });
 
 test('efeitos reais no núcleo: EXP, moedas, intervalo, cura da poção e capacidade', () => {
@@ -168,9 +168,13 @@ test('efeitos reais no núcleo: EXP, moedas, intervalo, cura da poção e capaci
     const a = win(base.game), b = win(up.game);
     assert.equal(b.expGained, Math.floor(a.expGained * 1.5));
     assert.equal(b.goldGained, Math.floor(a.goldGained * 1.5));
-    assert.equal(up.game._getNextBattleDelay(2000), 800 * 0.6);
+    assert.ok(Math.abs(up.game._getNextBattleDelay(2000) - 800 * 0.8) < 1e-9, 'intervalo máximo escala com o ritmo');
     assert.equal(base.game._getNextBattleDelay(2000), 800);
-    assert.equal(up.game._getNextBattleDelay(300), 300 * 0.6);
+    assert.equal(up.game._getNextBattleDelay(300), 300, 'abaixo do máximo o intervalo é o próprio ritmo de ataque');
+    assert.ok(Math.abs(up.game.getAttackInterval(5000) - base.game.getAttackInterval(5000) * 0.8) < 1e-9, 'ataques de jogador E inimigo escalam igual');
+    up.game._towerMode = true;
+    assert.equal(up.game.getAttackInterval(5000), base.game.getAttackInterval(5000), 'a Torre não é afetada');
+    up.game._towerMode = false;
     assert.equal(base.game.getPotionCapacity(), 30);
     assert.equal(up.game.getPotionCapacity(), 60);
     assert.ok(Math.abs(up.game.getPotionHealPercent() - 0.7) < 1e-9);

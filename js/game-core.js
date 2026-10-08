@@ -115,6 +115,7 @@ class GameCore {
 
     _invalidateAllCaches() {
         this._routeEstimates = null;      // 路线估算缓存
+        this._pricingCapCache = null;     // 定价等级上限（已解锁路线的最高等级）缓存
         this._mods = null;                // 升级修改器缓存（存档/导入/新游戏后等级可能变了）
         this._instanceStats.clear();
         this._dexBonus = null;
@@ -209,8 +210,9 @@ class GameCore {
 
     // 两场战斗之间的间隔：攻击间隔 < 800ms 时等于攻击间隔
     _getNextBattleDelay(attackInterval) {
-        const base = attackInterval < NEXT_BATTLE_MAX_DELAY_MS ? attackInterval : NEXT_BATTLE_MAX_DELAY_MS;
-        return base * this.getModifier('battle_delay').mult;     // 升级"狩猎速度"缩短间隔（Live 与 Fast 共用此函数）
+        // attackInterval 已按"狩猎速度"缩放；最大间隔同比例缩放，整个循环（战斗+间隔）一起变快（Live 与 Fast 共用）
+        const cap = this._towerMode ? NEXT_BATTLE_MAX_DELAY_MS : NEXT_BATTLE_MAX_DELAY_MS * this.getModifier('battle_tempo').mult;
+        return attackInterval < cap ? attackInterval : cap;
     }
 
     // 重置速率跟踪器（切换地图时调用）
@@ -1091,6 +1093,7 @@ class GameCore {
     catchPokemonWithIvs(pokemonId, level, ivs, opts = {}) {
         // 标记为已捕获
         this.gameState.pokedex[pokemonId] = 'caught';
+        this._pricingCapCache = null;     // 地区解锁状态可能变了
         this.gameState.stats.totalCatches++;
 
         // 该物种还没有任何个体：创建第一只个体（它同时是旧结构 caughtPokemon[物种] 的数据本体）
@@ -1819,7 +1822,9 @@ class GameCore {
         // speed=10 → 1999ms, speed=10000 → 911ms, speed=100000 → 377ms
         // speed → ∞ 时趋近100ms，但永远达不到
         const interval = 100 + 1900 / (1 + speed / 14000);
-        return interval;
+        // 升级"狩猎速度"：整场战斗的节奏按同一比例加快（玩家与敌人用同一个函数，所以胜负不变，只是每小时能打更多场）。挑战塔不受影响
+        if (this._towerMode) return interval;
+        return interval * this.getModifier('battle_tempo').mult;
     }
 
     // ===================== 战斗系统 =====================
