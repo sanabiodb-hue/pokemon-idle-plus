@@ -515,3 +515,28 @@ Candidatos a serviços separados: servidor autoritativo de simulação (worker),
 ### Testes
 
 `tests/automation-*.test.js`, `tests/hunt-view.test.js` (DOM falso em `tests/helpers/fake-dom.js`) e o smoke com Chromium (aba Caça em 360×640 e 1280×800, sem rolagem horizontal, iniciar/pausar/parar, motivo, offline).
+
+## 💰 Fase 6: economia, Hunt Analyzer e upgrades (sem mudança de schema)
+
+Transforma a automação em um sistema de decisões: caçar → ganhar moedas → comprar poções/upgrades → ficar mais eficiente → escolher rota/política melhor.
+Relatório completo de balanceamento (tabelas de 10 min a 7 dias, 3 perfis × 4 estilos): [`docs/economia-balanceamento.md`](docs/economia-balanceamento.md).
+
+| Peça | Arquivo | Papel |
+|---|---|---|
+| Configuração | `js/economy/config.js` | **todos** os números econômicos (preços, upgrades, analisador, comparação) |
+| Economia | `js/economy/economy.js` | `earnMoney`/`spendMoney`: única via para mexer em `gold` (valor inteiro > 0, `reason` registrada, saldo nunca negativo, eventos `money_earned`/`money_spent`, só acumulados por razão) |
+| Loja | `js/economy/shop.js` | catálogo genérico (hoje só poções), preço progressivo, estoque com teto, compra atômica |
+| Upgrades + modificadores | `js/economy/upgrades.js` | 5 upgrades com requisitos; `getModifier(stat)` é o único ponto de bônus — Live e Fast usam as mesmas funções do núcleo |
+| Analyzer | `js/economy/analyzer.js` | métricas por hora, agregação por rota (flush por trecho), histórico das últimas 20 caçadas, objetivo |
+| Rotas | `js/economy/route-compare.js` | real × estimado (simulação em cópia "headless"), melhores por objetivo, avisos de risco, recomendação (nunca troca a rota sozinha) |
+| Interface | `js/economy-view.js` | Recursos / Loja / Upgrades / Análise dentro da aba Caça |
+| Simulador | `tools/simulate-economy.js` | jogador-robô, perfis e estilos, horizontes até 7 dias, saída em tabela/JSON/Markdown |
+
+Regras que mudaram: derrubar Pokémon rende moedas **desde o início** (`earnFromStart`); gemas, frutas e talentos continuam atrás das insígnias; o ritmo de toda a caçada (lutas e intervalo) é escalado pelo upgrade Velocidade (a Torre não é afetada).
+Invariantes cobertos por teste: saldo ≥ 0, compra não duplica, save/load e offline não duplicam dinheiro, upgrade só sobe pagando, poções não duplicam, todo movimento tem `reason`, só `economy.js` altera `gold`.
+
+```
+node tools/simulate-economy.js --markdown          # tabelas completas (≈ 5 min)
+node tools/simulate-economy.js --profile=new --days=1
+node tools/bench-automation.js
+```
