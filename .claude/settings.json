@@ -1,0 +1,13 @@
+{
+  "extraKnownMarketplaces": {
+    "jev-skill": {
+      "source": {
+        "source": "github",
+        "repo": "codaaiteam/jev-skill"
+      }
+    }
+  },
+  "enabledPlugins": {
+    "jev@jev-skill": true
+  }
+}
