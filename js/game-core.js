@@ -689,22 +689,26 @@ class GameCore {
         const bestSkill = this._getBestSkillForInstance(s.activeInst, wildTypes);
         const playerPower = bestSkill.power > 0 ? bestSkill.power : 50;
 
-        // 模拟单场战斗
+        // 模拟单场战斗 —— F7.9: 与在线 battleTick 同一套离散节奏。时间以 BATTLE_TICK_MS 的整数倍推进；每个攻击者的计时器按"tick 数"
+        // 累计，到点那一 tick 先结算玩家（敌人被击败则立刻结束，敌人不再出手），否则敌人在同一 tick 出手；出手后该计时器清零（余量丢弃）。
+        const playerTicks = battleTicksPerAttack(s.playerAttackInterval);
+        const enemyTicks = battleTicksPerAttack(enemyAttackInterval);
         let battleTime = 0;
-        let playerTimer = 0;
+        let playerTimer = 0;     // 单位：tick
         let enemyTimer = 0;
+        let ticks = 0;
 
         while (enemyHp > 0 && s.playerHp > 0) {
-            const nextEvent = Math.min(s.playerAttackInterval - playerTimer, enemyAttackInterval - enemyTimer);
-
-            battleTime += nextEvent;
-            playerTimer += nextEvent;
-            enemyTimer += nextEvent;
+            const step = Math.min(playerTicks - playerTimer, enemyTicks - enemyTimer);
+            ticks += step;
+            playerTimer += step;
+            enemyTimer += step;
+            battleTime = ticks * BATTLE_TICK_MS;
 
             if (battleTime > s.remainingMs) break;
 
             // 玩家攻击
-            if (playerTimer >= s.playerAttackInterval) {
+            if (playerTimer >= playerTicks) {
                 playerTimer = 0;
                 const hit = this._computeDamage(
                     s.cachedPlayerLevel, s.playerStats.attack, enemyStats.defense,
@@ -714,10 +718,11 @@ class GameCore {
                 enemyHp -= hit.damage;
                 s.activeInst.stats.damageDealt += hit.damage;
                 if (hit.criticalHit) s.activeInst.stats.criticalHits++;
+                if (enemyHp <= 0) break;                    // 与在线一致：被击败的敌人在同一 tick 不会反击
             }
 
             // 敌方攻击
-            if (enemyTimer >= enemyAttackInterval) {
+            if (enemyTimer >= enemyTicks) {
                 enemyTimer = 0;
                 if (!(s.dodgeRate > 0 && this.rng() < s.dodgeRate)) {
                     const taken = this._computeDamage(
@@ -2021,11 +2026,11 @@ class GameCore {
 
         if (this._useWorkerTimer) {
             const cb = () => { this.battleTick(); };
-            this.battleTimer = this._workerSetInterval(cb, 50);
+            this.battleTimer = this._workerSetInterval(cb, BATTLE_TICK_MS);
         } else {
             this.battleTimer = setInterval(() => {
                 this.battleTick();
-            }, 50);
+            }, BATTLE_TICK_MS);
         }
     }
 

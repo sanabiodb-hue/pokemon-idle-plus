@@ -345,7 +345,9 @@ test('F7.0: importar um save inválido durante a simulação offline falha sem c
     const original = (event, data) => { if (event === 'offlineEnd') ended = data; };
     game.startBattle();
     game.onBattleEvent = original;
-    game._processOfflineBattles(600000);
+    // F7.9: precisa durar bem mais que UM lote (OFFLINE_BATCH_SIZE = 200 passos). Com 600 s o inicial gastava ~3 s por combate, ou seja, ~200 passos:
+    // a simulação terminava no primeiro lote síncrono ou não, conforme a duração dos combates. 1 h garante que ela continua em andamento.
+    game._processOfflineBattles(3600000);
     assert.equal(game._isOfflineSimulating, true, 'a simulação começou');
     // referências da simulação em curso
     const keep = {

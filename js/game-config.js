@@ -500,3 +500,15 @@ function defeatHealMs(maxHp, currentHp = 0) {
     const perSecond = Math.max(1, Math.floor(maxHp * DEFEAT_HEAL_PERCENT_PER_SEC));
     return Math.ceil(missing / perSecond) * 1000;
 }
+
+// F7.9: cadência DISCRETA do combate. O laço online (battleTick) roda a cada BATTLE_TICK_MS, acumula o tempo nos dois relógios e,
+// ao atacar, zera o relógio (a sobra é descartada). Logo um ataque acontece no primeiro tick k em que k x BATTLE_TICK_MS >= intervalo,
+// e o período efetivo é k ticks. O Fast Driver usa esta mesma função para reproduzir o ritmo online sem simular tick a tick.
+const BATTLE_TICK_MS = 50;
+function battleTicksPerAttack(intervalMs) {
+    if (!(intervalMs > 0)) return 1;
+    let k = Math.max(1, Math.ceil(intervalMs / BATTLE_TICK_MS));
+    while (k > 1 && (k - 1) * BATTLE_TICK_MS >= intervalMs) k--;       // guarda contra arredondamento de ponto flutuante
+    while (k * BATTLE_TICK_MS < intervalMs) k++;
+    return k;
+}
