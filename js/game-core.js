@@ -44,6 +44,7 @@ class GameCore {
         this._offlineHunt = null;
         this._fastSim = null;
         this._towerMode = false;
+        this._battleGuard = { refused: 0, last: null };   // F7.0: recusas de startBattle (diagnóstico/testes)
         // 个体名册：个体 / 队伍 / PC / 放生记录，并维护 caughtPokemon、team 这两个旧兼容视图
         this.roster = new PokemonRoster(() => this.gameState, { now: () => this.now() });
         // 名册里的变化（创建/放生/换主个体）要让属性缓存失效
@@ -877,6 +878,21 @@ class GameCore {
         } else {
             this._finishOfflineSimulation(s.battlesSimulated, s.reportedMs);
         }
+    }
+
+    // F7.0: cancela uma simulação offline em andamento SEM relatório, devolvendo callbacks, relógio e flags.
+    // Quem substitui o estado inteiro (importar/excluir save) deve chamar isto antes: zerar só _offlineSimState
+    // faz _runOfflineBatch parar em silêncio e deixa _isOfflineSimulating=true, callbacks mudos e o relógio
+    // simulado para sempre — e, com a guarda de startBattle, nenhuma batalha voltaria a começar.
+    _abortOfflineSimulation() {
+        if (!this._isOfflineSimulating && !this._offlineSimState && !this._offlineHunt) return false;
+        const h = this._offlineHunt;
+        this._offlineHunt = null;
+        if (h && h.realClock) this.clock = h.realClock;
+        this._offlineSimState = null;
+        this._fastSim = null;
+        this._endOfflineSilence(0);
+        return true;
     }
 
     // 离线模拟完成：保存、恢复回调、汇报摘要并重启战斗
@@ -1828,23 +1844,44 @@ class GameCore {
     }
 
     // ===================== 战斗系统 =====================
+    // F7.0: por que uma nova batalha NÃO pode começar agora (null = pode). Há um único motor de batalha:
+    // um loop de 50 ms, um timer de cura e um agendamento da próxima luta. Qualquer um ativo = já existe batalha.
+    // Chamadores legítimos (encadeamento, fim da cura, poção que reanima, fim do offline, saída da Torre) zeram o
+    // timer que possuem ANTES de chamar startBattle; quem quer substituir uma luta em curso deve chamar stopBattle().
+    _battleBlockReason() {
+        if (this._isOfflineSimulating) return 'offline';
+        if (this._towerMode) return 'tower';
+        if (this.healTimer) return 'healing';
+        if (this._nextBattleTimeout) return 'next_scheduled';
+        if (this.battleTimer) return 'in_battle';
+        return null;
+    }
+
+    // Devolve true se uma batalha começou; false se foi recusada (já há batalha) ou não há o que lutar.
     startBattle() {
-        if (!this.gameState || !this.gameState.currentRoute) return;
-        if (!this.gameState.team || this.gameState.team.length === 0) return;
+        if (!this.gameState || !this.gameState.currentRoute) return false;
+        if (!this.gameState.team || this.gameState.team.length === 0) return false;
+        const blocked = this._battleBlockReason();
+        if (blocked) {
+            this._battleGuard.refused++;
+            this._battleGuard.last = blocked;
+            this._log('startBattle recusado:', blocked);
+            return false;
+        }
         this.roster.reconcile();
         if (this.gameState.activePokemonIndex >= this.gameState.team.length) {
             this.gameState.activePokemonIndex = 0;
         }
 
         const route = this.getRoute(this.gameState.currentRoute);
-        if (!route) return;
+        if (!route) return false;
 
         // 优先使用保存的敌方宝可梦（更换宝可梦或刷新页面时不重新生成）
         let wildPokemon = this.gameState.currentEnemy;
         let isExistingEnemy = !!wildPokemon; // 标记是否为已存在的敌人（非新生成）
         if (!wildPokemon) {
             wildPokemon = this.generateWildPokemon(route);
-            if (!wildPokemon) return;
+            if (!wildPokemon) return false;
             this.gameState.currentEnemy = wildPokemon;
             this.save();
 
@@ -1870,7 +1907,7 @@ class GameCore {
 
         // 获取出战宝可梦的战斗属性
         const playerStats = this.calculateBattleStats(this.gameState.activePokemonIndex);
-        if (!playerStats) return;
+        if (!playerStats) return false;
         const enemyStats = this.calculateStats(wildPokemon);
 
         // 恢复血量：优先从内存中继承（连续战斗），其次从存档恢复（刷新页面）
@@ -1945,6 +1982,7 @@ class GameCore {
         }
 
         this.startBattleLoop();
+        return true;
     }
 
     startBattleLoop() {
@@ -3320,6 +3358,7 @@ class GameCore {
         if (!r.ok) return { success: false, message: r.error, code: r.code };
 
         this.saver.backupNow(true);
+        this._abortOfflineSimulation();
         this.stopBattle();
         this._towerMode = false;
         this._towerBattle = null;
@@ -3336,6 +3375,7 @@ class GameCore {
     }
 
     deleteSave() {
+        this._abortOfflineSimulation();
         this.saver.deleteAll();
         this.gameState = null;
         this.currentBattle = null;
@@ -4601,7 +4641,8 @@ class GameCore {
         this._towerBattle = null;
         this.gameState.tower.inBattle = false;
         this.save();
-        // 恢复主线战斗
+        // 恢复主线战斗（先停掉可能还在跑的挑战塔战斗循环：startBattle 不会顶替进行中的战斗）
+        this.stopBattle();
         this.startBattle();
     }
 

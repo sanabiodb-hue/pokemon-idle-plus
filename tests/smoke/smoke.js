@@ -378,6 +378,13 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
             check('队伍面板显示 6 只（含同物种的两只）', ui.slots === 6 && ui.party.filter(id => id === dupSpecies).length === 2, JSON.stringify({ slots: ui.slots, party: ui.party }));
             check('个体昵称显示为纯文本，没有脚本执行', ui.pwned === undefined && ui.evilImgs === 0 && /img src=x on/.test(ui.text) && !ui.text.includes('<img'));
 
+            // 先等加载时的离线结算（旧存档的 lastSave 很早，会在后台分批跑真实战斗）真正结束，再导出。
+            // 否则导出/导入的前后快照会被仍在写入名册的模拟污染（见 F7.0）。超时则明确报错，不会悄悄放过。
+            const offlineDone = await page.waitForFunction(() => !game._isOfflineSimulating && !game._offlineSimState, null, { timeout: 60000 }).then(() => true, () => false);
+            check('离线结算在导出前已结束（simulação offline terminou antes de exportar o save）', offlineDone,
+                'timeout de 60 s: game._isOfflineSimulating continua true; o teste de exportação/importação não é confiável sem isso');
+            if (!offlineDone) throw new Error('A simulação offline do carregamento não terminou em 60 s; abortando o teste de exportação/importação.');
+
             // 导出 → 清空 → 通过界面导入：个体完整往返
             const text = await page.evaluate(() => game.exportSave());
             const before = await page.evaluate(() => JSON.stringify({ owned: game.gameState.ownedPokemon, party: game.gameState.party, pc: game.gameState.pc }));
