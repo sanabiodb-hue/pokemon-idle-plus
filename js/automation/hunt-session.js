@@ -102,6 +102,19 @@ function sanitizeHuntSession(raw) {
         stats: createHuntSessionStats(),
     };
     if (_isObj(raw.stats)) for (const k of HUNT_STAT_KEYS) out.stats[k] = _num(raw.stats[k], 0, 0);
+    // F7.7: ciclo de caça de um mapa do mundo = { speciesId, seq, last [, to, progressPx] } (aditivo; saves antigos não têm). A identidade
+    // (espécie, sequência, último ponto) é obrigatória; `to` (destino da perna) e `progressPx` (distância já percorrida) são opcionais e,
+    // se inválidos, são descartados SEM invalidar o ciclo: a perna recomeça do zero com o mesmo destino determinístico.
+    if (_isObj(raw.world) && Number.isInteger(raw.world.speciesId) && raw.world.speciesId >= 1 && raw.world.speciesId <= 9999999
+        && Number.isInteger(raw.world.seq) && raw.world.seq >= 0 && raw.world.seq <= 1e9
+        && (raw.world.last === null || (Number.isInteger(raw.world.last) && raw.world.last >= 0 && raw.world.last <= 1000))) {
+        out.world = { speciesId: raw.world.speciesId, seq: raw.world.seq, last: raw.world.last };
+        const w = raw.world;
+        if (Number.isInteger(w.to) && w.to >= 0 && w.to <= 1000 && typeof w.progressPx === 'number' && Number.isFinite(w.progressPx) && w.progressPx >= 0 && w.progressPx <= 1e7) {
+            out.world.to = w.to;
+            out.world.progressPx = w.progressPx;
+        }
+    }
     // 关机期间的时间不算运行时长：running 降为 paused 时只保留已并入 activeMs 的部分
     if (out.routeId === null) return null;
     return out;

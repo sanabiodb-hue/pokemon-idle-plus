@@ -208,3 +208,95 @@ function worldInteractionNear(map, state, reach = WORLD_MOVEMENT.interactReach) 
     }
     return best;
 }
+
+
+// ============================================================
+// Caminhada automática das caçadas (Fase 7.7): busca de caminho + percurso lógico sobre a grade de colisão.
+//   - Busca: BFS (largura) em grade 4-direcional de custo uniforme, fila FIFO, o primeiro pai descoberto é mantido.
+//     ORDEM DE VIZINHOS (e, por isso, o desempate entre caminhos de mesmo custo): ESQUERDA, DIREITA, CIMA, BAIXO.
+//     Determinístico: mesma grade + mesma origem/destino = mesmo caminho. Termina sempre (cada célula entra na fila uma vez).
+//   - O caminho passa pelo PÉ de cada célula (centro do tile em x, 3 px acima da base em y, como o ponto inicial do mapa): a hitbox
+//     (10x4 px) cabe inteira em células andáveis, então o percurso é seguro; worldVerifyPath confere isso com worldMoveBy.
+//   - O estado lógico do percurso é só o PROGRESSO em px ao longo da poligonal; posição e direção são funções puras dele
+//     (worldPathPosition), iguais online e offline. Distância = nº de passos x 16 px; tempo = distância / velocidade.
+// ============================================================
+const WORLD_PATH_NEIGHBORS = [[-1, 0], [1, 0], [0, -1], [0, 1]];
+
+// Caminho mais curto entre duas células (inclui origem e destino) ou null (inválido/inalcançável)
+function worldFindPath(map, from, to) {
+    if (!map || !from || !to || !Number.isInteger(map.width) || !Number.isInteger(map.height)) return null;
+    const w = map.width, h = map.height;
+    const usable = (c) => Number.isInteger(c.x) && Number.isInteger(c.y) && c.x >= 0 && c.y >= 0 && c.x < w && c.y < h && !worldCellBlocked(map, c.x, c.y);
+    if (!usable(from) || !usable(to)) return null;
+    const start = from.y * w + from.x, goal = to.y * w + to.x;
+    if (start === goal) return [{ x: from.x, y: from.y }];
+    const parent = new Int32Array(w * h).fill(-1);
+    parent[start] = start;
+    const queue = [start];
+    for (let head = 0; head < queue.length && parent[goal] === -1; head++) {
+        const cur = queue[head], cx = cur % w, cy = (cur - cx) / w;
+        for (const [dx, dy] of WORLD_PATH_NEIGHBORS) {
+            const nx = cx + dx, ny = cy + dy;
+            if (nx < 0 || ny < 0 || nx >= w || ny >= h) continue;
+            const ni = ny * w + nx;
+            if (parent[ni] !== -1 || worldCellBlocked(map, nx, ny)) continue;
+            parent[ni] = cur;
+            queue.push(ni);
+        }
+    }
+    if (parent[goal] === -1) return null;
+    const cells = [];
+    for (let at = goal; ; at = parent[at]) {
+        cells.push({ x: at % w, y: Math.floor(at / w) });
+        if (at === start) break;
+    }
+    return cells.reverse();
+}
+
+// Pé do personagem parado numa célula (mesma regra do ponto inicial dos mapas)
+function worldCellFoot(cell) {
+    const ts = WORLD_TILE_SIZE;
+    return { x: cell.x * ts + ts / 2, y: cell.y * ts + ts - 3 };
+}
+
+function worldPathWaypoints(cells) { return cells.map(worldCellFoot); }
+
+// Comprimento (px) de uma poligonal de waypoints
+function worldPolylineLength(waypoints) {
+    let len = 0;
+    for (let i = 1; i < waypoints.length; i++) len += Math.abs(waypoints[i].x - waypoints[i - 1].x) + Math.abs(waypoints[i].y - waypoints[i - 1].y);
+    return len;
+}
+
+// Posição lógica depois de `progressPx` ao longo da poligonal (limitado a [0, comprimento]); dir = sentido do trecho atual
+function worldPathPosition(waypoints, progressPx, fallbackDir = 'down') {
+    const first = waypoints[0];
+    let left = Math.max(0, Number.isFinite(progressPx) ? progressPx : 0), dir = fallbackDir;
+    for (let i = 1; i < waypoints.length; i++) {
+        const a = waypoints[i - 1], b = waypoints[i];
+        const seg = Math.abs(b.x - a.x) + Math.abs(b.y - a.y);
+        dir = b.x > a.x ? 'right' : b.x < a.x ? 'left' : b.y > a.y ? 'down' : 'up';
+        if (left <= seg) {
+            const t = seg > 0 ? left / seg : 0;
+            return { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t, dir, done: i === waypoints.length - 1 && left >= seg };
+        }
+        left -= seg;
+    }
+    const last = waypoints[waypoints.length - 1] || first;
+    return { x: last.x, y: last.y, dir, done: true };
+}
+
+// Confere o percurso com o mesmo motor de colisão do movimento manual: andando trecho a trecho com worldMoveBy chega ao fim sem bloqueio
+function worldVerifyPath(map, waypoints) {
+    if (!Array.isArray(waypoints) || waypoints.length === 0) return false;
+    let state = { mapId: map.id, x: waypoints[0].x, y: waypoints[0].y, dir: 'down', moving: false, distance: 0 };
+    for (let i = 1; i < waypoints.length; i++) {
+        const b = waypoints[i], dx = b.x - state.x, dy = b.y - state.y;
+        const dir = dx > 0 ? 'right' : dx < 0 ? 'left' : dy > 0 ? 'down' : 'up';
+        const dist = Math.abs(dx) + Math.abs(dy);
+        const next = worldMoveBy(map, state, dir, dist);
+        if (Math.abs(next.x - b.x) > 1e-3 || Math.abs(next.y - b.y) > 1e-3) return false;
+        state = { ...next, x: b.x, y: b.y };
+    }
+    return true;
+}

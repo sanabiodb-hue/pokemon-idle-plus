@@ -327,6 +327,7 @@ class GameCore {
     _onPageHidden() {
         // 记录进入后台的时间，并立即落盘（防抖中的请求不能丢）
         this._hiddenAt = this.now();
+        if (this.encounterHook && this.encounterHook.onHidden) this.encounterHook.onHidden();   // F7.7: a caminhada online congela com a página escondida
         this.saveNow();
     }
 
@@ -341,6 +342,8 @@ class GameCore {
         const now = this.now();
         const elapsed = now - this._hiddenAt;
         this._hiddenAt = null;
+        // F7.7: ≤ 2 s a caminhada retoma e aplica o tempo escondido uma vez; mais que isso a simulação offline continua o MESMO ciclo
+        if (this.encounterHook && this.encounterHook.onVisible) this.encounterHook.onVisible(elapsed > 2000 && !this._towerMode && !this._isOfflineSimulating);
 
         // 挑战塔战斗由 Worker 定时器持续推进，不需要（也不能）做主线离线结算，
         // 否则会用主线敌人污染挑战塔进度。
@@ -351,6 +354,8 @@ class GameCore {
         // 如果后台时间超过2秒，进行离线战斗结算
         if (elapsed > 2000) {
             this._processOfflineBattles(Math.min(elapsed, this.getMaxOfflineTime()));
+            // F7.7: se a simulação nem começou (ex.: caçada do mundo pausada), religa a caminhada online sem aplicar o tempo escondido
+            if (!this._isOfflineSimulating && this.encounterHook && this.encounterHook.onOfflineEnd) this.encounterHook.onOfflineEnd();
             return; // 异步模拟，不在这里重启战斗
         }
 
@@ -443,6 +448,8 @@ class GameCore {
     _processOfflineBattles(elapsedMs) {
         if (!this.gameState || this._isOfflineSimulating || this._towerMode) return;
         if (!(elapsedMs > 0)) return;
+        // F7.7: caçada do mundo PAUSADA (e não por recarga): o tempo offline não avança caminhada, batalha nem sequência
+        if (this.encounterHook && this.encounterHook.offlineSuspended && this.encounterHook.offlineSuspended()) return;
 
         // 必须在 stopBattle 之前判断（stopBattle 会清掉治疗计时器）
         const battle = this.currentBattle;
@@ -451,6 +458,7 @@ class GameCore {
         // 停止当前战斗循环，防止模拟期间干扰
         this.stopBattle();
         this._beginOfflineSilence(elapsedMs);
+        if (this.encounterHook && this.encounterHook.onOfflineBegin) this.encounterHook.onOfflineBegin();   // F7.7: o Fast Driver conduz o ciclo do mundo
         this._beginOfflineHunt(elapsedMs);
 
         let simulateMs = elapsedMs;
@@ -641,8 +649,20 @@ class GameCore {
         const state = this.gameState;
         const hunting = this.isHuntRunning();
 
-        // 与在线共用的野怪生成（使用缓存的闪光率/权重参数）
-        const wildPokemon = this.generateWildPokemon(s.route, s.spawnCache);
+        // F7.7: caçada do mundo ativa → o MESMO ciclo da versão online: gasta o tempo de caminhada até o ponto (analítico, uma vez por perna),
+        // e o inimigo é a espécie do mapa. Sem ciclo do mundo: geração por rota, como sempre.
+        const world = hunting && this.encounterHook && this.encounterHook.fastTravel ? this.encounterHook : null;
+        let wildPokemon;
+        if (world) {
+            const trip = world.fastTravel(s.remainingMs);
+            if (!trip) { s.remainingMs = 0; return false; }                 // sem caminho válido: encerra sem girar em falso
+            this._fastSpend(s, trip.spentMs);
+            if (!trip.arrived) return true;                                 // o tempo offline acabou no meio do percurso (o progresso fica guardado)
+            wildPokemon = world.fastEnemy(s.spawnCache);
+        } else {
+            // 与在线共用的野怪生成（使用缓存的闪光率/权重参数）
+            wildPokemon = this.generateWildPokemon(s.route, s.spawnCache);
+        }
         if (!wildPokemon) { s.remainingMs = 0; return false; } // 路线无效：终止，避免空转
         s.wild = wildPokemon;
 
@@ -729,9 +749,10 @@ class GameCore {
                 if (!this.isHuntRunning()) { this._fastHalt(s); return true; }
             }
             if (s.playerHp <= 0) {
-                this._fastSpend(s, DEFEAT_HEAL_MS);
+                if (world) world.fastResolved('defeat', DEFEAT_HEAL_MS);      // a cura corre junto com a próxima caminhada (como online)
+                else this._fastSpend(s, DEFEAT_HEAL_MS);
                 s.playerHp = s.playerStats.hp;
-            }
+            } else if (world) world.fastResolved('defeat', 0);                // revivido por poção: segue sem espera
             return true;
         }
 
@@ -779,7 +800,9 @@ class GameCore {
                 }
             }
 
-            this._fastSpend(s, this._getNextBattleDelay(s.playerAttackInterval));
+            const nextDelay = this._getNextBattleDelay(s.playerAttackInterval);
+            if (world) world.fastResolved('victory', nextDelay);               // o atraso até a próxima batalha corre junto com a caminhada (como online)
+            else this._fastSpend(s, nextDelay);
         }
         return true;
     }
@@ -893,6 +916,7 @@ class GameCore {
         this._offlineSimState = null;
         this._fastSim = null;
         this._endOfflineSilence(0);
+        if (this.encounterHook && this.encounterHook.onOfflineEnd) this.encounterHook.onOfflineEnd();
         return true;
     }
 
@@ -915,6 +939,7 @@ class GameCore {
             };
         }
         const huntReport = this._endOfflineHunt(s, totalMs);       // 先结束狩猎并还原真实时钟，再保存
+        if (this.encounterHook && this.encounterHook.onOfflineEnd) this.encounterHook.onOfflineEnd();   // F7.7: religa a caminhada online sem reaplicar o tempo offline
         this._offlineSimState = null;
         this._fastSim = null;
 
@@ -1881,8 +1906,12 @@ class GameCore {
         let wildPokemon = this.gameState.currentEnemy;
         let isExistingEnemy = !!wildPokemon; // 标记是否为已存在的敌人（非新生成）
         if (!wildPokemon) {
-            // F7.6: um encontro do mundo que já chegou ao ponto fornece o inimigo (só depois da guarda e só sem inimigo salvo)
-            wildPokemon = (this.encounterHook ? this.encounterHook.takeArrivedEnemy() : null) || this.generateWildPokemon(route);
+            // F7.6/F7.7: com a caçada do mundo ativa, só o encontro que já chegou fornece o inimigo (depois da guarda e sem inimigo salvo);
+            // enquanto o personagem caminha (ou a sessão está pausada) as batalhas de rota ficam SEGURAS: nada de inimigo aleatório de fallback
+            const hook = this.encounterHook;
+            wildPokemon = hook ? hook.takeArrivedEnemy() : null;
+            if (!wildPokemon && hook && hook.holdsBattles()) return false;
+            if (!wildPokemon) wildPokemon = this.generateWildPokemon(route);
             if (!wildPokemon) return false;
             this.gameState.currentEnemy = wildPokemon;
             this.save();
@@ -3307,6 +3336,7 @@ class GameCore {
         this._syncShinyFlags();    // 旧代码直接写 shinyDex 时，让主个体的闪光与之一致
         gs.schemaVersion = SAVE_SCHEMA_VERSION;
         gs.lastSave = this.now();
+        if (this.encounterHook && this.encounterHook.beforeSave) this.encounterHook.beforeSave();   // F7.7: progresso da caminhada junto de lastSave (o offline conta a partir daí)
 
         if (this.currentBattle) {
             if (this.currentBattle.playerCurrentHp > 0) {

@@ -1,423 +1,396 @@
 'use strict';
-// F7.6: encontros nos mapas de caça. Lógica (WorldEncounters) testada com o GameCore REAL e um ManualClock (sem esperas nem quadros);
-// a view só lê o estado. Entradas oficiais: START/PAUSE/RESUME/STOP_HUNT e startBattle() (guarda central da F7.0).
+// F7.6/F7.7: ciclo de caça nos mapas de caça (WorldEncounters). GameCore REAL + ManualClock (sem esperas, sem quadros):
+// sessão ativa → ponto → caminho → caminhada (progresso lógico) → chegada → batalha oficial → resultado → próximo ponto.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { newGame } = require('./helpers/game');
 const { loadWorld, shown } = require('./helpers/world-env');
 
-const TILE = 16;
+const TILE = 16, SPEED = 64, SPECIES = 25;
 const dispatch = (game, type, extra = {}) => game.dispatchAutomationAction({ type, ...extra });
 const watch = (game) => { const ev = []; game.bus.on('*', (e) => ev.push(e)); return ev; };
 const count = (ev, type) => ev.filter(e => e.type === type && !e.offline).length;
 
 function setup(opts = {}) {
-    const { game, ctx } = newGame({ seed: opts.seed ?? 7 });
-    game.clock = new ctx.ManualClock(1_000_000);
+    const { game, ctx, storage } = newGame({ seed: opts.seed ?? 7, load: opts.load, storage: opts.storage });
+    game.clock = new ctx.ManualClock(opts.clock ?? 1_000_000);
     const world = loadWorld();
     const enc = new world.WorldEncounters(game);
-    return { game, ctx, world, enc, ev: watch(game) };
+    return { game, ctx, world, enc, storage, ev: watch(game) };
 }
-const startHunt = (game) => { const r = dispatch(game, 'START_HUNT'); assert.equal(r.ok, true, JSON.stringify(r)); return game.getHuntSession(); };
-
 // Derrota o inimigo atual pelo caminho real (battleTick → onEnemyDefeated). Deixa a próxima batalha agendada.
 function kill(game) {
     const b = game.currentBattle;
     b.wildCurrentHp = 1; b.playerTimer = b.playerNextAttack; b.enemyTimer = 0;
     const saved = game.rng; game.rng = () => 0.99; game.battleTick(); game.rng = saved;
 }
-// Faz o Pokémon do jogador cair pelo caminho real (defeat)
 function lose(game) {
     const b = game.currentBattle;
     b.playerCurrentHp = 1; b.wildCurrentHp = b.wildMaxHp; b.enemyTimer = b.enemyNextAttack; b.playerTimer = 0;
     const saved = game.rng; game.rng = () => 0.5; game.battleTick(); game.rng = saved;
 }
-// Faz exatamente o que o encadeamento do jogo faz depois de uma luta: zera o agendamento/cura que o dono possui e chama startBattle
+// Faz o que o encadeamento do jogo faz depois de uma luta: zera o agendamento/cura que o dono possui e chama startBattle
 function chain(game) {
     if (game._nextBattleTimeout) { clearTimeout(game._nextBattleTimeout); game._nextBattleTimeout = null; game._nextBattleScheduledAt = null; }
     if (game.healTimer) { clearTimeout(game.healTimer); game.healTimer = null; }
     return game.startBattle();
 }
-const idle = (game) => { game.stopBattle(); game.gameState.currentEnemy = null; };       // caçada rodando, mas sem luta nem inimigo salvo
-const SPECIES = 25;
-const manhattanMs = (from, to) => Math.ceil(((Math.abs(to.x - from.x) + Math.abs(to.y - from.y)) / 64) * 1000);
-const cellCenter = (p) => ({ x: (p.x + 0.5) * TILE, y: (p.y + 0.5) * TILE });
-const spawnFoot = (m) => ({ x: m.spawn.x * TILE + 8, y: m.spawn.y * TILE + TILE - 3 });
+const etaOf = (lengthPx) => Math.ceil(lengthPx / SPEED * 1000);
+// Comprimento esperado de uma perna, calculado de forma independente com a busca do motor
+function legLength(world, map, fromIndex, toIndex) {
+    const origin = fromIndex === null ? map.spawn : map.encounterPoints[fromIndex];
+    const cells = world.worldFindPath(map, origin, map.encounterPoints[toIndex]);
+    return (cells.length - 1) * TILE;
+}
+const session = (game) => game.getHuntSession();
 
-// =============================================================== pedido, validação e estado
-test('F7.6 explícito: ter a caçada rodando ou abrir o mapa nunca cria encontro; só o pedido do jogador cria', () => {
-    const { game, enc } = setup();
-    startHunt(game);
-    assert.equal(game.encounterHook, null, 'sem encontro, o jogo funciona como sempre');
-    assert.equal(enc.current, null);
-    assert.equal(game._getEngine().isAttached(), true);
-    const r = enc.request(SPECIES);
-    assert.equal(r.ok, true);
-    assert.equal(game.encounterHook, enc);
-    assert.equal(enc.current.state, 'approaching');
-});
-
-test('F7.6 pedido: exige caçada EM ANDAMENTO (autoritativa), espécie válida e não é aceito em Torre/offline nem duplicado', () => {
-    const { game, enc } = setup();
-    assert.equal(enc.request(SPECIES).code, 'no_running_hunt', 'sem sessão');
-    startHunt(game);
-    dispatch(game, 'PAUSE_HUNT');
-    assert.equal(enc.request(SPECIES).code, 'no_running_hunt', 'sessão pausada');
-    dispatch(game, 'RESUME_HUNT');
-    for (const bad of [0, -1, 1.5, NaN, '25', null, undefined, {}, 1074, 99999]) {
-        const r = enc.request(bad);
-        assert.deepEqual([r.ok, r.code], [false, 'invalid_species'], String(bad));
-    }
-    assert.equal(enc.current, null, 'nada foi criado por entradas inválidas');
+// =============================================================== início explícito e sessão
+test('F7.7 explícito: nada começa sozinho; só begin() cria o ciclo, e ele inicia a sessão pela entrada oficial', () => {
+    const { game, enc, ev } = setup();
     assert.equal(game.encounterHook, null);
-    game._towerMode = true; assert.equal(enc.request(SPECIES).code, 'tower_mode'); game._towerMode = false;
-    game._isOfflineSimulating = true; assert.equal(enc.request(SPECIES).code, 'offline'); game._isOfflineSimulating = false;
-    assert.equal(enc.request(SPECIES).ok, true);
-    assert.equal(enc.request(SPECIES).code, 'already_active', 'um encontro por vez');
-    assert.equal(enc.request(4).code, 'already_active');
+    assert.equal(session(game), null);
+    const r = enc.begin(SPECIES);
+    assert.equal(r.ok, true);
+    assert.equal(session(game).state, 'running', 'START_HUNT oficial');
+    assert.equal(count(ev, 'hunt_started'), 1);
+    assert.equal(game.encounterHook, enc);
+    assert.equal(enc.cycle.speciesId, SPECIES);
+    assert.equal(enc.current.state, 'approaching');
+    assert.ok(!game.currentBattle, 'nenhuma batalha de rota: a caçada começa caminhando');
+    assert.equal(count(ev, 'battle_started'), 0);
+    assert.deepEqual({ ...session(game).world }, { speciesId: SPECIES, seq: 0, last: null, to: enc.current.pointIndex, progressPx: 0 }, 'o mínimo para reconstruir o ciclo e a perna');
 });
 
-test('F7.6 identidade: a espécie e o ponto vêm do mapa certo; o ponto é candidato válido e caminhável', () => {
-    const { game, enc, world } = setup();
-    startHunt(game);
-    const map = world.worldHuntMap(SPECIES);
-    const c = enc.request(SPECIES).encounter;
-    assert.equal(c.mapId, 'hunt_25');
-    assert.equal(c.speciesId, map.speciesId);
-    assert.equal(c.speciesId, 25);
-    const p = map.encounterPoints[c.pointIndex];
-    assert.deepEqual([c.point.x, c.point.y], [p.x, p.y], 'coordenadas copiadas dos dados do mapa');
-    assert.ok(world.worldEncounterCandidates(map).includes(c.pointIndex));
-    assert.equal(world.worldCellBlocked(map, c.point.x, c.point.y), false, 'terreno caminhável');
-    assert.ok(c.point.x >= 0 && c.point.y >= 0 && c.point.x < map.width && c.point.y < map.height);
-    for (const id of [1, 150, 1073]) { const other = new world.WorldEncounters(game); enc.cancel('x'); assert.equal(other.request(id).encounter.speciesId, id); other.cancel('x'); }
-});
+test('F7.7 explícito: uma caçada que já roda é adotada (sem segunda sessão); pausada, sem equipe, Torre, offline e espécie inválida são recusados sem sobras', () => {
+    const a = setup();
+    assert.equal(dispatch(a.game, 'START_HUNT').ok, true);
+    const sid = session(a.game).id;
+    assert.equal(a.enc.begin(SPECIES).ok, true);
+    assert.equal(session(a.game).id, sid, 'mesma sessão');
+    assert.equal(count(a.ev, 'hunt_started'), 1);
+    assert.equal(a.enc.begin(4).code, 'already_active');
 
-// =============================================================== chegada (lógica, sem quadros) e batalha pela entrada oficial
-test('F7.6 chegada: ETA = distância em L ÷ velocidade, um único timer do relógio do jogo, sem teleporte e sem depender de quadros', () => {
-    const { game, enc, world } = setup();
-    startHunt(game);
-    const map = world.worldHuntMap(SPECIES);
-    const before = game.clock.pendingTimers();
-    const c = enc.request(SPECIES).encounter;
-    assert.equal(game.clock.pendingTimers(), before + 1, 'um timer');
-    assert.equal(c.etaMs, manhattanMs(spawnFoot(map), cellCenter(c.point)), 'fórmula do núcleo de movimento (independente do renderer)');
-    assert.ok(c.etaMs > 5000, 'a distância tem peso real');
-    game.clock.advance(c.etaMs - 1);
-    assert.equal(enc.current.state, 'approaching', 'um ms antes: ainda a caminho');
-    game.clock.advance(1);
-    assert.notEqual(enc.current.state, 'approaching', 'no instante da chegada o estado lógico muda');
-    // dividir o mesmo tempo em passos diferentes dá o mesmo resultado (nenhum quadro envolvido)
-    for (const step of [1, 7, 333, 1000]) {
-        const g2 = setup(); startHunt(g2.game);
-        const e2 = g2.enc.request(SPECIES).encounter;
-        let t = 0;
-        while (t < e2.etaMs - 1) { const d = Math.min(step, e2.etaMs - 1 - t); g2.game.clock.advance(d); t += d; }
-        assert.equal(g2.enc.current.state, 'approaching', `passo ${step}`);
-        g2.game.clock.advance(1);
-        assert.notEqual(g2.enc.current.state, 'approaching', `passo ${step}`);
+    const cases = [
+        ['hunt_paused', (g) => { dispatch(g, 'START_HUNT'); dispatch(g, 'PAUSE_HUNT'); }],
+        ['tower_mode', (g) => { g._towerMode = true; }],
+        ['offline', (g) => { g._isOfflineSimulating = true; }],
+        ['no_party', (g) => { g.gameState.team = []; }],
+    ];
+    for (const [code, prep] of cases) {
+        const { game, enc } = setup();
+        prep(game);
+        const before = game.bus._listenerCount;
+        const r = enc.begin(SPECIES);
+        assert.deepEqual([r.ok, r.code], [false, code], code);
+        assert.equal(enc.cycle, null, `${code}: sem ciclo`);
+        assert.equal(game.encounterHook, null, `${code}: sem gancho`);
+        assert.equal(game.bus._listenerCount, before, `${code}: sem ouvintes sobrando`);
+        assert.equal(game.clock.pendingTimers(), 0, `${code}: sem timers`);
+    }
+    for (const bad of [0, -1, 1.5, NaN, '25', null, undefined, {}, 1074, 99999]) {
+        const { game, enc } = setup();
+        const r = enc.begin(bad);
+        assert.deepEqual([r.ok, r.code], [false, 'invalid_species'], String(bad));
+        assert.equal(session(game), null, 'não iniciou sessão');
+        assert.equal(game.encounterHook, null);
     }
 });
 
-test('F7.6 batalha: a chegada com batalha em curso espera a vez (guarda central), sem segunda batalha; depois entra pela entrada oficial', () => {
+// =============================================================== caminhada, chegada e batalha
+test('F7.7 caminhada: a posição lógica progride pelo caminho (sem teleporte), em terreno andável, e o tempo é comprimento ÷ velocidade', () => {
+    const { game, enc, world } = setup();
+    enc.begin(SPECIES);
+    const map = world.worldHuntMap(SPECIES), c = enc.current;
+    const expectLen = legLength(world, map, null, c.pointIndex);
+    assert.equal(c.lengthPx, expectLen, 'distância = caminho percorrido (não a reta)');
+    assert.equal(c.etaMs, etaOf(expectLen));
+    assert.ok(c.lengthPx > Math.hypot((c.point.x - map.spawn.x) * TILE, (c.point.y - map.spawn.y) * TILE) - 1, 'o caminho nunca é menor que a reta');
+    const foot = (cell) => ({ x: cell.x * TILE + 8, y: cell.y * TILE + 13 });
+    const start = enc.hunterState(map);
+    assert.deepEqual([start.x, start.y], [foot(map.spawn).x, foot(map.spawn).y], 'começa no ponto inicial do mapa');
+    let prev = start, walked = 0;
+    for (let t = 100; t < c.etaMs - 100; t += 100) {
+        game.clock.advance(100);
+        const h = enc.hunterState(map);
+        const step = Math.abs(h.x - prev.x) + Math.abs(h.y - prev.y);
+        assert.ok(step <= SPEED * 0.1 + 1e-6 && step > 0, `passo de ${step.toFixed(3)} px em 100 ms (nunca um salto)`);
+        assert.equal(world.worldCellBlocked(map, Math.floor(h.x / TILE), Math.floor((h.y - 1) / TILE)), false, 'sempre sobre terreno andável');
+        assert.equal(h.moving, true);
+        walked += step; prev = h;
+    }
+    assert.ok(walked > 0 && walked <= c.lengthPx, 'percorreu parte do caminho, sem passar do fim');
+    assert.ok(Math.abs(enc.cycle.leg.progressPx - SPEED * (game.now() - 1_000_000) / 1000) < 1e-6, 'progresso = velocidade × tempo');
+});
+
+test('F7.7 chegada: a batalha só começa quando o progresso lógico chega ao fim do caminho (nem um ms antes), pela entrada oficial', () => {
     const { game, enc, ev } = setup();
-    startHunt(game);                                                     // START_HUNT já abriu uma batalha normal
-    const routeBattle = game.currentBattle;
+    enc.begin(SPECIES);
+    const c = enc.current;
+    game.clock.advance(c.etaMs - 1);
+    assert.equal(count(ev, 'battle_started'), 0);
+    assert.equal(enc.current.state, 'approaching');
+    assert.ok(!game.currentBattle);
+    assert.equal(game.startBattle(), false, 'tentar iniciar antes da chegada é recusado (sem batalha aleatória de rota)');
+    assert.equal(game.startBattle(), false);
+    assert.ok(!game.currentBattle && !game.gameState.currentEnemy, 'nenhum inimigo foi gerado');
+    assert.equal(game.getHuntSession().state, 'running');
+    game.clock.advance(1);
+    assert.equal(enc.current.state, 'battling');
     assert.equal(count(ev, 'battle_started'), 1);
-    const c = enc.request(SPECIES).encounter;
-    game.clock.advance(c.etaMs);
-    assert.equal(enc.current.state, 'arrived', 'chegou, mas a batalha em curso impede');
-    assert.equal(game.currentBattle, routeBattle, 'a batalha em curso não foi trocada');
-    assert.equal(game._battleGuard.last, 'in_battle', 'quem recusou foi a guarda central');
-    assert.equal(count(ev, 'battle_started'), 1, 'nenhuma batalha extra');
-    assert.equal(game.startBattle(), false);
-    assert.equal(enc.current.state, 'arrived');
-    kill(game);                                                          // fim real da batalha de rota
-    assert.ok(game._nextBattleTimeout, 'o encadeamento do jogo agendou a próxima');
-    assert.equal(game.startBattle(), false, 'enquanto agendada, também recusa');
-    assert.equal(enc.current.state, 'arrived');
-    assert.equal(chain(game), true, 'a vez do encadeamento: o encontro fornece o inimigo');
-    assert.equal(enc.current.state, 'battling');
-    assert.equal(game.currentBattle.wild.id, SPECIES, 'o inimigo é a espécie do mapa');
-    assert.equal(count(ev, 'battle_started'), 2);
+    assert.equal(game.currentBattle.wild.id, SPECIES, 'a espécie do mapa');
+    assert.equal(enc.cycle.leg.progressPx, enc.cycle.leg.lengthPx);
     assert.equal(game.startBattle(), false, 'o mesmo encontro não abre uma segunda batalha');
-    assert.equal(game.startBattle(), false);
-    assert.equal(count(ev, 'battle_started'), 2);
-    assert.equal(game._battleGuard.last, 'in_battle');
+    game.clock.advance(120_000);
+    assert.equal(count(ev, 'battle_started'), 1, 'tempo extra não cria outra batalha');
 });
 
-test('F7.6 batalha: sem batalha em curso a chegada inicia a luta na hora, uma única vez', () => {
+test('F7.7 chegada por frações: dividir o tempo em 1, 7, 16,6, 33, 250 e 1000 ms leva à chegada no mesmo instante lógico', () => {
+    let reference = null;
+    for (const step of [1, 7, 16.6667, 33, 250, 1000, 4999]) {
+        const { game, enc } = setup();
+        enc.begin(SPECIES);
+        const eta = enc.current.etaMs;
+        let t = 0;
+        while (enc.current.state === 'approaching' && t < eta + 5000) {
+            const d = Math.min(step, eta + 5000 - t);
+            game.clock.advance(d); t += d;
+            if (enc.cycle) enc.hunterState({ id: enc.cycle.mapId });          // leitura do estado lógico (como a view faz)
+        }
+        assert.equal(enc.current.state, 'battling', `passo ${step}`);
+        assert.ok(t >= eta - 1e-6 && t < eta + step + 1, `chegou em ${t} ms (eta ${eta}, passo ${step})`);
+        const first = enc.current.pointIndex;
+        reference = reference === null ? first : reference;
+        assert.equal(first, reference, 'mesmo ponto escolhido');
+    }
+});
+
+test('F7.7 chegada com batalha em curso: espera a vez (guarda central), sem segunda batalha, e é servida pelo encadeamento sem perder o pedido', () => {
     const { game, enc, ev } = setup();
-    startHunt(game);
-    idle(game);                                                          // caçada rodando, loop ocioso
-    const c = enc.request(SPECIES).encounter;
-    const before = count(ev, 'battle_started');
-    game.clock.advance(c.etaMs);
-    assert.equal(enc.current.state, 'battling');
-    assert.equal(count(ev, 'battle_started'), before + 1);
-    assert.equal(game.currentBattle.wild.id, SPECIES);
-    game.clock.advance(60_000);
-    assert.equal(count(ev, 'battle_started'), before + 1, 'tempo extra não cria outra batalha');
-    assert.equal(game.encounterHook, enc);
-});
-
-test('F7.6 inimigo: usa os mecanismos do jogo (nível da rota, IVs, shiny) e nunca sobrescreve um inimigo salvo', () => {
-    const { game, enc } = setup();
-    startHunt(game);
-    idle(game);
-    const route = game.getRoute(game.gameState.currentRoute);
-    const c = enc.request(SPECIES).encounter;
-    game.clock.advance(c.etaMs);
-    const w = game.currentBattle.wild;
-    assert.equal(w.id, SPECIES);
-    assert.ok(w.level >= route.levelRange[0], `nível ${w.level} dentro da faixa da rota`);
-    assert.ok(w.ivs && typeof w.isShiny === 'boolean' && w.isWild === true && w.uid);
-    // inimigo salvo (ex.: atualização de página) vence: o encontro espera
-    game.stopBattle(); enc.cancel('x'); game.gameState.currentEnemy = game.createWildPokemon(19, 3, 0);
-    const second = enc.request(SPECIES);
-    game.clock.advance(second.encounter.etaMs);
-    assert.equal(game.currentBattle.wild.id, 19, 'o inimigo salvo foi usado');
-    assert.equal(enc.current.state, 'arrived', 'o encontro continua esperando a vez');
+    assert.equal(dispatch(game, 'START_HUNT').ok, true);               // uma batalha de rota já em curso (caçada comum)
+    const routeBattle = game.currentBattle;
+    assert.equal(enc.begin(SPECIES).ok, true);
+    game.clock.advance(enc.current.etaMs);
+    assert.equal(enc.current.state, 'arrived');
+    assert.equal(game.currentBattle, routeBattle, 'a luta em curso não foi trocada');
+    assert.equal(game._battleGuard.last, 'in_battle', 'recusa da guarda central');
+    assert.equal(count(ev, 'battle_started'), 1);
     kill(game);
-    chain(game);
-    assert.equal(game.currentBattle.wild.id, SPECIES);
+    assert.equal(game.startBattle(), false, 'próxima batalha agendada: recusa');
+    assert.equal(enc.current.state, 'arrived');
+    assert.equal(chain(game), true);
     assert.equal(enc.current.state, 'battling');
+    assert.equal(game.currentBattle.wild.id, SPECIES);
+    assert.equal(count(ev, 'battle_started'), 2);
 });
 
-// =============================================================== resultados reais
-test('F7.6 resultados: vitória e derrota reais resolvem o encontro sem duplicar contadores nem recompensas', () => {
+test('F7.7 ciclo: resultado real → próximo ponto automático, sem repetir o anterior, sem batalha de rota no meio, com percurso a partir do ponto anterior', () => {
+    const { game, enc, world, ev } = setup();
+    enc.begin(SPECIES);
+    const map = world.worldHuntMap(SPECIES), sid = session(game).id;
+    let last = null;
+    const seen = [];
+    for (let n = 0; n < 6; n++) {
+        const c = enc.current;
+        assert.equal(c.sequence, n, `perna ${n}`);
+        assert.equal(c.pointIndex, world.worldPickEncounterPoint(map, sid, n, last), 'ponto segue a função pura determinística');
+        if (last !== null) assert.notEqual(c.pointIndex, last, 'não repete o ponto imediatamente');
+        assert.equal(c.lengthPx, legLength(world, map, last, c.pointIndex), 'percurso parte do ponto anterior');
+        game.clock.advance(c.etaMs);
+        if (n > 0) assert.equal(chain(game) || enc.current.state === 'battling', true);
+        assert.equal(enc.current.state, 'battling');
+        assert.equal(game.currentBattle.wild.id, SPECIES);
+        assert.equal(count(ev, 'battle_started'), n + 1, 'uma batalha por chegada');
+        if (n % 2 === 0) kill(game); else lose(game);
+        seen.push(c.pointIndex);
+        last = c.pointIndex;
+        assert.equal(enc.lastResult.outcome, n % 2 === 0 ? 'victory' : 'defeat');
+        assert.equal(enc.current.state, 'approaching', 'a sessão segue ativa: já começou o próximo deslocamento');
+        assert.equal(enc.current.sequence, n + 1);
+        assert.deepEqual({ ...session(game).world }, { speciesId: SPECIES, seq: n + 1, last, to: enc.current.pointIndex, progressPx: 0 });
+        // enquanto caminha para o próximo: nada de batalha de rota
+        const started = count(ev, 'battle_started');
+        assert.equal(chain(game), false, 'sem chegada, o encadeamento do jogo não abre luta (sem fallback aleatório)');
+        assert.equal(count(ev, 'battle_started'), started);
+        if (n % 2 === 1) { game.stopBattle(); game.healTimer = null; }
+    }
+    assert.ok(new Set(seen).size >= 3, 'usou vários pontos');
+});
+
+test('F7.7 resultados: vitória e derrota reais não duplicam contadores nem recompensas; evento repetido é inofensivo', () => {
     for (const result of ['victory', 'defeat']) {
         const { game, enc, ev } = setup();
-        startHunt(game); idle(game);
-        const base = game.bus._listenerCount;
-        const c = enc.request(SPECIES).encounter;
-        assert.ok(game.bus._listenerCount > base, 'o encontro assinou eventos');
-        game.clock.advance(c.etaMs);
-        assert.equal(enc.current.state, 'battling');
-        const session = game.getHuntSession(), s0 = { ...session.stats }, money0 = count(ev, 'money_earned'), completed0 = count(ev, 'battle_completed');
+        enc.begin(SPECIES);
+        game.clock.advance(enc.current.etaMs);
+        const s0 = { ...session(game).stats }, money0 = count(ev, 'money_earned'), done0 = count(ev, 'battle_completed');
         if (result === 'victory') kill(game); else lose(game);
-        assert.equal(count(ev, 'battle_completed'), completed0 + 1, `${result}: um único fim de batalha`);
-        assert.equal(enc.current.state, 'resolved');
-        assert.equal(enc.current.outcome, result);
-        assert.equal(session.stats.battles - s0.battles, 1, 'o contador do jogo subiu uma vez (o controlador não conta nada)');
-        assert.equal(session.stats[result === 'victory' ? 'victories' : 'defeats'] - s0[result === 'victory' ? 'victories' : 'defeats'], 1);
-        assert.ok(count(ev, 'money_earned') - money0 <= 1, 'recompensa em dinheiro: no máximo uma vez');
-        assert.equal(game.encounterHook, null, 'o gancho é removido ao resolver');
-        assert.equal(game.bus._listenerCount, base, 'sem ouvintes do encontro sobrando');
-        enc._onBattleCompleted({ type: 'battle_completed', result });          // evento repetido/atrasado é inofensivo
-        assert.equal(enc.current.state, 'resolved');
-        assert.equal(session.stats.battles - s0.battles, 1);
+        assert.equal(count(ev, 'battle_completed'), done0 + 1);
+        assert.equal(session(game).stats.battles - s0.battles, 1, 'o contador é do jogo, uma vez');
+        assert.equal(session(game).stats[result === 'victory' ? 'victories' : 'defeats'] - s0[result === 'victory' ? 'victories' : 'defeats'], 1);
+        assert.ok(count(ev, 'money_earned') - money0 <= 1);
+        const seq = enc.current.sequence;
+        enc._onBattleCompleted({ type: 'battle_completed', result });         // evento atrasado/repetido
+        enc._onBattleCompleted({ type: 'battle_completed', result });
+        assert.equal(enc.current.sequence, seq, 'não avançou outra perna');
+        assert.equal(session(game).stats.battles - s0.battles, 1);
     }
 });
 
 // =============================================================== pausa, retomada, encerramento
-test('F7.6 pausa: congela o ETA e preserva ponto/sequência; retomar continua uma única vez, sem re-sortear', () => {
-    const { game, enc, ev } = setup();
-    startHunt(game); idle(game);
-    const c = enc.request(SPECIES).encounter;
-    const id = c.id, idx = c.pointIndex, seq = enc.sequence;
-    game.clock.advance(2500);
+test('F7.7 pausa: congela posição e progresso, preserva caminho/destino/sequência; retomar continua o MESMO percurso, sem novo sorteio e sem duplicar a chegada', () => {
+    const { game, enc, world, ev } = setup();
+    enc.begin(SPECIES);
+    const map = world.worldHuntMap(SPECIES), c = enc.current, id = c.id, idx = c.pointIndex;
+    game.clock.advance(4000);
     dispatch(game, 'PAUSE_HUNT');
-    assert.equal(game.clock.pendingTimers() === 0 || !enc._timer, true, 'nenhum timer do encontro durante a pausa');
-    const left = enc.current.remainingMs;
-    assert.equal(left, c.etaMs - 2500, 'ETA restante exato');
-    game.clock.advance(10 * 60_000);                                         // muito tempo pausado
-    assert.equal(enc.current.state, 'approaching', 'pausar não faz o encontro progredir');
-    assert.equal(enc.current.remainingMs, left);
-    assert.equal(count(ev, 'battle_started'), 1, 'nenhuma batalha nova durante a pausa');
-    dispatch(game, 'RESUME_HUNT');
-    assert.equal(enc.current.id, id); assert.equal(enc.current.pointIndex, idx); assert.equal(enc.sequence, seq, 'nada foi re-sorteado');
-    assert.ok(enc._timer !== null, 'timer rearmado');
-    game.clock.advance(left - 1);
+    const frozen = enc.hunterState(map), seq = enc.cycle.seq;
+    assert.equal(Math.round(enc.cycle.leg.progressPx), SPEED * 4, 'tempo aplicado até a pausa, uma vez');
+    assert.equal(frozen.moving, false);
+    assert.equal(game.clock.pendingTimers(), 0, 'nenhum timer durante a pausa');
+    game.clock.advance(10 * 60_000);
+    const still = enc.hunterState(map);
+    assert.deepEqual([still.x, still.y], [frozen.x, frozen.y], 'posição congelada');
     assert.equal(enc.current.state, 'approaching');
-    game.clock.advance(1);
-    assert.equal(enc.current.state, 'arrived', 'a retomada já tinha reaberto a luta de rota; o encontro espera a vez (guarda central)');
-    kill(game);
-    assert.equal(chain(game), true);
+    assert.equal(game.startBattle(), false, 'pausada: nenhuma batalha (nem de rota)');
+    assert.equal(count(ev, 'battle_started'), 0);
+    assert.equal(enc.cycle.seq, seq, 'nada foi sorteado');
+    dispatch(game, 'RESUME_HUNT');
+    assert.equal(enc.current.id, id); assert.equal(enc.current.pointIndex, idx); assert.equal(enc.cycle.seq, seq);
+    const remaining = c.etaMs - 4000;
+    game.clock.advance(remaining - 2);
+    assert.equal(enc.current.state, 'approaching', 'o tempo pausado não contou');
+    game.clock.advance(3);
     assert.equal(enc.current.state, 'battling');
-    const started = count(ev, 'battle_started');
-    dispatch(game, 'PAUSE_HUNT'); dispatch(game, 'RESUME_HUNT'); dispatch(game, 'PAUSE_HUNT'); dispatch(game, 'RESUME_HUNT');
-    assert.equal(count(ev, 'battle_started'), started, 'pausar/retomar várias vezes não duplica a batalha');
-    assert.equal(game.currentBattle.wild.id, SPECIES);
+    assert.equal(count(ev, 'battle_started'), 1);
+    for (let i = 0; i < 4; i++) { dispatch(game, 'PAUSE_HUNT'); dispatch(game, 'RESUME_HUNT'); }
+    assert.equal(count(ev, 'battle_started'), 1, 'pausar/retomar não duplica a batalha');
 });
 
-test('F7.6 pausa: com o encontro já chegado, a pausa não entrega o inimigo; a retomada entrega uma vez', () => {
+test('F7.7 pausa com a chegada já feita: a pausa não entrega o inimigo; a retomada entrega uma única vez', () => {
     const { game, enc, ev } = setup();
-    startHunt(game);                                                          // batalha de rota em curso
-    const c = enc.request(SPECIES).encounter;
-    game.clock.advance(c.etaMs);
+    assert.equal(dispatch(game, 'START_HUNT').ok, true);
+    enc.begin(SPECIES);
+    game.clock.advance(enc.current.etaMs);
     assert.equal(enc.current.state, 'arrived');
     kill(game);
     dispatch(game, 'PAUSE_HUNT');
-    chain(game);                                                              // o jogo segue com batalhas de rota (comportamento existente), mas sem consumir o encontro
-    assert.notEqual(game.currentBattle.wild.id, SPECIES === game.currentBattle.wild.id ? -1 : SPECIES);
-    assert.equal(enc.current.state, 'arrived', 'pausado: o encontro não foi consumido');
+    assert.equal(chain(game), false, 'pausada: nem o inimigo do mapa nem batalha de rota');
+    assert.equal(enc.current.state, 'arrived');
     assert.equal(enc._supplied, null);
-    kill(game);
-    dispatch(game, 'RESUME_HUNT');                                            // a retomada tenta a próxima batalha (ATTACK)
+    assert.equal(count(ev, 'battle_started'), 1);
+    dispatch(game, 'RESUME_HUNT');                                           // ATTACK da retomada → startBattle → gancho
     chain(game);
     assert.equal(enc.current.state, 'battling');
-    assert.equal(count(ev, 'battle_started') >= 3, true);
-    const started = count(ev, 'battle_started');
+    assert.equal(count(ev, 'battle_started'), 2);
     dispatch(game, 'PAUSE_HUNT'); dispatch(game, 'RESUME_HUNT');
-    assert.equal(count(ev, 'battle_started'), started, 'retomar durante a luta não abre outra');
+    assert.equal(count(ev, 'battle_started'), 2);
 });
 
-test('F7.6 encerramento: parar a caçada cancela o encontro que não começou e limpa timer, gancho e ouvintes', () => {
+test('F7.7 pausa durante a batalha: a luta termina normalmente, nenhum ponto é sorteado enquanto pausada e a retomada começa a próxima perna uma vez', () => {
+    const { game, enc, ev } = setup();
+    enc.begin(SPECIES);
+    game.clock.advance(enc.current.etaMs);
+    dispatch(game, 'PAUSE_HUNT');
+    const seq = enc.cycle.seq, battle = game.currentBattle;
+    assert.equal(game.currentBattle, battle, 'a batalha em curso não foi abortada');
+    kill(game);
+    assert.equal(enc.current.state, 'resolved');
+    assert.equal(enc.cycle.seq, seq, 'pausada: o próximo ponto NÃO foi escolhido');
+    assert.equal(enc.cycle.pendingLeg, true);
+    assert.equal(game.clock.pendingTimers(), 0);
+    game.clock.advance(60_000);
+    assert.equal(enc.current.state, 'resolved');
+    dispatch(game, 'RESUME_HUNT');
+    assert.equal(enc.current.state, 'approaching');
+    assert.equal(enc.cycle.seq, seq + 1);
+    dispatch(game, 'PAUSE_HUNT'); dispatch(game, 'RESUME_HUNT');
+    assert.equal(enc.cycle.seq, seq + 1, 'uma única perna nova');
+    assert.equal(count(ev, 'battle_started'), 1);
+});
+
+test('F7.7 encerramento: parar a caçada cancela o percurso e limpa timers, gancho, ouvintes e o registro da sessão; as batalhas normais voltam', () => {
     const { game, enc } = setup();
-    startHunt(game); idle(game);
-    const afterStart = game.bus._listenerCount;
-    const c = enc.request(SPECIES).encounter;
-    assert.ok(game.bus._listenerCount > afterStart);
+    const listeners0 = game.bus._listenerCount;
+    enc.begin(SPECIES);
+    game.clock.advance(3000);
     dispatch(game, 'STOP_HUNT');
+    assert.equal(enc.cycle, null);
     assert.equal(enc.current.state, 'cancelled');
     assert.equal(enc.current.reason, 'hunt_stopped');
-    assert.equal(enc._timer, null);
+    assert.equal(game.encounterHook, null);
     assert.equal(game.clock.pendingTimers(), 0);
-    assert.equal(game.encounterHook, null);
-    assert.equal(game.bus._listenerCount, afterStart - 0 - (game._getEngine().isAttached() ? 0 : 7), 'só restam os ouvintes do próprio jogo (os do encontro saíram)');
-    game.clock.advance(c.etaMs * 3);
-    assert.equal(enc.current.state, 'cancelled', 'o tempo passando não ressuscita nada');
-});
-
-test('F7.6 cancelamento: uma batalha já em curso nunca é abortada nem recontada; o encontro apenas deixa de ser acompanhado', () => {
-    const { game, enc, ev } = setup();
-    startHunt(game); idle(game);
-    const c = enc.request(SPECIES).encounter;
-    game.clock.advance(c.etaMs);
-    assert.equal(enc.current.state, 'battling');
-    const battle = game.currentBattle, timer = game.battleTimer;
-    const s0 = { ...game.getHuntSession().stats };
-    dispatch(game, 'STOP_HUNT');
+    assert.equal(game.bus._listenerCount, listeners0, 'ouvintes liberados (o motor da caçada também saiu)');
+    assert.equal(session(game).world, undefined, 'registro do mundo removido da sessão parada');
+    game.clock.advance(10 * 60_000);
     assert.equal(enc.current.state, 'cancelled');
-    assert.equal(game.currentBattle, battle, 'a batalha continua');
-    assert.equal(game.battleTimer, timer);
-    assert.equal(game.encounterHook, null);
-    const completed = count(ev, 'battle_completed');
-    kill(game);
-    assert.equal(count(ev, 'battle_completed'), completed + 1, 'termina pelas regras do jogo');
-    assert.equal(enc.current.state, 'cancelled', 'o resultado não reabre o encontro');
-    assert.equal(enc.cancel('de novo'), false, 'cancelar de novo é inofensivo');
+    assert.equal(game.startBattle(), true, 'fora de uma caçada do mundo, a batalha normal de rota funciona');
+    assert.notEqual(game.currentBattle, null);
 });
 
-test('F7.6 offline e Torre: cancelam um encontro pendente; o gancho não entrega inimigo nesses modos; offline por rota segue intacto', () => {
+test('F7.7 cancelamento: uma batalha em curso nunca é abortada; o resultado depois do cancelamento não reabre nada', () => {
+    const { game, enc, ev } = setup();
+    enc.begin(SPECIES);
+    game.clock.advance(enc.current.etaMs);
+    const battle = game.currentBattle, timer = game.battleTimer;
+    dispatch(game, 'STOP_HUNT');
+    assert.equal(game.currentBattle, battle);
+    assert.equal(game.battleTimer, timer);
+    const done = count(ev, 'battle_completed');
+    kill(game);
+    assert.equal(count(ev, 'battle_completed'), done + 1);
+    assert.equal(enc.cycle, null);
+    assert.equal(enc.cancel('de novo'), false);
+    assert.equal(game.clock.pendingTimers(), 0);
+});
+
+test('F7.7 offline e Torre durante a caminhada: encerram o ciclo; o gancho não entrega inimigo nesses modos', () => {
     for (const mode of ['_isOfflineSimulating', '_towerMode']) {
         const { game, enc } = setup();
-        startHunt(game); idle(game);
-        const c = enc.request(SPECIES).encounter;
+        enc.begin(SPECIES);
         game[mode] = true;
-        game.clock.advance(c.etaMs);
-        assert.equal(enc.current.state, 'cancelled', mode);
+        game.clock.advance(enc.current.etaMs);
+        assert.equal(enc.cycle, null, mode);
         assert.equal(enc.current.reason, mode === '_isOfflineSimulating' ? 'offline' : 'tower_mode');
         assert.equal(game.encounterHook, null);
         assert.equal(game.clock.pendingTimers(), 0);
         game[mode] = false;
     }
-    // evento offline também cancela
-    const { game, enc } = setup();
-    startHunt(game); idle(game);
-    enc.request(SPECIES);
-    game.bus.emit('battle_completed', { result: 'victory' }, { offline: true });
-    assert.equal(enc.current.reason, 'offline');
-    // gancho direto em modo offline devolve nada
-    const o = setup(); startHunt(o.game); idle(o.game);
-    const c = o.enc.request(SPECIES).encounter;
-    o.game.clock.advance(c.etaMs - 1);
-    o.game._isOfflineSimulating = true;
-    assert.equal(o.enc.takeArrivedEnemy(), null);
-    o.game._isOfflineSimulating = false;
 });
 
-// =============================================================== determinismo e repetição
-test('F7.6 pontos: a sequência é reproduzível (mapa + sessão + sequência), não repete o ponto anterior e nunca usa dados fora do mapa', () => {
-    const w1 = loadWorld(), w2 = loadWorld();
-    const map1 = w1.worldHuntMap(SPECIES), map2 = w2.worldHuntMap(SPECIES);
-    const run = (w, map, sid) => { const out = []; let last = null; for (let seq = 0; seq < 40; seq++) { const i = w.worldPickEncounterPoint(map, sid, seq, last); out.push(i); last = i; } return out.join(','); };
-    const a = run(w1, map1, 'habc1'), b = run(w2, map2, 'habc1');
-    assert.equal(a, b, 'mesma identidade, sessão e sequência: mesma lista (também em outro contexto)');
-    assert.notEqual(run(w1, map1, 'habc2'), a, 'outra sessão, outra sequência');
-    assert.notEqual(run(w1, w1.worldHuntMap(26), 'habc1'), a, 'outro mapa, outra sequência');
-    const idxs = a.split(',').map(Number);
-    for (let i = 1; i < idxs.length; i++) assert.notEqual(idxs[i], idxs[i - 1], `repetiu o ponto em ${i}`);
-    assert.ok(new Set(idxs).size >= 3, 'usa vários pontos');
-    // sem retentativas: chamada única e função pura (mesmos argumentos, mesmo resultado, nada muda no mapa)
-    const snap = JSON.stringify(map1);
-    for (let i = 0; i < 50; i++) assert.equal(w1.worldPickEncounterPoint(map1, 'habc1', 3, 1), w1.worldPickEncounterPoint(map1, 'habc1', 3, 1));
-    assert.equal(JSON.stringify(map1), snap, 'dados do mapa intactos');
-    assert.ok(Object.isFrozen(map1) && Object.isFrozen(map1.encounterPoints) && Object.isFrozen(map1.rows));
-});
-
-test('F7.6 pontos: casos-limite — um único candidato é reutilizado; pontos inválidos são ignorados; sem candidatos devolve null', () => {
-    const w = loadWorld();
-    const open = (points) => ({ id: 'x', type: 'hunt', width: 10, height: 10, rows: Array.from({ length: 10 }, (_, y) => (y === 5 ? '..TT......' : '..........')), spawn: { x: 0, y: 0 }, encounterPoints: points });
-    const one = open([{ x: 8, y: 8 }]);
-    assert.equal(w.worldPickEncounterPoint(one, 's', 0, null), 0);
-    assert.equal(w.worldPickEncounterPoint(one, 's', 1, 0), 0, 'único candidato: reutiliza (documentado)');
-    const mixed = open([{ x: 3, y: 5 }, { x: 99, y: 1 }, { x: -1, y: 2 }, { x: 1.5, y: 1 }, { x: 8, y: 8 }, null, { x: 2, y: 2 }]);
-    assert.equal(JSON.stringify(w.worldEncounterCandidates(mixed)), '[4,6]', 'bloqueado, fora do mapa, fracionário e nulo ficam de fora');
-    for (let s = 0; s < 30; s++) assert.ok([4, 6].includes(w.worldPickEncounterPoint(mixed, 's', s, null)));
-    for (let s = 0; s < 30; s++) { const p = w.worldPickEncounterPoint(mixed, 's', s, 4); assert.equal(p, 6, 'o outro candidato'); }
-    assert.equal(w.worldPickEncounterPoint(open([{ x: 3, y: 5 }, { x: 50, y: 50 }]), 's', 0, null), null);
-    assert.equal(w.worldPickEncounterPoint(open([]), 's', 0, null), null);
-    assert.equal(w.worldPickEncounterPoint({ id: 'z', width: 3, height: 3, rows: ['...', '...', '...'] }, 's', 0, null), null, 'sem lista de pontos');
-    assert.equal(w.worldPickEncounterPoint(null, 's', 0, null), null);
-});
-
-test('F7.6 sequência no jogo: encontros resolvidos em série seguem a função pura e jamais repetem o ponto imediatamente', () => {
-    const run = () => {
-        const { game, enc, world } = setup({ seed: 3 });
-        const session = startHunt(game); idle(game);
-        const map = world.worldHuntMap(SPECIES), picked = [];
-        let last = null;
-        for (let n = 0; n < 6; n++) {
-            const c = enc.request(SPECIES).encounter;
-            assert.equal(c.pointIndex, world.worldPickEncounterPoint(map, session.id, n, last), `encontro ${n} segue a função pura`);
-            if (last !== null) assert.notEqual(c.pointIndex, last);
-            picked.push(c.pointIndex);
-            game.clock.advance(c.etaMs);
-            assert.equal(enc.current.state, 'battling');
-            kill(game);
-            assert.equal(enc.current.state, 'resolved');
-            game.stopBattle(); if (game._nextBattleTimeout) { clearTimeout(game._nextBattleTimeout); game._nextBattleTimeout = null; }
-            last = c.pointIndex;
-        }
-        return picked.join(',');
-    };
-    assert.equal(run(), run(), 'mesma semente do jogo e mesmo relógio: mesma sequência de pontos');
-});
-
-test('F7.6 sessão nova ou mapa novo recomeçam a sequência; o ETA seguinte parte do ponto anterior (distância real)', () => {
+test('F7.7 página escondida: a caminhada congela; ≤ 2 s o tempo escondido é aplicado uma única vez; sem timers enquanto escondida', () => {
     const { game, enc, world } = setup();
-    startHunt(game); idle(game);
-    const c0 = enc.request(SPECIES).encounter;
-    game.clock.advance(c0.etaMs); kill(game); game.stopBattle(); clearTimeout(game._nextBattleTimeout); game._nextBattleTimeout = null;
+    enc.begin(SPECIES);
     const map = world.worldHuntMap(SPECIES);
-    const c1 = enc.request(SPECIES).encounter;
-    assert.equal(c1.sequence, 1);
-    assert.equal(c1.etaMs, manhattanMs(cellCenter(map.encounterPoints[c0.pointIndex]), cellCenter(c1.point)), 'percurso do ponto anterior ao novo');
-    const other = enc.request(4);
-    assert.equal(other.code, 'already_active');
-    game.clock.advance(c1.etaMs); kill(game); game.stopBattle(); clearTimeout(game._nextBattleTimeout); game._nextBattleTimeout = null;
-    const c2 = enc.request(4).encounter;
-    assert.equal(c2.sequence, 0, 'mapa diferente: sequência recomeça');
-    assert.equal(c2.mapId, 'hunt_4');
+    game.clock.advance(3000);
+    game._onPageHidden();
+    assert.equal(game.clock.pendingTimers(), 0);
+    const p0 = enc.cycle.leg.progressPx;
+    assert.equal(Math.round(p0), SPEED * 3);
+    game.clock.advance(1500);
+    assert.equal(enc.cycle.leg.progressPx, p0, 'nada anda escondido');
+    game._onPageVisible();
+    assert.equal(Math.round(enc.hunterState(map) && enc.cycle.leg.progressPx), Math.round(SPEED * 4.5), 'os 1,5 s escondidos foram aplicados uma vez');
+    game._onPageHidden(); game.clock.advance(1000); game._onPageVisible(); game._onPageVisible();
+    assert.equal(Math.round(enc.cycle.leg.progressPx), Math.round(SPEED * 5.5), 'visibilidade repetida não reaplica');
+    assert.ok(enc.cycle.leg.progressPx < enc.cycle.leg.lengthPx);
 });
 
-test('F7.6 dados do mapa e cache da F7.4 permanecem intactos depois de todo o ciclo', () => {
-    const { game, enc, world } = setup();
-    startHunt(game); idle(game);
-    const map = world.worldHuntMap(SPECIES);
-    const snap = JSON.stringify(map), stats = JSON.stringify(world.worldHuntStats());
-    for (let n = 0; n < 3; n++) { const c = enc.request(SPECIES).encounter; game.clock.advance(c.etaMs); kill(game); game.stopBattle(); if (game._nextBattleTimeout) { clearTimeout(game._nextBattleTimeout); game._nextBattleTimeout = null; } }
-    enc.request(SPECIES); enc.cancel('teste');
-    assert.equal(JSON.stringify(world.worldHuntMap(SPECIES)), snap);
-    assert.equal(world.worldHuntMap(SPECIES), map, 'mesmo objeto no cache');
-    assert.equal(JSON.stringify(world.worldHuntStats()), stats, 'nenhum mapa novo foi gerado pelos encontros');
-    assert.ok(Object.isFrozen(map) && Object.isFrozen(map.encounterPoints[0]));
-    assert.equal('state' in map || 'encounter' in map || 'used' in map, false, 'nenhum estado mutável foi gravado no mapa');
+// =============================================================== persistência (session.world)
+test('F7.7 persistência: o save guarda só { speciesId, seq, last [, to, progressPx] }; saves antigos e valores inválidos são aceitos com segurança', () => {
+    const { ctx } = newGame();
+    const base = (extra) => ({ id: 'h1', state: 'paused', routeId: 'kanto_route1', policy: ctx.defaultAutomationPolicy(), createdAt: 1, startedAt: 1, activeMs: 5, stats: {}, ...extra });
+    const ok = ctx.sanitizeHuntSession(base({ world: { speciesId: 25, seq: 3, last: 2 } }));
+    assert.equal(JSON.stringify(ok.world), '{"speciesId":25,"seq":3,"last":2}');
+    assert.equal(JSON.stringify(ctx.sanitizeHuntSession(base({ world: { speciesId: 25, seq: 0, last: null } })).world), '{"speciesId":25,"seq":0,"last":null}');
+    assert.equal(ctx.sanitizeHuntSession(base({})).world, undefined, 'save anterior à F7.7: sem campo, sem problema');
+    for (const bad of [null, 5, 'x', [], {}, { speciesId: 0, seq: 0, last: null }, { speciesId: -3, seq: 0, last: null }, { speciesId: 1.5, seq: 0, last: null }, { speciesId: '25', seq: 0, last: null },
+        { speciesId: 25, seq: -1, last: null }, { speciesId: 25, seq: 2e9, last: null }, { speciesId: 25, seq: 'a', last: null }, { speciesId: 25, seq: 1, last: -1 }, { speciesId: 25, seq: 1, last: 1.5 }, { speciesId: 25, seq: 1, last: 5000 }, { speciesId: 25, seq: 1 }, { speciesId: 1e9, seq: 1, last: null }]) {
+        const s = ctx.sanitizeHuntSession(base({ world: bad }));
+        assert.ok(s, 'a sessão continua válida');
+        assert.equal(s.world, undefined, JSON.stringify(bad));
+    }
 });
 
-// =============================================================== view: leitura do estado, sprite no mundo, ação explícita
+// =============================================================== view: leitura do estado, câmera e sprite
 const viewSetup = async (extra = {}) => {
     const { game, ctx } = newGame({ seed: 11 });
     game.clock = new ctx.ManualClock(2_000_000);
@@ -425,112 +398,94 @@ const viewSetup = async (extra = {}) => {
     return { ...r, game };
 };
 
-test('F7.6 view: abrir o mapa de caça não inicia sessão, batalha nem encontro; o botão é a ação explícita', async () => {
-    const { env, view, game, encounters, ui } = await viewSetup();
-    const stats0 = JSON.stringify(game._battleGuard);
-    assert.equal(view.openHuntMap(SPECIES).ok, true); env.flush();
-    assert.equal(game.getHuntSession(), null, 'nenhuma sessão');
-    assert.ok(!game.currentBattle);
-    assert.ok(!game.battleTimer);
-    assert.equal(game.encounterHook, null);
-    assert.equal(encounters.current, null);
-    assert.equal(JSON.stringify(game._battleGuard), stats0);
-    assert.equal(env.encounterBox.hidden, false);
-    assert.equal(env.encounterBtn.disabled, true, 'sem caçada em andamento o botão fica desligado');
-    assert.match(env.encounterStatus.textContent, /Inicie a caçada/);
-    env.encounterBtn.fire('click');                                         // mesmo assim: recusado com aviso, sem criar nada
-    assert.equal(encounters.current, null);
-    assert.match(ui.toasts[ui.toasts.length - 1], /Inicie a caçada/);
-    startHunt(game); idle(game);
-    view.requestRedraw(true); env.flush();
-    assert.equal(env.encounterBtn.disabled, false);
-    assert.equal(encounters.current, null, 'caçada rodando também não cria encontro sozinha');
-    env.encounterBtn.fire('click'); env.flush();
-    assert.equal(encounters.current.state, 'approaching');
-    assert.equal(env.encounterBtn.disabled, true, 'um por vez');
-    assert.match(env.encounterStatus.textContent, /Pikachu apareceu/);
-    view.setArea('starter_town'); env.flush();
-    assert.equal(env.encounterBox.hidden, true, 'fora de mapa de caça não há botão');
-});
-
-test('F7.6 view: o Pokémon é desenhado em coordenadas do MUNDO; a câmera só aplica a transformação e não muda o encontro', async () => {
+test('F7.7 view: abrir o mapa não inicia nada; o botão explícito inicia a caçada e o personagem aparece caminhando, com a câmera acompanhando', async () => {
     const { env, view, game, encounters, world } = await viewSetup();
-    startHunt(game); idle(game);
     view.openHuntMap(SPECIES); env.flush();
-    encounters.request(SPECIES);
-    const c = encounters.current;
-    env.flush();                                                            // primeiro desenho cria a imagem
-    await new Promise(r => setTimeout(r, 0));                               // a imagem falsa "carrega" (microtask)
-    env.flush();
-    const map = view.currentScene().map, m = view.lastMetrics;
-    const sprite = () => env.draws.filter(a => a.length === 5).at(-1);
-    const expectAt = (cam) => world.worldToScreen(cam, m, (c.point.x + 0.5) * TILE - 12, (c.point.y + 0.5) * TILE + 6 - 24);
-    const first = sprite(), cam1 = { ...view.lastCamera };
-    assert.ok(first, 'o sprite foi desenhado com drawImage de 5 argumentos');
-    assert.deepEqual([first[1], first[2]], [expectAt(cam1).x, expectAt(cam1).y]);
-    assert.equal(first[3], 24 * m.zoom);
-    // move só o personagem/câmera (estado visual): o sprite acompanha a câmera, o encontro lógico não muda
-    const snap = JSON.stringify(encounters.current);
-    view._players[map.id] = { ...view._player(map), x: (map.width - 6) * TILE, y: (map.height - 6) * TILE };
-    view.requestRedraw(true); env.flush();
-    const cam2 = { ...view.lastCamera }, second = sprite();
-    assert.notDeepEqual([cam1.x, cam1.y], [cam2.x, cam2.y], 'a câmera mudou');
-    assert.deepEqual([second[1], second[2]], [expectAt(cam2).x, expectAt(cam2).y], 'posição de tela segue a câmera');
-    assert.notDeepEqual([first[1], first[2]], [second[1], second[2]]);
-    assert.equal(JSON.stringify(encounters.current), snap, 'a lógica do encontro não foi tocada');
+    assert.equal(session(game), null);
+    assert.ok(!game.currentBattle);
+    assert.equal(encounters.cycle, null);
+    assert.equal(env.encounterBtn.disabled, false);
+    env.encounterBtn.fire('click'); env.flush();
+    assert.equal(session(game).state, 'running');
+    assert.equal(env.encounterBtn.disabled, true, 'um ciclo por vez');
+    assert.match(env.encounterStatus.textContent, /Caminhando até Pikachu/);
+    const map = view.currentScene().map;
+    const heroAt = () => { const hero = env.draws.filter(a => a.length === 9).at(-1); return [hero[5], hero[6]]; };
+    const cams = [], poses = [];
+    for (let i = 0; i < 6; i++) {
+        game.clock.advance(1500);
+        view.requestRedraw(true); env.flush();
+        cams.push({ ...view.lastCamera });
+        poses.push({ x: view._player(map).x, y: view._player(map).y, moving: view._player(map).moving });
+    }
+    assert.ok(poses.every(p => p.moving), 'andando');
+    assert.notDeepEqual([poses[0].x, poses[0].y], [poses[5].x, poses[5].y], 'a posição lógica mudou');
+    const m = view.lastMetrics, cam = view.lastCamera, p = view._player(map);
+    const feet = world.worldToScreen(cam, m, p.x, p.y - 6);
+    assert.ok(Math.abs(feet.x - m.bufferWidth / 2) <= m.zoom || cam.x === 0 || Math.abs(cam.x + m.viewWidth - map.width * TILE) < 1, 'câmera centrada no personagem (ou parada na borda do mapa)');
+    assert.ok(cams.some((c, i) => i > 0 && (c.x !== cams[i - 1].x || c.y !== cams[i - 1].y)), 'a câmera acompanhou o movimento');
+    // o personagem é desenhado exatamente onde o estado lógico o põe
+    const ch = world.WORLD_CHARACTER, at = world.worldToScreen(cam, m, p.x - ch.anchor.x, p.y - ch.anchor.y - (p.moving && Math.floor(p.distance / 6) % 2 === 1 ? 1 : 0));
+    assert.deepEqual(heroAt(), [at.x, at.y]);
 });
 
-test('F7.6 view: sem Canvas visível (aba escondida) a lógica segue igual; o desenho é só consequência do estado', async () => {
+test('F7.7 view: controles manuais nunca desviam o personagem durante a caçada; a lógica segue sem Canvas visível', async () => {
     const { env, view, game, encounters } = await viewSetup();
-    startHunt(game); idle(game);
     view.openHuntMap(SPECIES); env.flush();
-    const c = encounters.request(SPECIES).encounter;
-    view.onHide();                                                           // sai da aba: sem renderer
+    env.encounterBtn.fire('click'); env.flush();
+    const map = view.currentScene().map;
+    game.clock.advance(3000); view.requestRedraw(true); env.flush();
+    const before = encounters.hunterState(map);
+    env.key('keydown', 'ArrowLeft'); env.key('keydown', 'KeyW');
+    env.key('keyup', 'ArrowLeft'); env.key('keyup', 'KeyW');
+    assert.equal(env.controlsEl.hidden, true, 'sem direcional');
+    assert.equal(view.controls.direction(), null);
+    const eta = encounters.current.etaMs;
+    view.onHide();                                                          // sai da aba: sem renderer
     const draws = env.draws.length;
-    game.clock.advance(c.etaMs);
-    assert.equal(encounters.current.state, 'battling', 'a chegada e a batalha acontecem sem renderer');
+    game.clock.advance(eta);
+    assert.equal(encounters.current.state, 'battling', 'chegada e batalha sem Canvas');
     assert.equal(env.draws.length, draws, 'nada foi desenhado');
-    assert.equal(env.pending(), 0, 'nenhum quadro pedido');
+    assert.equal(env.pending(), 0);
+    assert.ok(before.x !== undefined);
     view.onShow(); env.flush();
     assert.match(env.encounterStatus.textContent, /Batalha contra Pikachu/);
 });
 
-test('F7.6 view: sair do mapa cancela o encontro pendente e não deixa nada ativo; trocar de destino durante a batalha não a aborta', async () => {
+test('F7.7 view: sair do mapa encerra o ciclo (nada avança invisivelmente nem cria encontro na área anterior); a batalha em curso não é abortada', async () => {
     const { env, view, game, encounters } = await viewSetup();
-    const listeners0 = game.bus._listenerCount;
-    startHunt(game); idle(game);
     view.openHuntMap(SPECIES); env.flush();
-    const base = game.bus._listenerCount;
-    encounters.request(SPECIES);
-    assert.equal(encounters.isActive(), true);
+    env.encounterBtn.fire('click'); env.flush();
+    const listeners = game.bus._listenerCount;
+    game.clock.advance(5000);
     view.setArea('starter_town'); env.flush();
-    assert.equal(encounters.current.state, 'cancelled');
+    assert.equal(encounters.cycle, null);
     assert.equal(encounters.current.reason, 'left_map');
     assert.equal(game.encounterHook, null);
     assert.equal(game.clock.pendingTimers(), 0);
-    assert.equal(game.bus._listenerCount, base, 'ouvintes do encontro liberados');
-    const draws = env.draws.filter(a => a.length === 5).length;
-    view.openHuntMap(SPECIES); env.flush();
-    assert.equal(env.draws.filter(a => a.length === 5).length, draws, 'o mapa reaberto não mostra o encontro cancelado');
+    assert.ok(game.bus._listenerCount < listeners, 'ouvintes do ciclo liberados');
+    game.clock.advance(10 * 60_000);
+    assert.ok(!game.currentBattle, 'nenhuma batalha foi criada na área anterior');
+    // a caçada (sessão) segue a regra da sessão: continua rodando como caçada comum de rota
+    assert.equal(session(game).state, 'running');
     // durante a batalha, sair do mapa não a aborta
-    const c = encounters.request(SPECIES).encounter;
-    game.clock.advance(c.etaMs);
-    assert.equal(encounters.current.state, 'battling');
+    view.openHuntMap(SPECIES); env.flush();
+    dispatch(game, 'STOP_HUNT');
+    env.encounterBtn.fire('click');
+    game.clock.advance(encounters.current.etaMs);
     const battle = game.currentBattle;
+    assert.equal(encounters.current.state, 'battling');
     view.setArea('kanto_route1'); env.flush();
     assert.equal(game.currentBattle, battle);
-    assert.equal(encounters.current.state, 'battling');
     kill(game);
-    assert.equal(encounters.current.state, 'resolved');
-    assert.ok(game.bus._listenerCount >= listeners0);
+    assert.equal(encounters.cycle, null);
 });
 
-test('F7.6 compatibilidade: cidade, movimento manual, Depot e navegação da F7.5 seguem funcionando com a lógica de encontros ligada', async () => {
+test('F7.7 compatibilidade: cidade, caminhada manual, Depot e navegação continuam funcionando com o ciclo de caça ligado', async () => {
     const { env, view, game } = await viewSetup();
-    assert.equal(view.areaId, 'starter_town');
     env.key('keydown', 'ArrowRight'); env.flush(16); for (let i = 0; i < 10; i++) env.flush(25); env.key('keyup', 'ArrowRight'); env.flush(20);
     const city = view.currentScene().map;
-    assert.ok(view._player(city).x > 3 * TILE, 'caminhada manual na cidade');
+    assert.ok(view._player(city).x > 3 * TILE);
     assert.equal(env.encounterBox.hidden, true);
     assert.equal(view.openHuntMap(7).ok, true); env.flush();
     env.key('keydown', 'ArrowRight');
@@ -538,6 +493,35 @@ test('F7.6 compatibilidade: cidade, movimento manual, Depot e navegação da F7.
     env.key('keyup', 'ArrowRight');
     assert.equal(view.openRoute('kanto_route1').ok, true);
     assert.equal(view.setArea('starter_town'), true);
-    assert.equal(game.getHuntSession(), null);
+    assert.equal(session(game), null);
     assert.equal(game.encounterHook, null);
+});
+
+test('F7.7 dados do mapa e cache da F7.4 permanecem intactos depois de ciclos completos', () => {
+    const { game, enc, world } = setup();
+    enc.begin(SPECIES);
+    const map = world.worldHuntMap(SPECIES);
+    const snap = JSON.stringify(map), stats = JSON.stringify(world.worldHuntStats());
+    for (let n = 0; n < 3; n++) { game.clock.advance(enc.current.etaMs); if (n > 0) chain(game); kill(game); }
+    enc.cancel('teste');
+    assert.equal(JSON.stringify(world.worldHuntMap(SPECIES)), snap);
+    assert.equal(world.worldHuntMap(SPECIES), map);
+    assert.equal(JSON.stringify(world.worldHuntStats()), stats, 'nenhum mapa novo foi gerado');
+    assert.ok(Object.isFrozen(map) && Object.isFrozen(map.encounterPoints[0]));
+    assert.equal('state' in map || 'leg' in map || 'cycle' in map, false);
+});
+
+test('F7.7 pontos: sequência reproduzível, sem repetição imediata, e candidatos inválidos/únicos tratados (função pura da F7.6 mantida)', () => {
+    const w1 = loadWorld(), w2 = loadWorld();
+    const m1 = w1.worldHuntMap(SPECIES), m2 = w2.worldHuntMap(SPECIES);
+    const run = (w, map, sid) => { const out = []; let last = null; for (let seq = 0; seq < 40; seq++) { const i = w.worldPickEncounterPoint(map, sid, seq, last); out.push(i); last = i; } return out.join(','); };
+    assert.equal(run(w1, m1, 'habc1'), run(w2, m2, 'habc1'));
+    assert.notEqual(run(w1, m1, 'habc2'), run(w1, m1, 'habc1'));
+    const idxs = run(w1, m1, 'habc1').split(',').map(Number);
+    for (let i = 1; i < idxs.length; i++) assert.notEqual(idxs[i], idxs[i - 1]);
+    const open = (points) => ({ id: 'x', type: 'hunt', width: 10, height: 10, rows: Array.from({ length: 10 }, (_, y) => (y === 5 ? '..TT......' : '..........')), spawn: { x: 0, y: 0 }, encounterPoints: points });
+    assert.equal(w1.worldPickEncounterPoint(open([{ x: 8, y: 8 }]), 's', 1, 0), 0, 'único candidato: reutiliza');
+    const mixed = open([{ x: 3, y: 5 }, { x: 99, y: 1 }, { x: -1, y: 2 }, { x: 1.5, y: 1 }, { x: 8, y: 8 }, null, { x: 2, y: 2 }]);
+    assert.equal(JSON.stringify(w1.worldEncounterCandidates(mixed)), '[4,6]');
+    assert.equal(w1.worldPickEncounterPoint(open([]), 's', 0, null), null);
 });

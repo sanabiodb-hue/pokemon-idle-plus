@@ -11,9 +11,10 @@
 //     síncrona e atômica: valida e resolve o mapa primeiro e só então troca a área (o último pedido vence; falha = área anterior
 //     intacta + aviso na interface). O seletor "Ir para" e a busca de espécie são só visuais: nunca chamam changeRoute nem batalha.
 //     Mapas de caça vêm só de getWorldMap('hunt_<espécie>') (cache LRU da F7.4); aqui guarda-se apenas o id e a posição do personagem;
-//   - ENCONTROS (F7.6): a lógica é do WorldEncounters (ui.worldEncounters, sem DOM/Canvas). Aqui só se LÊ o estado dele: o Pokémon é
-//     desenhado no ponto do mundo (pela câmera), o botão "Procurar Pokémon aqui" é uma ação explícita e abrir/trocar de mapa nunca
-//     inicia caçada nem batalha. Sair do mapa avisa o controlador (cancela um encontro que ainda não começou);
+//   - CAÇADA NO MAPA (F7.6/F7.7): a lógica (ciclo, caminho, progresso, chegada, batalha) é do WorldEncounters (ui.worldEncounters, sem
+//     DOM/Canvas). Aqui só se LÊ o estado dele: o Pokémon aparece no ponto, o personagem é desenhado onde o progresso lógico o põe e a
+//     câmera o acompanha. O botão "Iniciar caçada neste mapa" é uma ação explícita; abrir/trocar de mapa nunca inicia caçada nem batalha.
+//     Sair do mapa avisa o controlador (encerra o ciclo). O loop de quadros só roda enquanto há caminhada visível: parado, nada roda;
 //   - serviços da cidade reaproveitam o que já existe: Centro Pokémon → GameCore.healAtCenter (cura o HP do combatente atual,
 //     mesma regra da poção, sem gastar poção; recusada com a Caça em andamento); Depot → abre a aba PC existente;
 //   - ciclo de vida igual ao HuntView: onShow()/onHide() chamados por GameUI.switchTab.
@@ -60,7 +61,7 @@ class WorldView {
             </div>
             <div id="world-caption" class="world-caption"></div>
             <div id="world-encounter" class="world-encounter" hidden>
-                <button type="button" id="world-encounter-btn" class="world-encounter-btn">Procurar Pokémon aqui</button>
+                <button type="button" id="world-encounter-btn" class="world-encounter-btn">Iniciar caçada neste mapa</button>
                 <span id="world-encounter-status" class="world-encounter-status" aria-live="polite"></span>
             </div>
             <div id="world-hint" class="world-hint" aria-live="polite"></div>
@@ -166,8 +167,12 @@ class WorldView {
         const now = Number.isFinite(ts) ? ts : WorldView._now();
         const { map } = this.currentScene();
         const dir = this._manualDirection(map);
+        const hunter = this.encounters ? this.encounters.hunterState(map) : null;     // caçada no mapa: a posição vem do progresso LÓGICO do percurso
+        if (hunter) this._players[map.id] = hunter;
         const player = this._player(map);
-        if (dir) {
+        if (hunter) {
+            this._lastTs = null;
+        } else if (dir) {
             const dt = this._lastTs === null ? 0 : now - this._lastTs;      // worldStep limita a maxStepMs
             this._lastTs = now;
             this._players[map.id] = worldStep(map, player, dir, dt);
@@ -176,7 +181,7 @@ class WorldView {
             if (player.moving) this._players[map.id] = { ...player, moving: false };
         }
         this.draw();
-        if (dir) this._scheduleFrame();
+        if (dir || (hunter && hunter.moving)) this._scheduleFrame();      // loop de quadros só enquanto há movimento visível
     }
 
     _player(map) {
@@ -282,12 +287,12 @@ WorldView._assets = null; WorldView.failed = true; });   // permite tentar de no
         return this._travel(`hunt_${speciesId}`);
     }
 
-    // Ação explícita do jogador: chamar um encontro neste mapa de caça (exige caçada em andamento; nunca é automático)
+    // Ação explícita do jogador: iniciar a caçada neste mapa de caça (nunca é automático)
     _requestEncounter() {
         const { map } = this.currentScene();
         if (!this.encounters || map.type !== 'hunt') return null;
-        const r = this.encounters.request(map.speciesId);
-        if (!r.ok) this._notify(r.message || 'Não foi possível procurar Pokémon agora.');
+        const r = this.encounters.begin(map.speciesId);
+        if (!r.ok) this._notify(r.message || 'Não foi possível iniciar a caçada agora.');
         return r;
     }
 
@@ -299,16 +304,14 @@ WorldView._assets = null; WorldView.failed = true; });   // permite tentar de no
         if (!hunt) return;
         const c = enc.current && enc.current.mapId === map.id ? enc.current : null;
         const running = typeof this.game.isHuntRunning === 'function' && this.game.isHuntRunning();
-        this.encounterBtn.disabled = enc.isActive() || !running;
-        let text = running ? 'Chame um Pokémon: ele aparece em um ponto do mapa.' : 'Inicie a caçada na aba Caça para procurar Pokémon neste mapa.';
-        if (c) {
-            const name = this._encounterName(c);
-            if (c.state === 'approaching') text = `${name} apareceu a ~${Math.max(1, Math.round(c.etaMs / 1000))} s de distância.`;
-            else if (c.state === 'arrived') text = `${name} chegou ao ponto: aguardando a vez da batalha.`;
+        this.encounterBtn.disabled = enc.isActive();
+        let text = running ? 'Há uma caçada em andamento: ela passa a caminhar neste mapa quando você iniciar.' : 'Inicia a caçada: o treinador caminha até um ponto, o Pokémon aparece e a batalha começa na chegada.';
+        if (enc.isActive() && c) {
+            const name = this._encounterName(c), paused = typeof this.game.getHuntSession === 'function' && this.game.getHuntSession() && this.game.getHuntSession().state === 'paused';
+            if (c.state === 'approaching') text = `${paused ? 'Caçada pausada. ' : ''}Caminhando até ${name}: percurso de ${Math.round(c.lengthPx / WORLD_TILE_SIZE)} passos (~${Math.max(1, Math.round(c.etaMs / 1000))} s).`;
+            else if (c.state === 'arrived') text = `${paused ? 'Caçada pausada. ' : ''}O treinador chegou a ${name}: aguardando a vez da batalha.`;
             else if (c.state === 'battling') text = `Batalha contra ${name} em andamento.`;
-            else if (c.state === 'resolved') text = `Encontro com ${name} concluído (${c.outcome === 'defeat' ? 'derrota' : 'vitória'}).`;
-            else if (c.state === 'cancelled') text = `Encontro com ${name} cancelado.`;
-        }
+        } else if (c && c.state === 'cancelled') text = `Caçada neste mapa encerrada (${c.reason === 'left_map' ? 'você saiu do mapa' : c.reason === 'hunt_stopped' ? 'caçada parada' : c.reason}).`;
         this.encounterStatus.textContent = text;
     }
 

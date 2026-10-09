@@ -13,6 +13,7 @@ const EXPORTS = `WORLD_TILE_SIZE, WORLD_TILESET, WORLD_CHARACTER, WORLD_LEGEND, 
     getWorldMap, worldMapIdForRoute, worldCharAt, worldKindAt, worldHash, worldResolveTile, worldViewMetrics, worldCamera, worldCameraFocus, worldCellCenter,
     worldToScreen, worldFromScreen, worldVisibleCells, worldCanWalkManually, worldCellBlocked, worldCreateState, worldMoveBy, worldStep,
     worldAdvanceToward, POKEMON_DATA, REGIONS, worldPathLength, WORLD_GEN_VERSION, WORLD_GEN_LIMITS, WORLD_BIOME_FALLBACK, WORLD_TYPE_BIOME, WORLD_TYPE_PRIORITY, WORLD_BIOMES,
+    worldFindPath, worldCellFoot, worldPathWaypoints, worldPolylineLength, worldPathPosition, worldVerifyPath, WORLD_PATH_NEIGHBORS,
     worldHuntSeed, worldRng, worldStringSeed, WorldEncounters, WORLD_ENCOUNTER_STATES, worldEncounterCandidates, worldPickEncounterPoint, worldEncounterOrigin, worldBiomeForTypes, worldGenerateHuntMap, worldHuntMap, worldHuntMapById, worldHuntStats, worldHuntCacheClear, worldPathLength, worldTravelTimeMs, worldInteractionNear, DirectionStack, WorldControls, WorldView`;
 
 // Carrega os scripts clássicos do mundo num contexto vm (como o navegador faz com <script>)
