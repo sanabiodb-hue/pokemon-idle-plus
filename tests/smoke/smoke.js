@@ -832,7 +832,7 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
             await sleep(400);
             const rt2 = await probe();
             if (vp.isMobile) await page.evaluate(() => document.querySelector('[data-dir="right"]') && document.querySelector('[data-dir="right"]').dispatchEvent(new PointerEvent('pointerup', { pointerId: 8, bubbles: true })));
-            check(`Mundo ${vp.name}: "Visualizar mapa" mostra a Rota 1 (só visual): sem controles e sem caminhada manual, rota do jogo intacta`, rt.area === 'kanto_route1' && rt.controlsHidden === true && rt.hero > 20 && /Rota 1/.test(rt.aria) && rt2.px === rt.px && rt2.py === rt.py && (await page.evaluate(() => window.__raf)) === rafR && rt.route === routeBefore, JSON.stringify({ area: rt.area, hidden: rt.controlsHidden, aria: rt.aria, same: [rt.px, rt2.px], route: rt.route }));
+            check(`Mundo ${vp.name}: "Ir para" abre a Rota 1 (área visual): sem controles e sem caminhada manual, rota do jogo intacta`, rt.area === 'kanto_route1' && rt.controlsHidden === true && rt.hero > 20 && /Rota 1/.test(rt.aria) && rt2.px === rt.px && rt2.py === rt.py && (await page.evaluate(() => window.__raf)) === rafR && rt.route === routeBefore, JSON.stringify({ area: rt.area, hidden: rt.controlsHidden, aria: rt.aria, same: [rt.px, rt2.px], route: rt.route }));
             await page.selectOption('#world-destination', 'starter_town');
             await sleep(300);
             const back = await probe();
@@ -941,6 +941,33 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
             const huntInfo = await page.evaluate(() => ({ tilesetH: WorldView.images.tileset.naturalHeight, w: getWorldMap('hunt_74').width, type: getWorldMap('hunt_74').type, inList: Object.keys(WORLD_MAPS).some(k => /^hunt_/.test(k)) }));
             check(`Mundo ${vp.name} [F7.4]: mapa de caça gerado (hunt_74) desenha no navegador, sem caminhada manual, e não entra na lista de mapas`, hunt.area === 'hunt_74' && hunt.controlsHidden === true && hunt.colors >= 8 && huntInfo.tilesetH === 96 && huntInfo.type === 'hunt' && huntInfo.w >= 48 && huntInfo.inList === false, JSON.stringify({ hunt: { area: hunt.area, hidden: hunt.controlsHidden, colors: hunt.colors }, huntInfo }));
 
+            // F7.5: a lista de rotas (progressão) abre o mapa visual; rota sem mapa só avisa; a busca de espécie abre o mapa de caça sem caçar
+            await page.evaluate(() => { gameUI.worldView.setArea('starter_town'); });
+            const cards = await page.evaluate(() => document.querySelectorAll('#route-list .route-card').length);
+            await page.evaluate(() => document.querySelectorAll('#route-list .route-card')[0].click());
+            await sleep(300);
+            const r1 = await page.evaluate(() => ({ area: gameUI.worldView.areaId, route: game.gameState.currentRoute, hidden: document.getElementById('world-controls').hidden }));
+            check(`Mundo ${vp.name} [F7.5]: clicar na Rota 1 da lista muda a rota do jogo e abre o mapa visual dela (sem caminhada manual)`, cards >= 2 && r1.route === 'kanto_route1' && r1.area === 'kanto_route1' && r1.hidden === true, JSON.stringify({ cards, r1 }));
+            await page.evaluate(() => document.querySelectorAll('#route-list .route-card')[1].click());
+            await sleep(300);
+            const r2 = await page.evaluate(() => ({ area: gameUI.worldView.areaId, route: game.gameState.currentRoute, hint: document.getElementById('world-hint').textContent }));
+            check(`Mundo ${vp.name} [F7.5]: rota sem mapa visual muda só a progressão e avisa (a área exibida não muda)`, r2.route !== 'kanto_route1' && r2.area === 'kanto_route1' && /ainda não tem mapa visual/.test(r2.hint), JSON.stringify(r2));
+            const search = await page.evaluate(async () => {
+                const input = document.getElementById('world-hunt-input'), res = document.getElementById('world-hunt-results');
+                const cachedBefore = worldHuntStats().generated;
+                input.value = '1'; input.dispatchEvent(new Event('input', { bubbles: true }));
+                const many = res.children.length, total = res.textContent;
+                input.value = '25'; input.dispatchEvent(new Event('input', { bubbles: true }));
+                const btn = res.querySelector('[data-species-id="25"]');
+                const generatedAfterTyping = worldHuntStats().generated;
+                const routeBefore = game.gameState.currentRoute;
+                btn.click();
+                return { many, total, cachedBefore, generatedAfterTyping, area: gameUI.worldView.areaId, routeSame: game.gameState.currentRoute === routeBefore, running: game.isHuntRunning(), generated: worldHuntStats().generated, left: res.children.length };
+            });
+            await sleep(300);
+            check(`Mundo ${vp.name} [F7.5]: a busca mostra no máximo 10 espécies, não gera mapas ao digitar e abre o mapa de caça escolhido sem iniciar a caçada`,
+                search.many <= 11 && /Mostrando 10 de/.test(search.total) && search.generatedAfterTyping === search.cachedBefore && search.area === 'hunt_25' && search.routeSame && search.running === false && search.generated === search.cachedBefore + 1 && search.left === 0, JSON.stringify(search));
+            check(`Mundo ${vp.name} [F7.5]: depois de abrir o mapa de caça o renderer segue ativo e sem controles de caminhada`, (await probe()).area === 'hunt_25' && (await probe()).controlsHidden === true, JSON.stringify(await probe()));
             await page.evaluate(() => { gameUI.worldView.setArea('starter_town'); delete WORLD_MAPS.smoke_big; delete WORLD_MAPS.smoke_small; delete gameUI.worldView._players.smoke_big; delete gameUI.worldView._players.smoke_small; });
             await context.close();
         }

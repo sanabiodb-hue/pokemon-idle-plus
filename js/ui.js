@@ -1323,11 +1323,12 @@ class GameUI {
             `;
 
             card.addEventListener('click', () => {
-                this.game.changeRoute(route.id);
+                const changed = this.game.changeRoute(route.id);
                 this._recommendedRoute = this.game.getRecommendedRoute();
                 this.showRoutes(regionId); // 刷新显示
                 this.showToast(`📍 Você foi para ${route.name}`);
                 this.guideView.renderBar();
+                if (changed !== false && this.worldView) this.worldView.openRoute(route.id);   // F7.5: só depois que a progressão aceitou, o mundo visual abre o mapa da rota
             });
 
             routeList.appendChild(card);

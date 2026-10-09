@@ -12,7 +12,7 @@ const WORLD_FILES = ['js/world/world-data.js', 'js/world/world-biomes.js', 'js/w
 const EXPORTS = `WORLD_TILE_SIZE, WORLD_TILESET, WORLD_CHARACTER, WORLD_LEGEND, WORLD_MAPS, WORLD_ROUTE_MAPS, WORLD_START_MAP_ID, WORLD_MOVEMENT,
     getWorldMap, worldMapIdForRoute, worldCharAt, worldKindAt, worldHash, worldResolveTile, worldViewMetrics, worldCamera, worldCameraFocus, worldCellCenter,
     worldToScreen, worldFromScreen, worldVisibleCells, worldCanWalkManually, worldCellBlocked, worldCreateState, worldMoveBy, worldStep,
-    worldAdvanceToward, worldPathLength, WORLD_GEN_VERSION, WORLD_GEN_LIMITS, WORLD_BIOME_FALLBACK, WORLD_TYPE_BIOME, WORLD_TYPE_PRIORITY, WORLD_BIOMES,
+    worldAdvanceToward, POKEMON_DATA, REGIONS, worldPathLength, WORLD_GEN_VERSION, WORLD_GEN_LIMITS, WORLD_BIOME_FALLBACK, WORLD_TYPE_BIOME, WORLD_TYPE_PRIORITY, WORLD_BIOMES,
     worldHuntSeed, worldRng, worldBiomeForTypes, worldGenerateHuntMap, worldHuntMap, worldHuntMapById, worldHuntStats, worldHuntCacheClear, worldPathLength, worldTravelTimeMs, worldInteractionNear, DirectionStack, WorldControls, WorldView`;
 
 // Carrega os scripts clássicos do mundo num contexto vm (como o navegador faz com <script>)
@@ -24,7 +24,7 @@ function loadWorld(globals = {}) {
 
 function fakeElement(extra = {}) {
     const el = {
-        hidden: false, disabled: false, textContent: '', value: '', children: [], listeners: {}, blurred: false, _html: '',
+        hidden: false, disabled: false, textContent: '', value: '', dataset: {}, children: [], listeners: {}, blurred: false, _html: '',
         addEventListener(t, f) { (this.listeners[t] ||= new Set()).add(f); },
         removeEventListener(t, f) { if (this.listeners[t]) this.listeners[t].delete(f); },
         appendChild(c) { this.children.push(c); },
@@ -48,7 +48,9 @@ function fakeEnv({ width = 374, height = 374, dpr = 3, observer = true } = {}) {
     env.controlsEl = fakeElement();
     env.interactBtn = fakeElement({ disabled: true });
     env.destination = fakeElement();
-    const parts = { '#world-viewport': env.viewport, '#world-canvas': env.canvas, '#world-message': env.message, '#world-caption': env.caption, '#world-hint': env.hint, '#world-controls': env.controlsEl, '#world-interact': env.interactBtn, '#world-destination': env.destination };
+    env.huntInput = fakeElement();
+    env.huntResults = fakeElement();
+    const parts = { '#world-viewport': env.viewport, '#world-canvas': env.canvas, '#world-message': env.message, '#world-caption': env.caption, '#world-hint': env.hint, '#world-controls': env.controlsEl, '#world-interact': env.interactBtn, '#world-destination': env.destination, '#world-hunt-input': env.huntInput, '#world-hunt-results': env.huntResults };
     env.root = fakeElement({ querySelector: (sel) => parts[sel] || null });
     const reg = (store) => ({ addEventListener(t, f) { (store[t] ||= new Set()).add(f); }, removeEventListener(t, f) { if (store[t]) store[t].delete(f); } });
     env.document = { hidden: false, getElementById: (id) => (id === 'world-panel' ? env.root : null), createElement: (tag) => fakeElement({ tagName: tag.toUpperCase() }), ...reg(env.listeners) };
@@ -76,6 +78,7 @@ function fakeGame(routeId = 'kanto_route1', extra = {}) {
         getRoute: (id) => routes.find(r => r.id === id) || null,
         emit(type) { for (const e of [...subs]) if (e.type === type) e.fn({ type }); },
         subCount: () => subs.size,
+        isRegionUnlocked: () => true,
         healCalls: 0,
         healResult: { ok: true, amount: 7, revived: false },
         healAtCenter() { this.healCalls++; return this.healResult; },

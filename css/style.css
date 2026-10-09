@@ -1024,6 +1024,13 @@ body {
 /* Cidade (F7.2): seletor de destino, dica de proximidade e controles. O direcional fica ABAIXO da cena (não cobre o mapa) e só aparece em telas de toque. */
 .world-toolbar { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; font-size: 13px; color: var(--text-secondary); }
 .world-destination { flex: 1; min-width: 0; padding: 8px 10px; border-radius: 8px; background: var(--bg-card); color: var(--text-primary); border: 1px solid var(--border); font-size: 14px; }
+.world-hunt-search { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 8px; font-size: 13px; color: var(--text-secondary); }
+.world-hunt-input { flex: 1; min-width: 0; padding: 8px 10px; border-radius: 8px; background: var(--bg-card); color: var(--text-primary); border: 1px solid var(--border); font-size: 14px; }
+.world-hunt-results { flex-basis: 100%; display: flex; flex-wrap: wrap; gap: 6px; }
+.world-hunt-results:empty { display: none; }
+.world-hunt-result { padding: 8px 10px; min-height: 40px; border-radius: 8px; border: 1px solid var(--border); background: var(--bg-card); color: var(--text-primary); font-size: 13px; }
+.world-hunt-result:active { background: var(--accent); }
+.world-hunt-more { flex-basis: 100%; font-size: 12px; color: var(--text-secondary); }
 .world-hint { min-height: 18px; margin-top: 4px; font-size: 13px; color: var(--warning); }
 .world-controls { display: flex; align-items: center; justify-content: flex-start; gap: 12px; margin-top: 8px; user-select: none; -webkit-user-select: none; }
 .world-controls[hidden] { display: none; }

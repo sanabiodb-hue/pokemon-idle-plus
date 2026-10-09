@@ -362,13 +362,13 @@ test('F7.2 cidade: a view nunca altera a rota do jogo, não inicia batalha e nã
     assert.ok(true, 'chegou aqui sem que changeRoute/selectHuntRoute/startBattle/save fossem chamados');
 });
 
-test('F7.2 seletor: o controle se chama "Visualizar mapa" (não "Destino") e deixa claro que não viaja', async () => {
+test('F7.5 seletor: o controle se chama "Ir para" e deixa claro que não muda a rota do jogo', async () => {
     const { env } = await shown();
-    assert.match(env.root.innerHTML, /Visualizar mapa/);
+    assert.match(env.root.innerHTML, /Ir para/);
     assert.doesNotMatch(env.root.innerHTML, /Destino/);
     assert.match(env.root.innerHTML, /não muda a rota do jogo/);
     env.destination.value = 'kanto_route1'; env.destination.fire('change'); env.flush();
-    assert.match(env.caption.textContent, /só uma prévia visual: a rota do jogo não muda/);
+    assert.match(env.caption.textContent, /a rota do jogo não muda/);
     assert.doesNotMatch(env.caption.textContent, /Destino/);
 });
 
