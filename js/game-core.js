@@ -2103,6 +2103,36 @@ class GameCore {
         this._emit('hp_low', { hpPercent: pct, hp: battle.playerCurrentHp, maxHp: battle.playerMaxHp });
     }
 
+    // F7.2: cura gratuita do Centro Pokémon. Restaura o HP do COMBATENTE da batalha em curso: é o único HP que o jogo guarda
+    // (não existe HP por Pokémon da equipe, e este método não cria um). É a MESMA regra da poção (se o combatente estava caído,
+    // encerra a recuperação lenta e reabre a luta), sem gastar poção. Emite 'heal' com potion:false: a Caça só conta e mostra
+    // poções. Recusada durante a simulação offline, na Torre e com a Caça EM ANDAMENTO (a automação segue progredindo e a cura
+    // grátis a burlaria): pause ou pare a caçada antes; o estado vem de isHuntRunning(), sem variável paralela.
+    healAtCenter() {
+        if (this._isOfflineSimulating) return { ok: false, code: 'offline' };
+        if (this._towerMode) return { ok: false, code: 'tower_mode' };
+        if (this.isHuntRunning()) return { ok: false, code: 'hunt_running' };
+        const b = this.currentBattle;
+        if (!b) return { ok: false, code: 'no_battle' };
+        const fainted = b.playerCurrentHp <= 0;
+        if (!fainted && b.playerCurrentHp >= b.playerMaxHp) return { ok: false, code: 'full_hp' };
+        const hpBefore = b.playerCurrentHp;
+        b.playerCurrentHp = b.playerMaxHp;
+        b._lowHpNotified = false;
+        if (fainted) {
+            this._clearHealTimer();
+            this.gameState.currentEnemy = null;
+            this.save();
+            this.startBattle();
+        } else {
+            this.save();
+        }
+        const hpAfter = this.currentBattle ? this.currentBattle.playerCurrentHp : b.playerMaxHp;
+        this._emit('heal', { potion: false, reason: 'center', amount: hpAfter - hpBefore, hpBefore, hpAfter, maxHp: b.playerMaxHp, revived: fainted });
+        if (this.onBattleEvent) this.onBattleEvent('healing', { hp: hpAfter, maxHp: b.playerMaxHp });
+        return { ok: true, amount: hpAfter - hpBefore, revived: fainted };
+    }
+
     startHealingAfterDefeat() {
         if (!this.currentBattle) return;
         this._clearHealTimer();

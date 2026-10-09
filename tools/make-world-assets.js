@@ -2,7 +2,7 @@
 'use strict';
 // ============================================================
 // Gera os assets locais e originais do mundo visual (Fase 7.1), sem dependências:
-//   sprites/world/tileset.png   16x3 tiles de 16 px (layout em WORLD_TILESET, js/world/world-data.js)
+//   sprites/world/tileset.png   16x4 tiles de 16 px (layout em WORLD_TILESET, js/world/world-data.js)
 //   sprites/world/hero.png      4 quadros 16x24 (baixo, cima, esquerda, direita): placeholder do treinador
 // Determinístico: rodar de novo produz exatamente os mesmos bytes. Para trocar a arte, basta substituir os PNGs
 // mantendo o layout (ou ajustar WORLD_TILESET / WORLD_CHARACTER).
@@ -78,7 +78,7 @@ const P = {
 };
 
 // ---------- tiles ----------
-const tileset = new Surface(COLS * T, 3 * T);
+const tileset = new Surface(COLS * T, 4 * T);
 const tileAt = (index) => ({ sx: (index % COLS) * T, sy: Math.floor(index / COLS) * T });
 
 function newTile() { return new Surface(T, T); }
@@ -133,6 +133,56 @@ objectOnGrass(13, 1310, (l) => { l.rect(7, 8, 8, 15, P.woodD); l.rect(2, 2, 13, 
 objectOnGrass(14, 1410, (l) => { l.rect(0, 5, 15, 6, P.woodL); l.rect(0, 10, 15, 11, P.woodL); l.rect(0, 6, 15, 6, P.wood); l.rect(0, 11, 15, 11, P.wood); for (const x of [1, 7, 13]) { l.rect(x, 3, x + 1, 14, P.wood); l.rect(x + 1, 3, x + 1, 14, P.woodD); } });
 // 15 grama sombreada (reserva: sub-bosque)
 { const s = newTile(); grassBase(s, 1500); for (let y = 0; y < T; y++) for (let x = 0; x < T; x++) if ((x + y) % 2 === 0) s.set(x, y, [0, 30, 20, 40]); putTile(15, s); }
+
+// ---------- cidade: prédios, praça e mobiliário (linha 4: índices 48-63) ----------
+const B = {
+    roofR: hex('#d64545'), roofRD: hex('#a42f33'), roofRL: hex('#f07070'),
+    roofB: hex('#4a78c2'), roofBD: hex('#33558f'), roofBL: hex('#7da2dc'),
+    wall: hex('#ebe2c8'), wallD: hex('#cbbf9c'), wallS: hex('#a89c7c'), glass: hex('#7fc3ea'), glassD: hex('#4c8fc0'),
+    metal: hex('#8d96a3'), metalD: hex('#69727f'), metalL: hex('#b9c1cc'), warn: hex('#f2c230'),
+    stone: hex('#cdc6b2'), stoneD: hex('#aaa28d'), stoneL: hex('#e2dccb'),
+};
+function roof(index, base, dark, light, part, emblem) {
+    const s = newTile();
+    s.rect(0, 0, T - 1, T - 1, base);
+    for (let y = 3; y < T; y += 4) s.rect(0, y, T - 1, y, dark);                      // fileiras de telhas
+    for (let y = 0; y < T; y += 4) for (let x = (y / 4) % 2 ? 4 : 0; x < T; x += 8) s.set(x, y + 1, dark);
+    s.rect(0, 0, T - 1, 1, light);                                                   // cumeeira clara
+    s.rect(0, T - 2, T - 1, T - 1, dark);                                            // beiral
+    if (part === 'L') { s.rect(0, 0, 1, T - 1, dark); s.rect(1, 2, 1, T - 3, light); }
+    if (part === 'R') { s.rect(T - 2, 0, T - 1, T - 1, dark); s.rect(T - 2, 2, T - 2, T - 3, light); }
+    if (emblem === 'cross') { s.disc(8, 7, 5.2, [255, 255, 255]); s.rect(7, 3, 8, 11, base); s.rect(4, 6, 12, 7, base); }
+    if (emblem === 'box') { s.rect(3, 3, 12, 11, [245, 240, 225]); s.rect(3, 3, 12, 3, [200, 190, 165]); s.rect(7, 3, 8, 11, [200, 190, 165]); s.rect(3, 11, 12, 11, [150, 140, 118]); }
+    putTile(index, s);
+}
+function wall(index, part, kind) {
+    const s = newTile();
+    s.rect(0, 0, T - 1, T - 1, B.wall);
+    s.rect(0, T - 2, T - 1, T - 1, B.wallS);                                          // rodapé
+    for (let y = 2; y < T - 2; y += 5) s.rect(0, y, T - 1, y, B.wallD);              // juntas
+    if (part === 'L') s.rect(0, 0, 0, T - 1, B.wallS);
+    if (part === 'R') s.rect(T - 1, 0, T - 1, T - 1, B.wallS);
+    if (kind === 'window') { s.rect(3, 3, 12, 10, B.wallS); s.rect(4, 4, 11, 9, B.glass); s.rect(4, 4, 11, 5, B.glassD); s.rect(7, 4, 8, 9, B.wallS); s.rect(4, 7, 11, 7, B.wallS); }
+    if (kind === 'center-door') { s.rect(2, 1, 13, T - 1, B.wallS); s.rect(3, 2, 12, T - 1, B.glass); s.rect(3, 2, 12, 5, B.glassD); s.rect(7, 2, 8, T - 1, B.wallS); s.rect(3, 12, 12, T - 1, [180, 60, 60]); s.rect(1, T - 2, 14, T - 1, B.stoneD); }
+    if (kind === 'gate') { s.rect(1, 1, 14, T - 1, B.metalD); for (let y = 3; y < T - 1; y += 3) s.rect(2, y, 13, y, B.metal); s.rect(2, 2, 13, 2, B.metalL); for (let x = 1; x < 15; x += 4) s.rect(x, 1, x + 1, 1, B.warn); s.rect(1, T - 2, 14, T - 1, B.stoneD); }
+    putTile(index, s);
+}
+roof(48, B.roofR, B.roofRD, B.roofRL, 'L'); roof(49, B.roofR, B.roofRD, B.roofRL, 'M', 'cross'); roof(50, B.roofR, B.roofRD, B.roofRL, 'R');
+wall(51, 'L', 'window'); wall(52, 'M', 'center-door'); wall(53, 'R', 'window');
+roof(54, B.roofB, B.roofBD, B.roofBL, 'L'); roof(55, B.roofB, B.roofBD, B.roofBL, 'M', 'box'); roof(56, B.roofB, B.roofBD, B.roofBL, 'R');
+wall(57, 'L', 'window'); wall(58, 'M', 'gate'); wall(59, 'R', 'window');
+// 60 praça de pedra
+{ const s = newTile(); s.rect(0, 0, T - 1, T - 1, B.stone); const r = rng(6000);
+  for (let y = 0; y < T; y += 8) for (let x = ((y / 8) % 2) * 4; x < T + 8; x += 8) { s.rect(x, y, Math.min(x + 7, T - 1), y, B.stoneD); s.rect(x, y, x, Math.min(y + 7, T - 1), B.stoneD); }
+  for (let i = 0; i < 10; i++) s.set(Math.floor(r() * T), Math.floor(r() * T), r() < 0.5 ? B.stoneL : B.stoneD);
+  putTile(60, s); }
+// 61 banco, 62 poste de luz (objetos sobre a praça)
+function objectOnPlaza(index, draw) { const base = newTile(); base.blit(sliceTile(60), 0, 0); const layer = newTile(); draw(layer); layer.outline(P.ink); base.blit(layer, 0, 0); putTile(index, base); }
+function sliceTile(index) { const { sx, sy } = tileAt(index); const t = newTile(); for (let y = 0; y < T; y++) for (let x = 0; x < T; x++) { const i = ((sy + y) * tileset.w + sx + x) * 4; if (tileset.d[i + 3]) t.set(x, y, [tileset.d[i], tileset.d[i + 1], tileset.d[i + 2], tileset.d[i + 3]]); } return t; }
+objectOnPlaza(61, (l) => { l.rect(2, 6, 13, 8, P.woodL); l.rect(2, 8, 13, 8, P.wood); l.rect(2, 10, 13, 11, P.woodL); l.rect(3, 8, 4, 13, P.woodD); l.rect(11, 8, 12, 13, P.woodD); });
+objectOnPlaza(62, (l) => { l.rect(7, 5, 8, 14, P.ink); l.rect(7, 5, 7, 14, [70, 78, 92]); l.rect(5, 1, 10, 4, [250, 226, 140]); l.rect(6, 0, 9, 0, [90, 98, 112]); l.rect(5, 4, 10, 4, [220, 190, 90]); l.rect(6, 13, 9, 14, [90, 98, 112]); });
+// 63 placa de rua (seta para a rota) sobre grama
+objectOnGrass(63, 6300, (l) => { l.rect(7, 7, 8, 15, P.woodD); l.rect(2, 2, 13, 7, P.woodL); l.rect(2, 6, 13, 7, P.wood); l.rect(3, 4, 10, 4, P.woodD); l.rect(10, 3, 12, 5, P.woodD); l.set(12, 4, P.woodL); });
 
 // ---------- autotiles (máscara: N=1, E=2, S=4, W=8 = vizinho do mesmo tipo) ----------
 function edgeDistance(mask, x, y) {

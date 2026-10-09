@@ -83,3 +83,119 @@ function worldVisibleCells(map, camera, metrics) {
         y1: Math.min(map.height - 1, Math.floor((camera.y + metrics.viewHeight - 1 / metrics.zoom) / ts)),
     };
 }
+
+// ============================================================
+// Movimento (Fase 7.2): núcleo compartilhado, puro e independente do renderer e da taxa de quadros.
+//   - Estado: { mapId, x, y, dir, moving, distance }: x,y = ponto dos pés em px do mundo; distance = px já percorridos.
+//   - O controle MANUAL (cidades) fornece uma direção; o controle AUTOMÁTICO (caçadas, futuro) fornece um destino. Os dois
+//     passam por worldMoveBy: mesmas colisões, mesmos limites, mesma conta de distância.
+//   - Deslocamento = velocidade x tempo, linear: dividir o mesmo tempo em passos diferentes dá o mesmo resultado.
+//   - worldPathLength / worldTravelTimeMs dão a mesma conta em fórmula fechada (ETA de um encontro, simulação offline).
+// ============================================================
+const WORLD_DIRS = { up: { dx: 0, dy: -1 }, down: { dx: 0, dy: 1 }, left: { dx: -1, dy: 0 }, right: { dx: 1, dy: 0 } };
+const WORLD_EPS = 1e-4;
+
+// Só mapas de cidade aceitam caminhada manual; rotas e áreas de caça andam sozinhas
+function worldCanWalkManually(map) { return !!map && map.type === 'city'; }
+
+// Tile que bloqueia: objeto, água e tudo fora do mapa
+function worldCellBlocked(map, cellX, cellY) {
+    const kind = worldKindAt(map, cellX, cellY);
+    return kind === null || kind === 'object' || kind === 'water';
+}
+
+// Estado inicial: pés no centro da célula de spawn, um pouco abaixo (igual ao desenho da F7.1)
+function worldCreateState(map) {
+    const ts = WORLD_TILE_SIZE, sp = map.spawn;
+    return { mapId: map.id, x: sp.x * ts + ts / 2, y: sp.y * ts + ts - 3, dir: sp.dir || 'down', moving: false, distance: 0 };
+}
+
+// Move o eixo `axis` ('x'|'y') em `sign` (+1/-1) até `dist` px; para exatamente na borda do primeiro tile bloqueado
+function worldMoveAxis(map, pos, axis, sign, dist) {
+    const ts = WORLD_TILE_SIZE, hb = WORLD_MOVEMENT.hitbox;
+    const half = axis === 'x' ? hb.halfW : hb.halfH, cross = axis === 'x' ? pos.y : pos.x, crossHalf = axis === 'x' ? hb.halfH : hb.halfW;
+    const c0 = Math.floor((cross - crossHalf) / ts), c1 = Math.floor((cross + crossHalf - WORLD_EPS) / ts);
+    const from = pos[axis], target = from + sign * dist;
+    const edgeNow = Math.floor((from + sign * half) / ts), edgeNew = Math.floor((target + sign * half) / ts);
+    if (edgeNew !== edgeNow) {
+        for (let c = c0; c <= c1; c++) {
+            const blocked = axis === 'x' ? worldCellBlocked(map, edgeNew, c) : worldCellBlocked(map, c, edgeNew);
+            if (blocked) {
+                const boundary = sign > 0 ? edgeNew * ts : (edgeNew + 1) * ts;
+                const stop = boundary - sign * half - sign * WORLD_EPS;
+                return sign > 0 ? Math.max(from, Math.min(target, stop)) : Math.min(from, Math.max(target, stop));
+            }
+        }
+    }
+    return target;
+}
+
+// Primitiva comum: anda `distance` px na direção `dir` (cima/baixo/esquerda/direita); devolve um NOVO estado
+function worldMoveBy(map, state, dir, distance) {
+    const vec = WORLD_DIRS[dir];
+    if (!vec || !(distance > 0)) return { ...state, moving: false };
+    let { x, y } = state, left = distance, moved = 0;
+    const chunk = WORLD_TILE_SIZE / 2;                       // nunca pula mais que meio tile por vez
+    while (left > 1e-9) {
+        const d = Math.min(left, chunk);
+        const before = vec.dx ? x : y;
+        if (vec.dx) x = worldMoveAxis(map, { x, y }, 'x', vec.dx, d); else y = worldMoveAxis(map, { x, y }, 'y', vec.dy, d);
+        const got = Math.abs((vec.dx ? x : y) - before);
+        moved += got; left -= d;
+        if (got < d - 1e-9) break;                           // bateu num obstáculo ou na borda
+    }
+    return { ...state, x, y, dir, moving: moved > 1e-9, distance: state.distance + moved };
+}
+
+// Controle manual: uma direção (ou null) durante `dtMs` a `speed` px/s. dtMs é limitado a maxStepMs.
+function worldStep(map, state, dir, dtMs, speed = WORLD_MOVEMENT.walkSpeed) {
+    const dt = Math.min(Math.max(Number.isFinite(dtMs) ? dtMs : 0, 0), WORLD_MOVEMENT.maxStepMs);
+    if (!dir) return { ...state, moving: false };
+    return worldMoveBy(map, state, dir, (speed * dt) / 1000);
+}
+
+// Controle automático (caçadas): vai ao `target` (px do mundo) em L, primeiro no eixo x e depois no y, sem simular teclas.
+// Chega exatamente (sem passar do alvo); o tempo que sobra de uma perna vale para a seguinte, então o resultado não depende
+// de como o tempo foi dividido em passos. Não faz busca de caminho: se bater num obstáculo, devolve blocked.
+function worldAdvanceToward(map, state, target, dtMs, speed = WORLD_MOVEMENT.walkSpeed) {
+    const dt = Math.min(Math.max(Number.isFinite(dtMs) ? dtMs : 0, 0), WORLD_MOVEMENT.maxStepMs);
+    let s = { ...state, moving: false }, left = (speed * dt) / 1000, blocked = false;
+    for (let leg = 0; leg < 2 && left > 1e-9; leg++) {
+        const dx = target.x - s.x, dy = target.y - s.y;
+        const horizontal = Math.abs(dx) > WORLD_EPS;
+        const remaining = horizontal ? Math.abs(dx) : Math.abs(dy);
+        if (!horizontal && Math.abs(dy) <= WORLD_EPS) break;
+        const dir = horizontal ? (dx > 0 ? 'right' : 'left') : (dy > 0 ? 'down' : 'up');
+        const step = Math.min(left, remaining);
+        const next = worldMoveBy(map, s, dir, step);
+        const got = next.distance - s.distance;
+        s = { ...next, moving: s.moving || next.moving };
+        left -= got;
+        if (got < step - 1e-9) { blocked = true; break; }
+    }
+    const arrived = Math.abs(target.x - s.x) <= 1e-3 && Math.abs(target.y - s.y) <= 1e-3;
+    return { state: s, arrived, blocked };
+}
+
+// Fórmulas fechadas (mesma matemática do passo a passo, sem simular quadros): comprimento do percurso em L por pontos de
+// passagem, e tempo de viagem em ms. Servem para estimar o tempo até um encontro, ao vivo e offline.
+function worldPathLength(from, waypoints) {
+    let len = 0, cur = from;
+    for (const p of waypoints) { len += Math.abs(p.x - cur.x) + Math.abs(p.y - cur.y); cur = p; }
+    return len;
+}
+function worldTravelTimeMs(distancePx, speed = WORLD_MOVEMENT.walkSpeed) {
+    return speed > 0 ? (Math.max(0, distancePx) / speed) * 1000 : Infinity;
+}
+
+// Interação disponível perto de um ponto (só em cidades): a mais próxima dentro do alcance, ou null
+function worldInteractionNear(map, state, reach = WORLD_MOVEMENT.interactReach) {
+    if (!worldCanWalkManually(map) || !map.interactions) return null;
+    const ts = WORLD_TILE_SIZE;
+    let best = null, bestD = Infinity;
+    for (const it of map.interactions) {
+        const d = Math.hypot(state.x - (it.cell.x + 0.5) * ts, state.y - (it.cell.y + 0.5) * ts);
+        if (d <= reach && d < bestD) { best = it; bestD = d; }
+    }
+    return best;
+}

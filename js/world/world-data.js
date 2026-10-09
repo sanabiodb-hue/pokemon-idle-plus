@@ -8,18 +8,32 @@
 // ============================================================
 const WORLD_TILE_SIZE = 16;
 
-// Layout de sprites/world/tileset.png (16 colunas x 3 linhas de tiles 16x16)
+// Movimento: unidades consistentes e independentes da taxa de quadros. Posição e distância em px do mundo (1 tile = 16 px),
+// velocidade em px/s, tempo em ms. O mesmo modelo serve ao controle manual (cidades), à caminhada automática das caçadas e à
+// simulação offline (mesma matemática, sem desenhar passos). hitbox: meia-largura/meia-altura da caixa dos pés.
+const WORLD_MOVEMENT = {
+    walkSpeed: 64,            // 4 tiles por segundo
+    maxStepMs: 50,            // um quadro nunca vale mais que isto (aba escondida/engasgo não vira "teletransporte")
+    hitbox: { halfW: 5, halfH: 2 },
+    interactReach: 20,        // distância (px) dos pés ao ponto de interação para poder interagir
+};
+
+// Layout de sprites/world/tileset.png (16 colunas x 4 linhas de tiles 16x16)
 const WORLD_TILESET = {
     src: 'sprites/world/tileset.png',
     tileSize: WORLD_TILE_SIZE,
     cols: 16,
-    rows: 3,
+    rows: 4,
     tiles: {
         grass: [0, 1, 2, 3],      // variação escolhida por hash da posição
         tuft: 4, flowerRed: 5, flowerYellow: 6, tallGrass: 7, bush: 8, rock: 9,
         tree: [10, 11], stump: 12, sign: 13, fence: 14,
         pathBase: 16,             // 16 autotiles: máscara N=1, E=2, S=4, W=8 (vizinho do mesmo tipo)
         waterBase: 32,
+        // cidade (linha 4)
+        roofRedL: 48, roofRedCross: 49, roofRedR: 50, wallWindowL: 51, centerDoor: 52, wallWindowR: 53,
+        roofBlueL: 54, roofBlueBox: 55, roofBlueR: 56, depotWallL: 57, depotGate: 58, depotWallR: 59,
+        plaza: 60, bench: 61, lamp: 62, townSign: 63,
     },
 };
 
@@ -47,12 +61,58 @@ const WORLD_LEGEND = {
     'o': { kind: 'object', tile: 'stump' },
     's': { kind: 'object', tile: 'sign' },
     '=': { kind: 'object', tile: 'fence' },
+    // cidade
+    'q': { kind: 'ground', tile: 'plaza' },
+    'A': { kind: 'object', tile: 'roofRedL' }, 'B': { kind: 'object', tile: 'roofRedCross' }, 'C': { kind: 'object', tile: 'roofRedR' },
+    'D': { kind: 'object', tile: 'wallWindowL' }, 'G': { kind: 'object', tile: 'centerDoor' }, 'F': { kind: 'object', tile: 'wallWindowR' },
+    'H': { kind: 'object', tile: 'roofBlueL' }, 'I': { kind: 'object', tile: 'roofBlueBox' }, 'J': { kind: 'object', tile: 'roofBlueR' },
+    'K': { kind: 'object', tile: 'depotWallL' }, 'N': { kind: 'object', tile: 'depotGate' }, 'M': { kind: 'object', tile: 'depotWallR' },
+    'h': { kind: 'object', tile: 'bench' }, 'l': { kind: 'object', tile: 'lamp' }, 'z': { kind: 'object', tile: 'townSign' },
 };
 
-const WORLD_MAPS = {
+WORLD_MAPS = {
+    // Cidade inicial: Centro Pokémon (cura) e Depot (armazenamento). Caminhada manual permitida (type 'city').
+    starter_town: {
+        id: 'starter_town',
+        type: 'city',
+        name: 'Cidade Inicial',
+        width: 28,
+        height: 20,
+        label: 'praça de pedra com o Centro Pokémon, o Depot, bancos, postes e um caminho ao sul',
+        spawn: { x: 13, y: 9, dir: 'down' },
+        // pontos de interação: 'cell' é a célula caminhável em frente à porta; o serviço fica disponível perto dela
+        interactions: [
+            { id: 'pokemon_center', type: 'heal', label: 'Centro Pokémon', cell: { x: 6, y: 5 } },
+            { id: 'depot', type: 'depot', label: 'Depot', cell: { x: 21, y: 5 } },
+        ],
+        rows: [
+            'TTTTTTTTTTTTTTTTTTTTTTTTTTTT',
+            'TTTTTTTTTTTTTTTTTTTTTTTTTTTT',
+            'TT.T.....,T...,.,T..f...T.TT',
+            'TT,f.ABCy,rf........HIJ...TT',
+            'TT...DGFb.y......fb.KNM...TT',
+            'TTy.qqqqqlqqqqqqqqlqqqqq.TTT',
+            'TTT.qqqqqqqqqqqqqqqqqqqqy.TT',
+            'TT..qqqqqqqqqlqqqqqqqqqq,rTT',
+            'TT,yqqqqqqqqqqqqqqqqqqqq.,TT',
+            'TT..qqqqqhqqqqqqqqhqqqqq,.TT',
+            'TT,.qqqqqqqqqqqqqqqqqqqq,.TT',
+            'TTb.qqqqqqqqqqqqqqqqqqqq..TT',
+            'TT..b...,.b.ppp...y,.r...TTT',
+            'TTT.=======rppp,.=======f.TT',
+            'TTr.....,.ybppp.....bf..y,TT',
+            'TT..,......,pppff...f.....TT',
+            'TTy.........ppp.z........yTT',
+            'TT.........yppp.f..b.....fTT',
+            'TTTTTTTTTTTTpppTTTTTTTTTTTTT',
+            'TTTTTTTTTTTTpppTTTTTTTTTTTTT',
+        ],
+    },
+
     // Rota 1 de Kanto (id real em route-data.js): caminho de terra de sul (Pallet) a norte (Viridian)
     kanto_route1: {
         id: 'kanto_route1',
+        type: 'route',             // city | route | hunt: só 'city' aceita caminhada manual (rotas e caçadas andam sozinhas)
         routeId: 'kanto_route1',   // metadado opcional: rota de progressão relacionada (legenda); o mapa não depende dela
         width: 32,
         height: 24,
@@ -93,8 +153,8 @@ const WORLD_ROUTE_MAPS = {
     kanto_route1: 'kanto_route1',
 };
 
-// Área mostrada quando a rota atual ainda não tem mapa visual (só uma prévia: não altera a rota do jogo)
-const WORLD_PREVIEW_MAP_ID = 'kanto_route1';
+// Área exibida ao abrir a aba Mapa (as demais são escolhidas no seletor de destino; só visual, não altera a rota do jogo)
+const WORLD_START_MAP_ID = 'starter_town';
 
 const _worldHas = (obj, key) => typeof key === 'string' && Object.prototype.hasOwnProperty.call(obj, key);
 

@@ -721,7 +721,7 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
             await context.close();
         }
 
-        // ---------- Mundo visual (F7.1): a aba Mapa mostra a cena (Canvas), passiva, sem loop, e mantém as listas ----------
+        // ---------- Mundo visual (F7.1/F7.2): aba Mapa = cidade inicial (Canvas) com caminhada manual, Centro Pokémon e Depot ----------
         for (const vp of [
             { name: 'celular 360x640', width: 360, height: 640, deviceScaleFactor: 3, isMobile: true, hasTouch: true },
             { name: 'desktop 1280x800', width: 1280, height: 800, deviceScaleFactor: 1 },
@@ -739,53 +739,158 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
                 const px = c.getContext('2d').getImageData(0, 0, c.width, c.height).data;
                 const colors = new Set(); let hero = 0;
                 for (let i = 0; i < px.length; i += 4) { if (i % 20 === 0) colors.add(px[i] << 16 | px[i + 1] << 8 | px[i + 2]); if (px[i] === 31 && px[i + 1] === 163 && px[i + 2] === 163) hero++; }
+                const wv = gameUI.worldView, map = wv.currentScene().map, pl = wv._player(map);
+                const pad = document.querySelector('.world-dpad'), padBtn = document.querySelector('[data-dir="up"]');
                 return {
                     bw: c.width, bh: c.height, cw: r.width, ch: r.height, dpr: window.devicePixelRatio, colors: colors.size, hero,
-                    route: game.gameState.currentRoute, active: gameUI.worldView.active, draws: gameUI.worldView.drawCount,
-                    zoom: gameUI.worldView.lastMetrics && gameUI.worldView.lastMetrics.zoom, sw: document.documentElement.scrollWidth, iw: window.innerWidth,
+                    route: game.gameState.currentRoute, active: wv.active, draws: wv.drawCount, area: wv.areaId,
+                    zoom: wv.lastMetrics && wv.lastMetrics.zoom, sw: document.documentElement.scrollWidth, iw: window.innerWidth,
                     routes: document.querySelectorAll('#route-list .route-card').length, regions: document.querySelectorAll('#region-list .region-card').length,
                     rendering: getComputedStyle(c).imageRendering, aria: c.getAttribute('aria-label'), caption: document.getElementById('world-caption').textContent,
+                    hint: document.getElementById('world-hint').textContent, px: pl.x, py: pl.y, dist: pl.distance, moving: pl.moving,
+                    padShown: getComputedStyle(pad).display !== 'none', padBtn: padBtn ? padBtn.getBoundingClientRect().width : 0,
+                    controlsHidden: document.getElementById('world-controls').hidden, interactDisabled: document.getElementById('world-interact').disabled,
+                    pcActive: document.getElementById('tab-pc').classList.contains('active'),
                 };
             });
+            // andar: teclado no desktop; no celular, o direcional (eventos de ponteiro sintéticos, não toque físico)
+            const hold = async (dir, ms) => {
+                const code = { left: 'ArrowLeft', right: 'ArrowRight', up: 'ArrowUp', down: 'ArrowDown' }[dir];
+                if (vp.isMobile) {
+                    await page.evaluate((d) => document.querySelector(`[data-dir="${d}"]`).dispatchEvent(new PointerEvent('pointerdown', { pointerId: 7, bubbles: true, cancelable: true, isPrimary: true })), dir);
+                    await sleep(ms);
+                    await page.evaluate((d) => document.querySelector(`[data-dir="${d}"]`).dispatchEvent(new PointerEvent('pointerup', { pointerId: 7, bubbles: true })), dir);
+                } else { await page.keyboard.down(code); await sleep(ms); await page.keyboard.up(code); }
+                await sleep(120);
+            };
             const a = await probe();
             check(`Mundo ${vp.name}: antes de abrir a aba o renderer está inativo e não desenhou`, inactive.active === false && inactive.draws === 0, JSON.stringify(inactive));
-            check(`Mundo ${vp.name}: cena desenhada com buffer = tamanho CSS x dpr e zoom inteiro`, a.bw === Math.round(a.cw * a.dpr) && a.bh === Math.round(a.ch * a.dpr) && Number.isInteger(a.zoom) && a.zoom >= 2, JSON.stringify(a));
+            check(`Mundo ${vp.name}: abre na cidade inicial, com buffer = tamanho CSS x dpr e zoom inteiro`, a.area === 'starter_town' && a.bw === Math.round(a.cw * a.dpr) && a.bh === Math.round(a.ch * a.dpr) && Number.isInteger(a.zoom) && a.zoom >= 2, JSON.stringify(a));
             check(`Mundo ${vp.name}: cenário variado (não é uma cor lisa) e personagem visível`, a.colors >= 14 && a.hero > 20, JSON.stringify({ colors: a.colors, hero: a.hero }));
-            check(`Mundo ${vp.name}: pixel art nítida, rótulo acessível e legenda em português`, /pixelated|crisp-edges/.test(a.rendering) && /Rota 1/.test(a.aria) && /Rota 1/.test(a.caption), JSON.stringify({ r: a.rendering, aria: a.aria }));
+            check(`Mundo ${vp.name}: pixel art nítida, rótulo acessível e legenda em português`, /pixelated|crisp-edges/.test(a.rendering) && /Cidade Inicial/.test(a.aria) && /Cidade Inicial/.test(a.caption), JSON.stringify({ r: a.rendering, aria: a.aria }));
             check(`Mundo ${vp.name}: sem rolagem horizontal; listas de regiões e rotas continuam na aba`, a.sw <= a.iw + 1 && a.routes > 0 && a.regions > 0, JSON.stringify({ sw: a.sw, iw: a.iw, routes: a.routes, regions: a.regions }));
             check(`Mundo ${vp.name}: puramente visual: a rota do jogo não mudou`, a.route === routeBefore, `${routeBefore} → ${a.route}`);
+            check(`Mundo ${vp.name}: direcional na tela só em telas de toque, com botões de pelo menos 44 px`, vp.isMobile ? (a.padShown && a.padBtn >= 44) : !a.padShown, JSON.stringify({ shown: a.padShown, w: a.padBtn }));
 
-            // sem loop contínuo: parado por 1,2 s, nenhum quadro de animação é pedido e nada é redesenhado
+            // parada: sem pedir quadros de animação nem redesenhar
             const rafBefore = await page.evaluate(() => window.__raf);
             await sleep(1200);
             const idle = await probe();
             check(`Mundo ${vp.name}: cena parada não pede quadros nem redesenha (sem loop)`, (await page.evaluate(() => window.__raf)) === rafBefore && idle.draws === a.draws, JSON.stringify({ rafBefore, draws: [a.draws, idle.draws] }));
 
+            // caminhar de verdade até o Centro Pokémon: esquerda, cima, esquerda (a distância usa o tempo real, sem depender da taxa de quadros)
+            await hold('left', 500); await hold('up', 900); await hold('left', 1300);
+            const walked = await probe();
+            const dx = a.px - walked.px, dy = a.py - walked.py;
+            check(`Mundo ${vp.name}: caminhada manual anda (≈64 px/s, sem teleporte) e acumula a distância`, dx > 80 && dx < 140 && dy > 45 && dy < 75 && walked.dist > 140 && walked.dist < 215 && !walked.moving, JSON.stringify({ dx, dy, dist: walked.dist }));
+            const rafWalk = await page.evaluate(() => window.__raf);
+            await sleep(600);
+            check(`Mundo ${vp.name}: ao soltar a direção o loop de quadros para`, (await page.evaluate(() => window.__raf)) === rafWalk, 'continuou pedindo quadros parado');
+            check(`Mundo ${vp.name}: perto do Centro Pokémon o botão Interagir habilita e mostra a dica`, walked.interactDisabled === false && /Centro Pok/.test(walked.hint), JSON.stringify({ d: walked.interactDisabled, hint: walked.hint }));
+
+            // Centro Pokémon: cura o HP da batalha (mesma regra da poção, sem gastar poção)
+            await page.evaluate(() => { game.currentBattle.playerCurrentHp = 1; });
+            const potionsBefore = await page.evaluate(() => game.getPotions());
+            await page.click('#world-interact');
+            await sleep(200);
+            const healed = await page.evaluate(() => ({ hp: game.currentBattle.playerCurrentHp, max: game.currentBattle.playerMaxHp, potions: game.getPotions(), toast: !!document.querySelector('.toast') }));
+            check(`Mundo ${vp.name}: Centro Pokémon cura o Pokémon em batalha sem gastar poção e avisa`, healed.hp >= healed.max - 1 && healed.potions === potionsBefore && healed.toast, JSON.stringify(healed));
+
+            // Com a Caça EM ANDAMENTO o Centro recusa (a automação seguiria progredindo); pausar libera
+            const centerHeals = () => page.evaluate(() => game.bus.recent(200, 'heal').filter(e => e.reason === 'center').length);
+            const healsBefore = await centerHeals();
+            await page.evaluate(() => { game.dispatchAutomationAction({ type: 'START_HUNT' }); game.currentBattle.playerCurrentHp = 1; });
+            await page.click('#world-interact');
+            await sleep(200);
+            const blockedHunt = await page.evaluate(() => ({ running: game.isHuntRunning(), hint: document.getElementById('world-hint').textContent }));
+            check(`Mundo ${vp.name}: com a Caça em andamento o Centro Pokémon recusa e orienta a pausar`, blockedHunt.running === true && (await centerHeals()) === healsBefore && /Pause ou pare a caçada/.test(blockedHunt.hint), JSON.stringify({ blockedHunt, heals: [healsBefore, await centerHeals()] }));
+            await page.evaluate(() => { game.dispatchAutomationAction({ type: 'PAUSE_HUNT' }); game.currentBattle.playerCurrentHp = 1; });
+            await page.click('#world-interact');
+            await sleep(200);
+            check(`Mundo ${vp.name}: depois de pausar a caçada o Centro Pokémon atende de novo`, (await centerHeals()) === healsBefore + 1 && (await page.evaluate(() => game.isHuntRunning())) === false, JSON.stringify({ heals: await centerHeals() }));
+            await page.evaluate(() => { game.dispatchAutomationAction({ type: 'STOP_HUNT' }); });
+
+            // Depot: abre a aba PC existente (posição levada até a porta por atalho de teste)
+            await page.evaluate(() => { const wv = gameUI.worldView, m = wv.currentScene().map, it = m.interactions.find(i => i.type === 'depot'); wv._players[m.id] = { ...wv._player(m), x: (it.cell.x + 0.5) * 16, y: (it.cell.y + 0.5) * 16, moving: false }; wv.requestRedraw(true); });
+            await sleep(250);
+            const atDepot = await probe();
+            check(`Mundo ${vp.name}: perto do Depot a dica aparece`, atDepot.interactDisabled === false && /Depot/.test(atDepot.hint), JSON.stringify({ hint: atDepot.hint }));
+            await page.click('#world-interact');
+            await sleep(250);
+            const pc = await probe();
+            check(`Mundo ${vp.name}: Depot abre a aba PC existente e o renderer do mundo fica inativo`, pc.pcActive === true && pc.active === false, JSON.stringify({ pc: pc.pcActive, active: pc.active }));
+            await page.click('[data-tab="tab-map"]');
+            await page.waitForFunction(() => gameUI.worldView.active === true && gameUI.worldView.drawCount > 0, null, { timeout: 10000 });
+
+            // destino: Rota 1 é só visual (não muda a rota do jogo) e não aceita caminhada manual
+            await page.selectOption('#world-destination', 'kanto_route1');
+            await sleep(300);
+            const rt = await probe();
+            const rafR = await page.evaluate(() => window.__raf);
+            if (vp.isMobile) await page.evaluate(() => document.querySelector('[data-dir="right"]') && document.querySelector('[data-dir="right"]').dispatchEvent(new PointerEvent('pointerdown', { pointerId: 8, bubbles: true, cancelable: true })));
+            else await page.keyboard.press('ArrowRight');
+            await sleep(400);
+            const rt2 = await probe();
+            if (vp.isMobile) await page.evaluate(() => document.querySelector('[data-dir="right"]') && document.querySelector('[data-dir="right"]').dispatchEvent(new PointerEvent('pointerup', { pointerId: 8, bubbles: true })));
+            check(`Mundo ${vp.name}: "Visualizar mapa" mostra a Rota 1 (só visual): sem controles e sem caminhada manual, rota do jogo intacta`, rt.area === 'kanto_route1' && rt.controlsHidden === true && rt.hero > 20 && /Rota 1/.test(rt.aria) && rt2.px === rt.px && rt2.py === rt.py && (await page.evaluate(() => window.__raf)) === rafR && rt.route === routeBefore, JSON.stringify({ area: rt.area, hidden: rt.controlsHidden, aria: rt.aria, same: [rt.px, rt2.px], route: rt.route }));
+            await page.selectOption('#world-destination', 'starter_town');
+            await sleep(300);
+            const back = await probe();
+            check(`Mundo ${vp.name}: voltar à cidade devolve os controles e lembra a posição`, back.area === 'starter_town' && back.controlsHidden === false && Math.abs(back.px - atDepot.px) < 1 && Math.abs(back.py - atDepot.py) < 1, JSON.stringify({ area: back.area, px: back.px, depotPx: atDepot.px }));
+
             // resize/orientação: redesenha com o novo tamanho e continua sem overflow
             await page.setViewportSize(vp.isMobile ? { width: 640, height: 360 } : { width: 900, height: 700 });
-            await page.waitForFunction((n) => gameUI.worldView.drawCount > n, a.draws, { timeout: 10000 });
+            await page.waitForFunction((n) => gameUI.worldView.drawCount > n, back.draws, { timeout: 10000 });
             const b = await probe();
             check(`Mundo ${vp.name}: após resize/orientação o buffer acompanha o novo tamanho, sem overflow`, b.bw === Math.round(b.cw * b.dpr) && b.bh === Math.round(b.ch * b.dpr) && b.sw <= b.iw + 1 && b.hero > 20, JSON.stringify({ bw: b.bw, cw: b.cw, sw: b.sw, iw: b.iw }));
 
-            // sair da aba: o renderer fica inativo e não redesenha mais
+            // perder o foco durante a caminhada: nada de tecla presa
+            if (!vp.isMobile) {
+                await page.keyboard.down('ArrowLeft');
+                await sleep(150);
+                await page.evaluate(() => window.dispatchEvent(new Event('blur')));
+                await sleep(150);
+                const x1 = (await probe()).px;
+                await sleep(400);
+                const x2 = (await probe()).px;
+                await page.keyboard.up('ArrowLeft');
+                check(`Mundo ${vp.name}: perder o foco solta a tecla (o personagem para sozinho)`, Math.abs(x2 - x1) < 0.01, JSON.stringify({ x1, x2 }));
+            }
+
+            // sair da aba durante a caminhada: renderer inativo, sem redesenhar e sem tecla presa
+            if (!vp.isMobile) await page.keyboard.down('ArrowDown'); else await page.evaluate(() => document.querySelector('[data-dir="down"]').dispatchEvent(new PointerEvent('pointerdown', { pointerId: 9, bubbles: true, cancelable: true })));
+            await sleep(150);
             await page.click('[data-tab="tab-battle"]');
             const off = await probe();
-            await page.setViewportSize({ width: vp.width, height: vp.height });
-            await sleep(400);
+            await sleep(500);
             const off2 = await probe();
-            check(`Mundo ${vp.name}: fora da aba o renderer fica inativo e não redesenha`, off.active === false && off2.active === false && off2.draws === off.draws, JSON.stringify({ off: off.draws, off2: off2.draws }));
+            if (!vp.isMobile) await page.keyboard.up('ArrowDown');
+            check(`Mundo ${vp.name}: sair da aba no meio da caminhada deixa o renderer inativo, sem redesenhar nem andar`, off.active === false && off2.active === false && off2.draws === off.draws && off2.px === off.px && off2.py === off.py, JSON.stringify({ off: off.draws, off2: off2.draws }));
 
-            // voltar: retoma
+            // voltar: retoma e as listas continuam funcionando (a lista troca a rota do JOGO; a cena continua na cidade)
             await page.click('[data-tab="tab-map"]');
             await page.waitForFunction((n) => gameUI.worldView.drawCount > n, off2.draws, { timeout: 10000 });
-            const back = await probe();
-            check(`Mundo ${vp.name}: ao voltar para a aba o renderer retoma e redesenha`, back.active === true && back.draws > off2.draws && back.hero > 20, JSON.stringify({ active: back.active, draws: back.draws }));
-
-            // as listas continuam funcionais: escolher outra rota pela lista troca a rota do JOGO e a cena apenas acompanha a legenda
+            const again = await probe();
+            check(`Mundo ${vp.name}: ao voltar para a aba o renderer retoma sem tecla presa`, again.active === true && again.draws > off2.draws && again.hero > 20 && again.moving === false, JSON.stringify({ active: again.active, moving: again.moving }));
             await page.click('#route-list .route-card:not(.active)');
             await sleep(300);
-            const after = await page.evaluate(() => ({ route: game.gameState.currentRoute, caption: document.getElementById('world-caption').textContent }));
-            check(`Mundo ${vp.name}: a lista de rotas segue mudando a rota do jogo (a cena é só prévia)`, after.route !== routeBefore && /Prévia visual: Rota 1/.test(after.caption), JSON.stringify(after));
+            const after = await page.evaluate(() => ({ route: game.gameState.currentRoute, caption: document.getElementById('world-caption').textContent, area: gameUI.worldView.areaId }));
+            check(`Mundo ${vp.name}: a lista de rotas segue mudando a rota do jogo (a cena continua na cidade)`, after.route !== routeBefore && after.area === 'starter_town' && /Cidade Inicial/.test(after.caption), JSON.stringify(after));
+            await context.close();
+        }
+
+        // ---------- Dispositivo híbrido (desktop com tela de toque): o direcional aparece e o teclado continua funcionando ----------
+        {
+            const { page, context } = await newPage(() => localStorage.setItem('pokemon_idle_tutorial_done', '1'), { viewport: { width: 1280, height: 800 }, hasTouch: true });
+            await page.goto(base);
+            await page.waitForFunction(() => typeof game !== 'undefined' && game.currentBattle, null, { timeout: 15000 });
+            await page.click('[data-tab="tab-map"]');
+            await page.waitForFunction(() => gameUI.worldView.drawCount > 0, null, { timeout: 10000 });
+            const hy = await page.evaluate(() => ({ coarse: matchMedia('(any-pointer: coarse)').matches, shown: getComputedStyle(document.querySelector('.world-dpad')).display !== 'none', x: gameUI.worldView._player(gameUI.worldView.currentScene().map).x }));
+            await page.keyboard.down('ArrowLeft'); await sleep(500); await page.keyboard.up('ArrowLeft'); await sleep(150);
+            const hy2 = await page.evaluate(() => gameUI.worldView._player(gameUI.worldView.currentScene().map).x);
+            check('Mundo híbrido (1280x800 com tela de toque): direcional visível', hy.coarse === true && hy.shown === true, JSON.stringify(hy));
+            check('Mundo híbrido (1280x800 com tela de toque): o teclado continua andando', hy.x - hy2 > 20, JSON.stringify({ x0: hy.x, x1: hy2 }));
             await context.close();
         }
 
