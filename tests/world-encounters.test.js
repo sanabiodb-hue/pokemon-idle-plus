@@ -408,7 +408,7 @@ test('F7.7 view: abrir o mapa não inicia nada; o botão explícito inicia a ca�
     env.encounterBtn.fire('click'); env.flush();
     assert.equal(session(game).state, 'running');
     assert.equal(env.encounterBtn.disabled, true, 'um ciclo por vez');
-    assert.match(env.encounterStatus.textContent, /Caminhando até Pikachu/);
+    assert.match(env.encounterStatus.textContent, /caminhando até Pikachu/i);
     const map = view.currentScene().map;
     const heroAt = () => { const hero = env.draws.filter(a => a.length === 9).at(-1); return [hero[5], hero[6]]; };
     const cams = [], poses = [];
@@ -449,7 +449,7 @@ test('F7.7 view: controles manuais nunca desviam o personagem durante a caçada;
     assert.equal(env.pending(), 0);
     assert.ok(before.x !== undefined);
     view.onShow(); env.flush();
-    assert.match(env.encounterStatus.textContent, /Batalha contra Pikachu/);
+    assert.match(env.encounterStatus.textContent, /batalha contra Pikachu/i);
 });
 
 test('F7.7 view: sair do mapa encerra o ciclo (nada avança invisivelmente nem cria encontro na área anterior); a batalha em curso não é abortada', async () => {

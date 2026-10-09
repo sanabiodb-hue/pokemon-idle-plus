@@ -30,7 +30,7 @@ function worldResolveTile(map, x, y, tileset = WORLD_TILESET) {
     const ch = worldCharAt(map, x, y);
     const def = ch === null ? null : WORLD_LEGEND[ch];
     if (!def) return tileset.tiles.grass[0];
-    const autoBase = def.kind === 'path' ? tileset.tiles.pathBase : def.kind === 'water' ? tileset.tiles.waterBase : def.kind === 'lava' ? tileset.tiles.lavaBase : null;
+    const autoBase = def.kind === 'path' ? (def.auto && tileset.tiles[def.auto] !== undefined ? tileset.tiles[def.auto] : tileset.tiles.pathBase) : def.kind === 'water' ? tileset.tiles.waterBase : def.kind === 'lava' ? tileset.tiles.lavaBase : null;
     if (autoBase !== null) {
         const same = (nx, ny) => { const k = worldKindAt(map, nx, ny); return k === null || k === def.kind; };
         const mask = (same(x, y - 1) ? 1 : 0) | (same(x + 1, y) ? 2 : 0) | (same(x, y + 1) ? 4 : 0) | (same(x - 1, y) ? 8 : 0);

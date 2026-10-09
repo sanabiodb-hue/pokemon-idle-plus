@@ -167,7 +167,7 @@ function worldGenerateHuntMap(spec) {
         const row = [];
         for (let x = 0; x < w; x++) {
             const i = y * w + x, rGround = rnd(), rObstacle = rnd(), rScatter = rnd();      // sempre 3 sorteios por célula: ordem fixa
-            if (pathCells[i]) row.push('p');
+            if (pathCells[i]) row.push(biome.path);
             else if (protectedCells[i]) row.push(_wgPick(biome.ground, rGround));
             else if (x === 0 || y === 0 || x === w - 1 || y === h - 1) row.push(biome.border);
             else if (isLiquid[i]) row.push(biome.liquid.ch);

@@ -467,8 +467,7 @@ class GameCore {
         if (wasHealing && battle) {
             const maxHp = battle.playerMaxHp;
             const healPerSecond = Math.max(1, Math.floor(maxHp * DEFEAT_HEAL_PERCENT_PER_SEC));
-            const missing = Math.max(0, maxHp - battle.playerCurrentHp);
-            const healMs = Math.ceil(missing / healPerSecond) * 1000;
+            const healMs = defeatHealMs(maxHp, battle.playerCurrentHp);
             if (elapsedMs < healMs) {
                 // 离线期间都在治疗，没有战斗可结算
                 battle.playerCurrentHp = Math.min(maxHp, battle.playerCurrentHp + healPerSecond * Math.floor(elapsedMs / 1000));
@@ -749,8 +748,9 @@ class GameCore {
                 if (!this.isHuntRunning()) { this._fastHalt(s); return true; }
             }
             if (s.playerHp <= 0) {
-                if (world) world.fastResolved('defeat', DEFEAT_HEAL_MS);      // a cura corre junto com a próxima caminhada (como online)
-                else this._fastSpend(s, DEFEAT_HEAL_MS);
+                const healMs = defeatHealMs(s.playerStats.hp, 0);               // a mesma duração do modo online (ver defeatHealMs)
+                if (world) world.fastResolved('defeat', healMs);                // a cura corre junto com a próxima caminhada (como online)
+                else this._fastSpend(s, healMs);
                 s.playerHp = s.playerStats.hp;
             } else if (world) world.fastResolved('defeat', 0);                // revivido por poção: segue sem espera
             return true;
@@ -2171,6 +2171,7 @@ class GameCore {
         const maxHp = this.currentBattle.playerMaxHp;
         const healPerSecond = Math.max(1, Math.floor(maxHp * DEFEAT_HEAL_PERCENT_PER_SEC));
 
+        // duração total = defeatHealMs(maxHp) (o Fast Driver usa a mesma conta)
         this.healTimer = this._workerSetInterval(() => {
             if (!this.currentBattle) {
                 this._clearHealTimer();

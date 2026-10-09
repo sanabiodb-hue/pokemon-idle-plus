@@ -63,6 +63,7 @@ class WorldView {
             <div id="world-encounter" class="world-encounter" hidden>
                 <button type="button" id="world-encounter-btn" class="world-encounter-btn">Iniciar caçada neste mapa</button>
                 <span id="world-encounter-status" class="world-encounter-status" aria-live="polite"></span>
+                <div id="world-encounter-bar" class="world-encounter-bar" hidden role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-label="Progresso até o ponto de encontro"><i></i></div>
             </div>
             <div id="world-hint" class="world-hint" aria-live="polite"></div>
             <div id="world-controls" class="world-controls">
@@ -85,6 +86,8 @@ class WorldView {
         this.encounterBox = this.root.querySelector('#world-encounter');
         this.encounterBtn = this.root.querySelector('#world-encounter-btn');
         this.encounterStatus = this.root.querySelector('#world-encounter-status');
+        this.encounterBar = this.root.querySelector('#world-encounter-bar');
+        this._uiKey = null;                // último texto/progresso mostrado (só mexe no DOM quando muda)
         this.huntInput = this.root.querySelector('#world-hunt-input');
         this.huntResults = this.root.querySelector('#world-hunt-results');
         this.controls = new WorldControls({ root: this.root, onChange: () => this._onInput(), onInteract: () => this._interact() });
@@ -298,21 +301,49 @@ WorldView._assets = null; WorldView.failed = true; });   // permite tentar de no
 
     _encounterName(c) { const d = POKEMON_DATA[c.speciesId]; return d && d.name ? d.name : `#${c.speciesId}`; }
 
+    // Estado da caçada para o jogador: só dados autoritativos (sessão do jogo + perna do controlador). Só escreve no DOM quando o valor muda.
     _syncEncounterUi(map) {
         const enc = this.encounters, hunt = map.type === 'hunt' && !!enc;
         this.encounterBox.hidden = !hunt;
-        if (!hunt) return;
-        const c = enc.current && enc.current.mapId === map.id ? enc.current : null;
-        const running = typeof this.game.isHuntRunning === 'function' && this.game.isHuntRunning();
-        this.encounterBtn.disabled = enc.isActive();
-        let text = running ? 'Há uma caçada em andamento: ela passa a caminhar neste mapa quando você iniciar.' : 'Inicia a caçada: o treinador caminha até um ponto, o Pokémon aparece e a batalha começa na chegada.';
-        if (enc.isActive() && c) {
-            const name = this._encounterName(c), paused = typeof this.game.getHuntSession === 'function' && this.game.getHuntSession() && this.game.getHuntSession().state === 'paused';
-            if (c.state === 'approaching') text = `${paused ? 'Caçada pausada. ' : ''}Caminhando até ${name}: percurso de ${Math.round(c.lengthPx / WORLD_TILE_SIZE)} passos (~${Math.max(1, Math.round(c.etaMs / 1000))} s).`;
-            else if (c.state === 'arrived') text = `${paused ? 'Caçada pausada. ' : ''}O treinador chegou a ${name}: aguardando a vez da batalha.`;
-            else if (c.state === 'battling') text = `Batalha contra ${name} em andamento.`;
-        } else if (c && c.state === 'cancelled') text = `Caçada neste mapa encerrada (${c.reason === 'left_map' ? 'você saiu do mapa' : c.reason === 'hunt_stopped' ? 'caçada parada' : c.reason}).`;
-        this.encounterStatus.textContent = text;
+        if (!hunt) { this._uiKey = null; return; }
+        const st = enc.status(), name = this._encounterName({ speciesId: map.speciesId }), where = `${name}${map.label ? ' · ' + map.label : ''}`;
+        const sessionLabel = { running: 'ativa', paused: 'pausada' }[st.sessionState] || 'parada';
+        const pct = st.lengthPx > 0 ? Math.min(100, Math.floor(st.progressPx / st.lengthPx * 100)) : 0;
+        let text, bar = null, disabled = st.active;
+        if (st.active) {
+            const steps = Math.max(0, Math.ceil((st.lengthPx - st.progressPx) / WORLD_TILE_SIZE));
+            const paused = st.sessionState === 'paused';
+            if (st.phase === 'approaching') {
+                text = paused ? `Caçada pausada · parado a ${pct}% do caminho até ${name}. Retome na aba Caça para continuar.`
+                    : `Caçada ativa · caminhando até ${name}: ${pct}% (faltam ${steps} ${steps === 1 ? 'passo' : 'passos'}).`;
+                bar = pct;
+            } else if (st.phase === 'arrived') {
+                const why = paused ? 'a batalha começa quando você retomar a caçada' : st.battleBusy ? 'aguardando a batalha atual terminar' : st.healing ? 'aguardando a recuperação do Pokémon' : 'a batalha vai começar';
+                text = `${paused ? 'Caçada pausada' : 'Caçada ativa'} · ${name} chegou ao ponto: ${why}.`;
+                bar = 100;
+            } else if (st.phase === 'battling') {
+                text = `Caçada ${paused ? 'pausada (a batalha em curso termina normalmente)' : 'ativa'} · batalha contra ${name} em andamento.`;
+                bar = 100;
+            } else {
+                text = `Caçada ${paused ? 'pausada' : 'ativa'} · ${name}: ${paused ? 'o próximo ponto será escolhido quando você retomar' : 'escolhendo o próximo ponto'}.`;
+            }
+            if (st.offline) text += ' (calculando o tempo offline…)';
+        } else {
+            const c = enc.current && enc.current.mapId === map.id ? enc.current : null;
+            if (st.sessionState === 'paused') text = 'Há uma caçada pausada: retome ou pare na aba Caça antes de iniciar uma caçada neste mapa.';
+            else if (st.offline) { text = 'Calculando o tempo offline: aguarde para iniciar a caçada.'; disabled = true; }
+            else if (c && c.state === 'cancelled') text = `Caçada em ${where} encerrada (${c.reason === 'left_map' ? 'você saiu do mapa' : c.reason === 'hunt_stopped' ? 'caçada parada' : c.reason === 'offline' ? 'cálculo offline' : c.reason}). Você pode iniciar de novo.`;
+            else if (st.sessionState === 'running') text = `Há uma caçada comum ativa: ao iniciar aqui ela passa a caminhar neste mapa (${where}).`;
+            else text = `Mapa de caça de ${where}. Inicie a caçada: o treinador caminha até um ponto, o Pokémon aparece e a batalha começa na chegada.`;
+        }
+        const last = enc.lastResult && st.active && enc.lastResult.outcome !== 'cancelled' ? ` Último resultado: ${enc.lastResult.outcome === 'defeat' ? 'derrota' : 'vitória'}.` : '';
+        const full = text + last, key = `${full}|${bar}|${disabled}`;
+        if (key === this._uiKey) return;                                       // nada mudou: não toca no DOM
+        this._uiKey = key;
+        this.encounterStatus.textContent = full;
+        this.encounterBtn.disabled = disabled;
+        this.encounterBar.hidden = bar === null;
+        if (bar !== null) { this.encounterBar.setAttribute('aria-valuenow', String(bar)); this.encounterBar.firstElementChild.style.width = `${bar}%`; }
     }
 
     // Sprite do Pokémon do encontro (um só em memória); redesenha quando carrega

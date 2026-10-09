@@ -137,7 +137,7 @@ test('F7.4 determinismo: não depende de Math.random, do relógio nem de quadros
 
 test('F7.4 determinismo: valores fixos (golden) — mudou o algoritmo ou os biomas? some 1 em WORLD_GEN_VERSION e atualize', () => {
     assert.equal(W.WORLD_GEN_VERSION, 1);
-    const golden = { 1: ['forest', '112x60', 795463433, '95765247'], 25: ['meadow', '97x65', 3879105865, 'cad03750'], 150: ['haunted', '69x50', 3402270965, 'c7f2922f'], 1073: ['cave', '70x60', 84970993, '57cdae47'] };
+    const golden = { 1: ['forest', '112x60', 795463433, '95765247'], 25: ['meadow', '97x65', 3879105865, 'cad03750'], 150: ['haunted', '69x50', 3402270965, 'eb944635'], 1073: ['cave', '70x60', 84970993, 'd6bb468c'] };
     for (const [id, [biome, size, seed, sum]] of Object.entries(golden)) {
         const m = W.worldHuntMap(Number(id));
         assert.deepEqual([m.biome, `${m.width}x${m.height}`, W.worldHuntSeed(Number(id)), checksum(m)], [biome, size, seed, sum], `espécie ${id}`);
@@ -159,7 +159,7 @@ test('F7.4 variação: espécies do mesmo bioma têm layouts diferentes usando o
     assert.ok(Object.keys(byBiome).length >= 6, `biomas em uso: ${Object.keys(byBiome)}`);
     for (const [biome, list] of Object.entries(byBiome)) {
         assert.ok(list.length >= 20, `${biome}: espécies suficientes para comparar`);
-        const palette = new Set([...W.WORLD_BIOMES[biome].ground.map(e => e[0]), ...W.WORLD_BIOMES[biome].obstacles.symbols.map(e => e[0]), W.WORLD_BIOMES[biome].border, 'p',
+        const palette = new Set([...W.WORLD_BIOMES[biome].ground.map(e => e[0]), ...W.WORLD_BIOMES[biome].obstacles.symbols.map(e => e[0]), W.WORLD_BIOMES[biome].border, W.WORLD_BIOMES[biome].path,
             ...(W.WORLD_BIOMES[biome].patch ? [W.WORLD_BIOMES[biome].patch.ch] : []), ...(W.WORLD_BIOMES[biome].liquid ? [W.WORLD_BIOMES[biome].liquid.ch] : []), ...(W.WORLD_BIOMES[biome].shore ? [W.WORLD_BIOMES[biome].shore] : [])]);
         const layouts = new Set(list.map(m => m.rows.join('')));
         assert.equal(layouts.size, list.length, `${biome}: nenhum layout repetido`);
@@ -240,9 +240,10 @@ test('F7.4 mapas: a rede é uma rede de verdade (corredor largo o bastante para 
         let reachable = 0;
         for (const d of dist) if (d >= 0) reachable++;
         assert.ok(reachable >= m.width * m.height * 0.25, `${m.id}: área acessível ${reachable}`);
-        // caminho (letra 'p') 4-conectado e protegido por faixa andável de 3 de largura: cada célula 'p' tem todo o 3x3 andável
+        // caminho (letra própria do bioma) 4-conectado e protegido por faixa andável de 3 de largura: cada célula do caminho tem todo o 3x3 andável
+        const pathChar = N.WORLD_BIOMES[m.biome].path;
         let paths = 0;
-        for (let y = 1; y < m.height - 1; y++) for (let x = 1; x < m.width - 1; x++) if (m.rows[y][x] === 'p') {
+        for (let y = 1; y < m.height - 1; y++) for (let x = 1; x < m.width - 1; x++) if (m.rows[y][x] === pathChar) {
             paths++;
             for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) assert.ok(walkableAt(legend, m, x + dx, y + dy), `${m.id}: corredor largo em (${x},${y})`);
         }

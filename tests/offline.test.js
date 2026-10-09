@@ -16,6 +16,10 @@ test('离线结算：生成摘要（战斗数、经验、新捕获），事件�
     game.catchPokemonWithIvs(4, 15, ivs(10));
     const st = game.gameState.caughtPokemon[4];
     st.exp = ctx.getExpForLevel('mediumSlow', 15);
+    // F7.8: a primeira evolução para uma espécie ainda não registrada REINICIA o progresso (Lv1; regra oficial, resetProgress). Sem isto o
+    // Charmeleon recomeça no Lv1 com 12 HP e passa o resto dos 20 min perdendo (≈90 derrotas), o que torna a contagem de vitórias
+    // hipersensível ao tempo de cura. Registrando o Charmeleon antes, a evolução mantém o nível e a contagem fica estável (≈428).
+    game.gameState.pokedex[5] = 'caught';
     game.gameState.team = [4];
     game.gameState.activePokemonIndex = 0;
     game._invalidateAllCaches();

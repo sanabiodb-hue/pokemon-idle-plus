@@ -240,6 +240,22 @@ class WorldEncounters {
         if (this.game.isHuntRunning() && this._isLive()) this.game.startBattle();     // entrada oficial; se a guarda recusar, o encadeamento do jogo oferece a vez depois
     }
 
+    // Leitura (sem avançar nada) do que a interface mostra: fase da perna, progresso real e o estado do jogo que explica uma espera.
+    status() {
+        const c = this.cycle, g = this.game, leg = c && c.leg, session = g.getHuntSession ? g.getHuntSession() : null;
+        return {
+            active: !!c,
+            speciesId: c ? c.speciesId : null,
+            sessionState: session ? session.state : 'none',
+            phase: leg ? leg.state : (c ? 'pending' : 'none'),          // approaching | arrived | battling | resolved | pending | none
+            progressPx: leg ? leg.progressPx : 0,
+            lengthPx: leg ? leg.lengthPx : 0,
+            battleBusy: !!g.battleTimer,
+            healing: !!g.healTimer,
+            offline: !!g._isOfflineSimulating,
+        };
+    }
+
     // Estado lógico do personagem no mapa (posição, direção, se está andando), lido pela view. Só avança o relógio; não desenha nada.
     hunterState(map) {
         const c = this.cycle, leg = c && c.leg;

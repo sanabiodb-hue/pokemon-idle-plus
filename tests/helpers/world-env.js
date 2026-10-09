@@ -52,9 +52,10 @@ function fakeEnv({ width = 374, height = 374, dpr = 3, observer = true } = {}) {
     env.encounterBox = fakeElement({ hidden: true });
     env.encounterBtn = fakeElement();
     env.encounterStatus = fakeElement();
+    env.encounterBar = fakeElement({ hidden: true, firstElementChild: { style: {} }, setAttribute(k, v) { (this.attrs ||= {})[k] = v; } });
     env.huntInput = fakeElement();
     env.huntResults = fakeElement();
-    const parts = { '#world-viewport': env.viewport, '#world-canvas': env.canvas, '#world-message': env.message, '#world-caption': env.caption, '#world-hint': env.hint, '#world-controls': env.controlsEl, '#world-interact': env.interactBtn, '#world-destination': env.destination, '#world-encounter': env.encounterBox, '#world-encounter-btn': env.encounterBtn, '#world-encounter-status': env.encounterStatus, '#world-hunt-input': env.huntInput, '#world-hunt-results': env.huntResults };
+    const parts = { '#world-viewport': env.viewport, '#world-canvas': env.canvas, '#world-message': env.message, '#world-caption': env.caption, '#world-hint': env.hint, '#world-controls': env.controlsEl, '#world-interact': env.interactBtn, '#world-destination': env.destination, '#world-encounter': env.encounterBox, '#world-encounter-btn': env.encounterBtn, '#world-encounter-status': env.encounterStatus, '#world-encounter-bar': env.encounterBar, '#world-hunt-input': env.huntInput, '#world-hunt-results': env.huntResults };
     env.root = fakeElement({ querySelector: (sel) => parts[sel] || null });
     const reg = (store) => ({ addEventListener(t, f) { (store[t] ||= new Set()).add(f); }, removeEventListener(t, f) { if (store[t]) store[t].delete(f); } });
     env.document = { hidden: false, getElementById: (id) => (id === 'world-panel' ? env.root : null), createElement: (tag) => fakeElement({ tagName: tag.toUpperCase() }), ...reg(env.listeners) };

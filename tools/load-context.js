@@ -110,7 +110,7 @@ function loadGameContext(opts = {}) {
   EXP_GROUPS, getExpForLevel, getBestTypeEffectiveness, REGION_POKEDEX_RANGES, LZString,
   SAVE_KEY, SAVE_SCHEMA_VERSION, SAVE_BACKUP_KEYS, SAVE_CORRUPT_KEY, SAVE_META_KEY, SAVE_PREMIGRATION_PREFIX,
   SAVE_DEBOUNCE_MS, SAVE_MAX_WAIT_MS, SAVE_BACKUP_INTERVAL_MS, SAVE_BACKUP_COUNT, SAVE_IMPORT_MAX_CHARS,
-  BASE_CRIT_RATE, BASE_CRIT_MULTIPLIER, BASE_SHINY_RATE, DEFEAT_HEAL_MS, MAX_OFFLINE_TIME,
+  BASE_CRIT_RATE, BASE_CRIT_MULTIPLIER, BASE_SHINY_RATE, DEFEAT_HEAL_MS, defeatHealMs, MAX_OFFLINE_TIME,
   GUIDE_ONBOARDING_STEPS, GUIDE_GOALS, guideDefaultState, sanitizeGuideState,
   SystemClock, ManualClock, SimulationClock, EventBus, AUTOMATION_EVENT_TYPES, calculatePokemonQuality, QUALITY_GRADES,
   defaultAutomationPolicy, validateAutomationPolicy, sanitizeAutomationPolicy, sanitizeAutomationState, policyTargetsSpecies, shouldCapture, AUTOMATION_ACTION_TYPES, ActionDispatcher, decideAutomationActions, AutomationEngine, AUTOMATION_MAX_ACTIONS_PER_EVALUATION,

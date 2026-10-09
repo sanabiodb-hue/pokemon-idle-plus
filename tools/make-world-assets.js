@@ -2,7 +2,7 @@
 'use strict';
 // ============================================================
 // Gera os assets locais e originais do mundo visual (Fase 7.1), sem dependências:
-//   sprites/world/tileset.png   16x6 tiles de 16 px (layout em WORLD_TILESET, js/world/world-data.js)
+//   sprites/world/tileset.png   16x10 tiles de 16 px (layout em WORLD_TILESET, js/world/world-data.js)
 //   sprites/world/hero.png      4 quadros 16x24 (baixo, cima, esquerda, direita): placeholder do treinador
 // Determinístico: rodar de novo produz exatamente os mesmos bytes. Para trocar a arte, basta substituir os PNGs
 // mantendo o layout (ou ajustar WORLD_TILESET / WORLD_CHARACTER).
@@ -78,7 +78,7 @@ const P = {
 };
 
 // ---------- tiles ----------
-const tileset = new Surface(COLS * T, 6 * T);
+const tileset = new Surface(COLS * T, 10 * T);
 const tileAt = (index) => ({ sx: (index % COLS) * T, sy: Math.floor(index / COLS) * T });
 
 function newTile() { return new Surface(T, T); }
@@ -276,6 +276,30 @@ for (let mask = 0; mask < 16; mask++) {
     for (let i = 0; i < 5; i++) { const x = 3 + Math.floor(q() * 9), y = 4 + Math.floor(q() * 9); if (edgeDistance(mask, x, y) > 4) { l.set(x, y, BI.lavaL); l.set(x + 1, y, BI.lavaL); } }
     putTile(80 + mask, l);
 }
+
+
+// ---------- caminhos próprios dos biomas sem grama (F7.8): linhas 7 a 10 (índices 96-159) ----------
+// Mesma máscara e mesmo desenho do caminho de terra (16 autotiles), mas com o chão do bioma na borda e um aro escuro que se funde a ele:
+// em vez de um contorno de grama pregado sobre pedra, cinza, neve ou solo sombrio.
+function trailSet(base, seed, pal) {
+    for (let mask = 0; mask < 16; mask++) {
+        const s = newTile(), r = rng(seed + mask);
+        for (let y = 0; y < T; y++) for (let x = 0; x < T; x++) {
+            const d = edgeDistance(mask, x, y);
+            if (d <= 1) { s.set(x, y, ((x * 7 + y * 3) % 5 === 0) ? pal.groundB : pal.groundA); continue; }
+            if (d === 2) { s.set(x, y, pal.rim); continue; }
+            if (d === 3) { s.set(x, y, pal.mid); continue; }
+            s.set(x, y, pal.fill);
+        }
+        for (let i = 0; i < 18; i++) { const x = Math.floor(r() * T), y = Math.floor(r() * T); if (edgeDistance(mask, x, y) > 3) s.set(x, y, r() < 0.5 ? pal.fillD : pal.fillL); }
+        for (let i = 0; i < 2; i++) { const x = 4 + Math.floor(r() * 8), y = 4 + Math.floor(r() * 8); if (edgeDistance(mask, x, y) > 4) { s.set(x, y, pal.pebble); s.set(x + 1, y, pal.fillD); } }
+        putTile(base + mask, s);
+    }
+}
+trailSet(96, 9600, { groundA: BI.cave, groundB: BI.caveD, rim: hex('#4a4453'), mid: hex('#6b6470'), fill: hex('#8e8794'), fillD: hex('#7a7380'), fillL: hex('#a9a3b0'), pebble: hex('#c1bcc8') });      // caverna: cascalho claro
+trailSet(112, 11200, { groundA: BI.ash, groundB: BI.ashD, rim: hex('#2a2124'), mid: hex('#51444a'), fill: hex('#76686d'), fillD: hex('#5f5257'), fillL: hex('#928388'), pebble: hex('#f08a24') });    // vulcão: cinza batida com brasa
+trailSet(128, 12800, { groundA: BI.snow, groundB: BI.snowD, rim: hex('#8fa9bd'), mid: hex('#b3c8d8'), fill: hex('#cddbe6'), fillD: hex('#b0c4d3'), fillL: hex('#e1ebf2'), pebble: hex('#9db6c9') });   // neve: pisoteada, azulada
+trailSet(144, 14400, { groundA: BI.gloom, groundB: BI.gloomD, rim: hex('#241c37'), mid: hex('#43375a'), fill: hex('#6c5e80'), fillD: hex('#594b6d'), fillL: hex('#837497'), pebble: hex('#a8a2b8') });   // sombrias: terra roxa batida
 
 // ---------- personagem (placeholder original) ----------
 const HW = 16, HH = 24;

@@ -23,7 +23,7 @@ const WORLD_TILESET = {
     src: 'sprites/world/tileset.png',
     tileSize: WORLD_TILE_SIZE,
     cols: 16,
-    rows: 6,
+    rows: 10,
     tiles: {
         grass: [0, 1, 2, 3],      // variação escolhida por hash da posição
         tuft: 4, flowerRed: 5, flowerYellow: 6, tallGrass: 7, bush: 8, rock: 9,
@@ -38,6 +38,8 @@ const WORLD_TILESET = {
         caveFloor: [64, 65], caveBoulder: 66, crystal: 67, ashFloor: [68, 69], basalt: 70, snowFloor: [71, 72], pine: 73, iceRock: 74,
         gloomFloor: [75, 76], deadTree: 77, tombstone: 78, sand: 79,
         lavaBase: 80,             // 16 autotiles de lava (mesma máscara da água)
+        // caminhos dos biomas sem grama (F7.8): 16 autotiles cada, chão do bioma na borda
+        caveTrailBase: 96, ashTrailBase: 112, snowTrailBase: 128, gloomTrailBase: 144,
     },
 };
 
@@ -78,6 +80,9 @@ const WORLD_LEGEND = {
     'n': { kind: 'ground', walkable: true, tile: 'snowFloor' }, 'P': { kind: 'object', walkable: false, tile: 'pine' }, 'i': { kind: 'object', walkable: false, tile: 'iceRock' },
     'g': { kind: 'ground', walkable: true, tile: 'gloomFloor' }, 'd': { kind: 'object', walkable: false, tile: 'deadTree' }, 't': { kind: 'object', walkable: false, tile: 'tombstone' },
     'e': { kind: 'ground', walkable: true, tile: 'sand' },
+    // caminhos próprios dos biomas sem grama: mesmo kind 'path' (conectam entre si), base do autotile vem de `auto`
+    'u': { kind: 'path', walkable: true, auto: 'caveTrailBase' }, 'v': { kind: 'path', walkable: true, auto: 'ashTrailBase' },
+    'k': { kind: 'path', walkable: true, auto: 'snowTrailBase' }, 'm': { kind: 'path', walkable: true, auto: 'gloomTrailBase' },
     'h': { kind: 'object', walkable: false, tile: 'bench' }, 'l': { kind: 'object', walkable: false, tile: 'lamp' }, 'z': { kind: 'object', walkable: false, tile: 'townSign' },
 };
 

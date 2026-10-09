@@ -490,4 +490,13 @@ const SAVE_MAX_WAIT_MS = 10000;         // 防抖上限：持续请求时最迟 
 const SAVE_BACKUP_COUNT = 3;            // 轮转备份份数
 const SAVE_BACKUP_INTERVAL_MS = 10 * 60 * 1000; // 自动备份最小间隔
 const SAVE_IMPORT_MAX_CHARS = 30 * 1000 * 1000; // 导入文本长度上限
-const DEFEAT_HEAL_MS = Math.ceil(1 / DEFEAT_HEAL_PERCENT_PER_SEC) * 1000; // 从 0 血回满所需时间
+const DEFEAT_HEAL_MS = Math.ceil(1 / DEFEAT_HEAL_PERCENT_PER_SEC) * 1000; // 从 0 血回满所需时间（仅当 20% 整除最大生命时精确；实际时长用 defeatHealMs）
+
+// F7.8: duração OFICIAL da recuperação após derrota (online, pré-simulação offline e Fast Driver usam a mesma conta).
+// A cada segundo recupera-se max(1, floor(maxHp x 20%)) de vida; o tempo é o nº de segundos até encher.
+function defeatHealMs(maxHp, currentHp = 0) {
+    if (!(maxHp > 0)) return 0;
+    const missing = Math.max(0, maxHp - Math.max(0, currentHp));
+    const perSecond = Math.max(1, Math.floor(maxHp * DEFEAT_HEAL_PERCENT_PER_SEC));
+    return Math.ceil(missing / perSecond) * 1000;
+}
