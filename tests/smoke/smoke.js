@@ -934,6 +934,13 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
             check(`Mundo ${vp.name} [câmera]: mapa menor que a tela aparece inteiro e centralizado (zoom inteiro) e a câmera não segue o personagem`,
                 small.tl.x >= 0 && small.tl.y >= 0 && small.br.x <= small.bw && small.br.y <= small.bh && Math.abs(small.tl.x - (small.bw - small.br.x)) <= 1 && Math.abs(small.tl.y - (small.bh - small.br.y)) <= 1 && Number.isInteger(small.zoom) && s1.px > s0.px + 10 && s1.cx === s0.cx && s1.cy === s0.cy, JSON.stringify({ small, s0, s1 }));
 
+            // F7.4: mapa de caça gerado sob demanda (hunt_<espécie>) aparece no renderer real, sem controles de caminhada e com o tileset ampliado
+            await page.evaluate(() => { gameUI.worldView.setArea('hunt_74'); });
+            await sleep(400);
+            const hunt = await probe();
+            const huntInfo = await page.evaluate(() => ({ tilesetH: WorldView.images.tileset.naturalHeight, w: getWorldMap('hunt_74').width, type: getWorldMap('hunt_74').type, inList: Object.keys(WORLD_MAPS).some(k => /^hunt_/.test(k)) }));
+            check(`Mundo ${vp.name} [F7.4]: mapa de caça gerado (hunt_74) desenha no navegador, sem caminhada manual, e não entra na lista de mapas`, hunt.area === 'hunt_74' && hunt.controlsHidden === true && hunt.colors >= 8 && huntInfo.tilesetH === 96 && huntInfo.type === 'hunt' && huntInfo.w >= 48 && huntInfo.inList === false, JSON.stringify({ hunt: { area: hunt.area, hidden: hunt.controlsHidden, colors: hunt.colors }, huntInfo }));
+
             await page.evaluate(() => { gameUI.worldView.setArea('starter_town'); delete WORLD_MAPS.smoke_big; delete WORLD_MAPS.smoke_small; delete gameUI.worldView._players.smoke_big; delete gameUI.worldView._players.smoke_small; });
             await context.close();
         }

@@ -2,7 +2,7 @@
 'use strict';
 // ============================================================
 // Gera os assets locais e originais do mundo visual (Fase 7.1), sem dependências:
-//   sprites/world/tileset.png   16x4 tiles de 16 px (layout em WORLD_TILESET, js/world/world-data.js)
+//   sprites/world/tileset.png   16x6 tiles de 16 px (layout em WORLD_TILESET, js/world/world-data.js)
 //   sprites/world/hero.png      4 quadros 16x24 (baixo, cima, esquerda, direita): placeholder do treinador
 // Determinístico: rodar de novo produz exatamente os mesmos bytes. Para trocar a arte, basta substituir os PNGs
 // mantendo o layout (ou ajustar WORLD_TILESET / WORLD_CHARACTER).
@@ -78,7 +78,7 @@ const P = {
 };
 
 // ---------- tiles ----------
-const tileset = new Surface(COLS * T, 4 * T);
+const tileset = new Surface(COLS * T, 6 * T);
 const tileAt = (index) => ({ sx: (index % COLS) * T, sy: Math.floor(index / COLS) * T });
 
 function newTile() { return new Surface(T, T); }
@@ -223,6 +223,58 @@ for (let mask = 0; mask < 16; mask++) {
     }
     for (let i = 0; i < 4; i++) { const x = 3 + Math.floor(q() * 8), y = 4 + Math.floor(q() * 9); if (edgeDistance(mask, x, y) > 4) { w.set(x, y, P.watL); w.set(x + 1, y, P.watL); w.set(x + 2, y, P.watL); } }
     putTile(32 + mask, w);
+}
+
+
+// ---------- biomas dos mapas de caça (F7.4): linhas 5 e 6 (índices 64-95) ----------
+const BI = {
+    cave: hex('#6b6470'), caveD: hex('#4f4a57'), caveL: hex('#8a8392'), crystal: hex('#5fc8e8'), crystalL: hex('#c4f1ff'), crystalD: hex('#2f7fb0'),
+    ash: hex('#4a4044'), ashD: hex('#352d31'), ashL: hex('#645459'), basalt: hex('#2a2428'), basaltL: hex('#51454a'), ember: hex('#f08a24'),
+    lava: hex('#e8531c'), lavaL: hex('#ffb347'), lavaD: hex('#a8280f'), crust: hex('#3a2a2c'),
+    snow: hex('#eef6fb'), snowD: hex('#cfe2ee'), snowS: hex('#b4cfe0'), pine: hex('#2c6b53'), pineL: hex('#4f9a77'), ice: hex('#9fd8f2'), iceL: hex('#e6fbff'), iceD: hex('#5aa6cf'),
+    gloom: hex('#4b3f63'), gloomD: hex('#382e4d'), gloomL: hex('#65577f'), dead: hex('#3b3040'), deadL: hex('#5b4b63'), stoneG: hex('#aaa6b8'), stoneGD: hex('#7f7a92'),
+    sandL: hex('#ecdca6'), sandD: hex('#cdb97f'),
+};
+function groundTile(index, seed, base, a, b, specks = 22) {
+    const s = newTile(), r = rng(seed);
+    s.rect(0, 0, T - 1, T - 1, base);
+    for (let i = 0; i < specks; i++) s.set(Math.floor(r() * T), Math.floor(r() * T), r() < 0.55 ? a : b);
+    putTile(index, s);
+    return s;
+}
+function objectOnTile(index, seed, groundIndex, draw) {
+    const base = sliceTile(groundIndex), layer = newTile();
+    draw(layer, rng(seed)); layer.outline(P.ink);
+    base.blit(layer, 0, 0); putTile(index, base);
+}
+// 64-65 chão de caverna, 66 pedregulho, 67 cristal
+groundTile(64, 6400, BI.cave, BI.caveD, BI.caveL); groundTile(65, 6410, BI.cave, BI.caveL, BI.caveD, 28);
+objectOnTile(66, 6600, 64, (l) => { l.ellipse(8, 9.5, 7, 5.6, BI.caveD); l.ellipse(6.5, 7.6, 4.4, 3, BI.caveL); l.ellipse(11, 11.5, 3.6, 2.4, BI.cave); l.set(9, 7, BI.caveL); });
+objectOnTile(67, 6700, 65, (l) => { for (const [x, h, c] of [[5, 9, BI.crystalD], [8, 12, BI.crystal], [11, 8, BI.crystalD]]) { for (let k = 0; k < h; k++) l.rect(x - (k < 2 ? 0 : 0), 14 - k, x + 1, 14 - k, k > h - 3 ? BI.crystalL : c); } l.set(8, 3, BI.crystalL); l.set(8, 4, BI.crystalL); l.rect(3, 14, 13, 15, BI.caveD); });
+// 68-69 cinza vulcânica, 70 basalto, 71-72 neve, 73 pinheiro nevado, 74 pedra de gelo
+groundTile(68, 6800, BI.ash, BI.ashD, BI.ashL); groundTile(69, 6810, BI.ash, BI.ashL, BI.ember, 26);
+objectOnTile(70, 7000, 68, (l) => { l.ellipse(8, 10, 6.4, 5, BI.basalt); l.ellipse(6.5, 8.2, 3.8, 2.4, BI.basaltL); l.set(10, 12, BI.ember); l.set(5, 11, BI.lavaD); });
+groundTile(71, 7100, BI.snow, BI.snowD, BI.snowS, 18); groundTile(72, 7110, BI.snow, BI.snowS, BI.snowD, 24);
+objectOnTile(73, 7300, 71, (l) => { l.rect(7, 12, 8, 15, P.trunkD); for (const [y, hw] of [[11, 5], [7, 4], [3, 3]]) for (let k = 0; k < 4; k++) l.rect(8 - hw + k * 0 - (3 - k) * 0, y + k, 8 + hw - 1, y + k, k < 2 ? BI.pine : BI.pineL); l.rect(5, 6, 10, 6, BI.snow); l.rect(6, 10, 11, 10, BI.snow); l.rect(4, 14, 11, 14, BI.snowD); });
+objectOnTile(74, 7400, 72, (l) => { l.ellipse(8, 10, 6, 5, BI.iceD); l.ellipse(7, 8, 4, 3, BI.ice); l.ellipse(6, 7, 1.6, 1.2, BI.iceL); l.set(11, 12, BI.iceL); });
+// 75-76 solo sombrio, 77 árvore morta, 78 lápide, 79 areia
+groundTile(75, 7500, BI.gloom, BI.gloomD, BI.gloomL); groundTile(76, 7510, BI.gloom, BI.gloomL, BI.gloomD, 26);
+objectOnTile(77, 7700, 75, (l) => { l.rect(7, 6, 8, 15, BI.dead); l.rect(8, 6, 8, 15, P.trunkD); for (const [x0, y0, x1, y1] of [[3, 4, 7, 8], [9, 3, 13, 7], [4, 10, 7, 11], [9, 9, 12, 10]]) { for (let k = 0; k <= Math.max(x1 - x0, 1); k++) l.set(Math.min(x0 + k, x1), y0 + Math.round(((y1 - y0) * k) / Math.max(x1 - x0, 1)), BI.deadL); } l.set(7, 5, BI.deadL); });
+objectOnTile(78, 7800, 76, (l) => { l.rect(4, 5, 11, 14, BI.stoneG); l.rect(5, 3, 10, 5, BI.stoneG); l.rect(4, 12, 11, 14, BI.stoneGD); l.rect(10, 5, 11, 14, BI.stoneGD); l.rect(7, 6, 8, 10, BI.stoneGD); l.rect(6, 8, 9, 9, BI.stoneGD); });
+groundTile(79, 7900, BI.sandL, BI.sandD, P.dirtL, 20);
+// 80-95 lava (autotile, mesma máscara da água; borda de cinza escura em vez de grama)
+for (let mask = 0; mask < 16; mask++) {
+    const l = newTile(), q = rng(8000 + mask);
+    for (let y = 0; y < T; y++) for (let x = 0; x < T; x++) {
+        const d = edgeDistance(mask, x, y);
+        if (d <= 0) { l.set(x, y, BI.ash); continue; }
+        if (d === 1) { l.set(x, y, BI.basalt); continue; }
+        if (d === 2) { l.set(x, y, BI.crust); continue; }
+        if (d === 3) { l.set(x, y, BI.lavaD); continue; }
+        l.set(x, y, (y + (x >> 2)) % 6 < 3 ? BI.lava : BI.lavaD);
+    }
+    for (let i = 0; i < 5; i++) { const x = 3 + Math.floor(q() * 9), y = 4 + Math.floor(q() * 9); if (edgeDistance(mask, x, y) > 4) { l.set(x, y, BI.lavaL); l.set(x + 1, y, BI.lavaL); } }
+    putTile(80 + mask, l);
 }
 
 // ---------- personagem (placeholder original) ----------

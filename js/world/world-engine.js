@@ -10,7 +10,7 @@ function worldCharAt(map, x, y) {
     return map.rows[y][x];
 }
 
-// Tipo do terreno ('ground' | 'path' | 'water' | 'object'), ou null fora do mapa / letra desconhecida
+// Tipo do terreno ('ground' | 'path' | 'water' | 'lava' | 'object'), ou null fora do mapa / letra desconhecida
 function worldKindAt(map, x, y) {
     const ch = worldCharAt(map, x, y);
     const def = ch === null ? null : WORLD_LEGEND[ch];
@@ -30,10 +30,11 @@ function worldResolveTile(map, x, y, tileset = WORLD_TILESET) {
     const ch = worldCharAt(map, x, y);
     const def = ch === null ? null : WORLD_LEGEND[ch];
     if (!def) return tileset.tiles.grass[0];
-    if (def.kind === 'path' || def.kind === 'water') {
+    const autoBase = def.kind === 'path' ? tileset.tiles.pathBase : def.kind === 'water' ? tileset.tiles.waterBase : def.kind === 'lava' ? tileset.tiles.lavaBase : null;
+    if (autoBase !== null) {
         const same = (nx, ny) => { const k = worldKindAt(map, nx, ny); return k === null || k === def.kind; };
         const mask = (same(x, y - 1) ? 1 : 0) | (same(x + 1, y) ? 2 : 0) | (same(x, y + 1) ? 4 : 0) | (same(x - 1, y) ? 8 : 0);
-        return (def.kind === 'path' ? tileset.tiles.pathBase : tileset.tiles.waterBase) + mask;
+        return autoBase + mask;
     }
     const t = tileset.tiles[def.tile];
     return Array.isArray(t) ? t[worldHash(x, y) % t.length] : t;

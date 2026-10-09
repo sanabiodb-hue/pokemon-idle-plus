@@ -8,15 +8,17 @@ const { loadData } = require('../../tools/load-context');
 
 const ROOT = path.resolve(__dirname, '..', '..');
 const read = (f) => fs.readFileSync(path.join(ROOT, f), 'utf8');
-const WORLD_FILES = ['js/world/world-data.js', 'js/world/world-engine.js', 'js/world/world-controls.js', 'js/world/world-view.js'];
+const WORLD_FILES = ['js/world/world-data.js', 'js/world/world-biomes.js', 'js/world/world-gen.js', 'js/world/world-engine.js', 'js/world/world-controls.js', 'js/world/world-view.js'];
 const EXPORTS = `WORLD_TILE_SIZE, WORLD_TILESET, WORLD_CHARACTER, WORLD_LEGEND, WORLD_MAPS, WORLD_ROUTE_MAPS, WORLD_START_MAP_ID, WORLD_MOVEMENT,
     getWorldMap, worldMapIdForRoute, worldCharAt, worldKindAt, worldHash, worldResolveTile, worldViewMetrics, worldCamera, worldCameraFocus, worldCellCenter,
     worldToScreen, worldFromScreen, worldVisibleCells, worldCanWalkManually, worldCellBlocked, worldCreateState, worldMoveBy, worldStep,
-    worldAdvanceToward, worldPathLength, worldTravelTimeMs, worldInteractionNear, DirectionStack, WorldControls, WorldView`;
+    worldAdvanceToward, worldPathLength, WORLD_GEN_VERSION, WORLD_GEN_LIMITS, WORLD_BIOME_FALLBACK, WORLD_TYPE_BIOME, WORLD_TYPE_PRIORITY, WORLD_BIOMES,
+    worldHuntSeed, worldRng, worldBiomeForTypes, worldGenerateHuntMap, worldHuntMap, worldHuntMapById, worldHuntStats, worldHuntCacheClear, worldPathLength, worldTravelTimeMs, worldInteractionNear, DirectionStack, WorldControls, WorldView`;
 
 // Carrega os scripts clássicos do mundo num contexto vm (como o navegador faz com <script>)
 function loadWorld(globals = {}) {
-    const ctx = vm.createContext({ REGIONS: loadData().REGIONS, ...globals });
+    const data = loadData();
+    const ctx = vm.createContext({ REGIONS: data.REGIONS, POKEMON_DATA: data.POKEMON_DATA, ...globals });
     return vm.runInContext(WORLD_FILES.map(read).join('\n;\n') + `\n;({ ${EXPORTS} })`, ctx);
 }
 

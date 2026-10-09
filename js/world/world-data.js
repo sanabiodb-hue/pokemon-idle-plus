@@ -23,7 +23,7 @@ const WORLD_TILESET = {
     src: 'sprites/world/tileset.png',
     tileSize: WORLD_TILE_SIZE,
     cols: 16,
-    rows: 4,
+    rows: 6,
     tiles: {
         grass: [0, 1, 2, 3],      // variação escolhida por hash da posição
         tuft: 4, flowerRed: 5, flowerYellow: 6, tallGrass: 7, bush: 8, rock: 9,
@@ -34,6 +34,10 @@ const WORLD_TILESET = {
         roofRedL: 48, roofRedCross: 49, roofRedR: 50, wallWindowL: 51, centerDoor: 52, wallWindowR: 53,
         roofBlueL: 54, roofBlueBox: 55, roofBlueR: 56, depotWallL: 57, depotGate: 58, depotWallR: 59,
         plaza: 60, bench: 61, lamp: 62, townSign: 63,
+        // biomas dos mapas de caça (F7.4, linhas 5 e 6)
+        caveFloor: [64, 65], caveBoulder: 66, crystal: 67, ashFloor: [68, 69], basalt: 70, snowFloor: [71, 72], pine: 73, iceRock: 74,
+        gloomFloor: [75, 76], deadTree: 77, tombstone: 78, sand: 79,
+        lavaBase: 80,             // 16 autotiles de lava (mesma máscara da água)
     },
 };
 
@@ -46,7 +50,7 @@ const WORLD_CHARACTER = {
     frames: { down: { col: 0, row: 0 }, up: { col: 1, row: 0 }, left: { col: 2, row: 0 }, right: { col: 3, row: 0 } },
 };
 
-// Legenda do terreno: kind 'path' e 'water' se conectam entre si (autotile); 'object' e 'ground' são tiles fixos.
+// Legenda do terreno: kind 'path', 'water' e 'lava' se conectam entre si (autotile); 'object' e 'ground' são tiles fixos.
 // `walkable` é a ÚNICA fonte de verdade da colisão (F7.3): o motor lê só ele; o `kind` é só aparência. Letra fora da legenda = bloqueada.
 const WORLD_LEGEND = {
     '.': { kind: 'ground', walkable: true, tile: 'grass' },
@@ -68,6 +72,12 @@ const WORLD_LEGEND = {
     'D': { kind: 'object', walkable: false, tile: 'wallWindowL' }, 'G': { kind: 'object', walkable: false, tile: 'centerDoor' }, 'F': { kind: 'object', walkable: false, tile: 'wallWindowR' },
     'H': { kind: 'object', walkable: false, tile: 'roofBlueL' }, 'I': { kind: 'object', walkable: false, tile: 'roofBlueBox' }, 'J': { kind: 'object', walkable: false, tile: 'roofBlueR' },
     'K': { kind: 'object', walkable: false, tile: 'depotWallL' }, 'N': { kind: 'object', walkable: false, tile: 'depotGate' }, 'M': { kind: 'object', walkable: false, tile: 'depotWallR' },
+    // biomas de caça (F7.4)
+    'c': { kind: 'ground', walkable: true, tile: 'caveFloor' }, 'R': { kind: 'object', walkable: false, tile: 'caveBoulder' }, 'X': { kind: 'object', walkable: false, tile: 'crystal' },
+    'a': { kind: 'ground', walkable: true, tile: 'ashFloor' }, 'O': { kind: 'object', walkable: false, tile: 'basalt' }, 'L': { kind: 'lava', walkable: false },
+    'n': { kind: 'ground', walkable: true, tile: 'snowFloor' }, 'P': { kind: 'object', walkable: false, tile: 'pine' }, 'i': { kind: 'object', walkable: false, tile: 'iceRock' },
+    'g': { kind: 'ground', walkable: true, tile: 'gloomFloor' }, 'd': { kind: 'object', walkable: false, tile: 'deadTree' }, 't': { kind: 'object', walkable: false, tile: 'tombstone' },
+    'e': { kind: 'ground', walkable: true, tile: 'sand' },
     'h': { kind: 'object', walkable: false, tile: 'bench' }, 'l': { kind: 'object', walkable: false, tile: 'lamp' }, 'z': { kind: 'object', walkable: false, tile: 'townSign' },
 };
 
@@ -161,7 +171,8 @@ const _worldHas = (obj, key) => typeof key === 'string' && Object.prototype.hasO
 
 // Mapa pelo id do MAPA (ou null)
 function getWorldMap(mapId) {
-    return _worldHas(WORLD_MAPS, mapId) ? WORLD_MAPS[mapId] : null;
+    if (_worldHas(WORLD_MAPS, mapId)) return WORLD_MAPS[mapId];
+    return typeof worldHuntMapById === 'function' ? worldHuntMapById(mapId) : null;   // mapas de caça `hunt_<espécie>`: gerados sob demanda (world-gen.js)
 }
 
 // Id do mapa visual de uma rota de progressão (ou null se a rota ainda não tem mapa)
