@@ -46,19 +46,26 @@ function worldViewMetrics({ cssWidth, cssHeight, dpr = 1, tileSize = WORLD_TILE_
     const bufferWidth = Math.max(1, Math.round(cssWidth * ratio));
     const bufferHeight = Math.max(1, Math.round(cssHeight * ratio));
     let zoom = Math.max(1, Math.round((targetTileCss * ratio) / tileSize));
-    // mapa (em px da arte) menor que a vista: sobe o zoom inteiro até cobrir o painel, sem barras vazias nas laterais
-    if (mapWidth > 0 && mapHeight > 0) while (zoom < maxZoom && (mapWidth * zoom < bufferWidth || mapHeight * zoom < bufferHeight)) zoom++;
+    // mapa (em px da arte) que já cabe INTEIRO na vista com o zoom base nos dois eixos: usa o MAIOR zoom inteiro em que ele ainda
+    // cabe inteiro (a câmera o centraliza, com barras iguais). Se algum eixo é maior que a vista, mantém o zoom base e a
+    // câmera acompanha o personagem (eixo que cabe fica centralizado; o outro, limitado às bordas)
+    if (mapWidth > 0 && mapHeight > 0 && mapWidth * zoom <= bufferWidth && mapHeight * zoom <= bufferHeight) {
+        while (zoom < maxZoom && mapWidth * (zoom + 1) <= bufferWidth && mapHeight * (zoom + 1) <= bufferHeight) zoom++;
+    }
     return { cssWidth, cssHeight, dpr: ratio, bufferWidth, bufferHeight, tileSize, zoom, viewWidth: bufferWidth / zoom, viewHeight: bufferHeight / zoom };
 }
 
 // Câmera (canto superior esquerdo, em px do mundo) centrada em `focus` (px do mundo), limitada às bordas do mapa;
-// se o mapa for menor que a vista, fica centrado. Arredondada ao pixel do dispositivo (sem frestas entre tiles).
+// em cada eixo em que o mapa for menor que a vista, fica centrado (mapa inteiro visível). Arredondada ao pixel do dispositivo (sem frestas entre tiles).
 function worldCamera(map, metrics, focus) {
     const mapW = map.width * metrics.tileSize, mapH = map.height * metrics.tileSize;
     const axis = (focusPx, view, size) => (size <= view ? (size - view) / 2 : Math.min(Math.max(focusPx - view / 2, 0), size - view));
     const x = axis(focus.x, metrics.viewWidth, mapW), y = axis(focus.y, metrics.viewHeight, mapH);
     return { x: Math.round(x * metrics.zoom) / metrics.zoom, y: Math.round(y * metrics.zoom) / metrics.zoom };
 }
+
+// Ponto que a câmera segue: os pés do personagem um pouco acima (centro do corpo). Única definição; só LÊ o estado.
+function worldCameraFocus(state) { return { x: state.x, y: state.y - 6 }; }
 
 // Centro de uma célula em px do mundo
 function worldCellCenter(map, cellX, cellY, tileSize = WORLD_TILE_SIZE) {
@@ -98,10 +105,11 @@ const WORLD_EPS = 1e-4;
 // Só mapas de cidade aceitam caminhada manual; rotas e áreas de caça andam sozinhas
 function worldCanWalkManually(map) { return !!map && map.type === 'city'; }
 
-// Tile que bloqueia: objeto, água e tudo fora do mapa
+// Tile que bloqueia: tudo que a legenda não declara `walkable: true` (objeto, água, letra desconhecida) e tudo fora do mapa
 function worldCellBlocked(map, cellX, cellY) {
-    const kind = worldKindAt(map, cellX, cellY);
-    return kind === null || kind === 'object' || kind === 'water';
+    const ch = worldCharAt(map, cellX, cellY);
+    const def = ch === null ? null : WORLD_LEGEND[ch];
+    return !def || def.walkable !== true;
 }
 
 // Estado inicial: pés no centro da célula de spawn, um pouco abaixo (igual ao desenho da F7.1)

@@ -46,28 +46,29 @@ const WORLD_CHARACTER = {
     frames: { down: { col: 0, row: 0 }, up: { col: 1, row: 0 }, left: { col: 2, row: 0 }, right: { col: 3, row: 0 } },
 };
 
-// Legenda do terreno: kind 'path' e 'water' se conectam entre si (autotile); 'object' e 'ground' são tiles fixos
+// Legenda do terreno: kind 'path' e 'water' se conectam entre si (autotile); 'object' e 'ground' são tiles fixos.
+// `walkable` é a ÚNICA fonte de verdade da colisão (F7.3): o motor lê só ele; o `kind` é só aparência. Letra fora da legenda = bloqueada.
 const WORLD_LEGEND = {
-    '.': { kind: 'ground', tile: 'grass' },
-    ',': { kind: 'ground', tile: 'tuft' },
-    'f': { kind: 'ground', tile: 'flowerRed' },
-    'y': { kind: 'ground', tile: 'flowerYellow' },
-    'w': { kind: 'ground', tile: 'tallGrass' },
-    'p': { kind: 'path' },
-    '~': { kind: 'water' },
-    'T': { kind: 'object', tile: 'tree' },
-    'b': { kind: 'object', tile: 'bush' },
-    'r': { kind: 'object', tile: 'rock' },
-    'o': { kind: 'object', tile: 'stump' },
-    's': { kind: 'object', tile: 'sign' },
-    '=': { kind: 'object', tile: 'fence' },
+    '.': { kind: 'ground', walkable: true, tile: 'grass' },
+    ',': { kind: 'ground', walkable: true, tile: 'tuft' },
+    'f': { kind: 'ground', walkable: true, tile: 'flowerRed' },
+    'y': { kind: 'ground', walkable: true, tile: 'flowerYellow' },
+    'w': { kind: 'ground', walkable: true, tile: 'tallGrass' },
+    'p': { kind: 'path', walkable: true },
+    '~': { kind: 'water', walkable: false },
+    'T': { kind: 'object', walkable: false, tile: 'tree' },
+    'b': { kind: 'object', walkable: false, tile: 'bush' },
+    'r': { kind: 'object', walkable: false, tile: 'rock' },
+    'o': { kind: 'object', walkable: false, tile: 'stump' },
+    's': { kind: 'object', walkable: false, tile: 'sign' },
+    '=': { kind: 'object', walkable: false, tile: 'fence' },
     // cidade
-    'q': { kind: 'ground', tile: 'plaza' },
-    'A': { kind: 'object', tile: 'roofRedL' }, 'B': { kind: 'object', tile: 'roofRedCross' }, 'C': { kind: 'object', tile: 'roofRedR' },
-    'D': { kind: 'object', tile: 'wallWindowL' }, 'G': { kind: 'object', tile: 'centerDoor' }, 'F': { kind: 'object', tile: 'wallWindowR' },
-    'H': { kind: 'object', tile: 'roofBlueL' }, 'I': { kind: 'object', tile: 'roofBlueBox' }, 'J': { kind: 'object', tile: 'roofBlueR' },
-    'K': { kind: 'object', tile: 'depotWallL' }, 'N': { kind: 'object', tile: 'depotGate' }, 'M': { kind: 'object', tile: 'depotWallR' },
-    'h': { kind: 'object', tile: 'bench' }, 'l': { kind: 'object', tile: 'lamp' }, 'z': { kind: 'object', tile: 'townSign' },
+    'q': { kind: 'ground', walkable: true, tile: 'plaza' },
+    'A': { kind: 'object', walkable: false, tile: 'roofRedL' }, 'B': { kind: 'object', walkable: false, tile: 'roofRedCross' }, 'C': { kind: 'object', walkable: false, tile: 'roofRedR' },
+    'D': { kind: 'object', walkable: false, tile: 'wallWindowL' }, 'G': { kind: 'object', walkable: false, tile: 'centerDoor' }, 'F': { kind: 'object', walkable: false, tile: 'wallWindowR' },
+    'H': { kind: 'object', walkable: false, tile: 'roofBlueL' }, 'I': { kind: 'object', walkable: false, tile: 'roofBlueBox' }, 'J': { kind: 'object', walkable: false, tile: 'roofBlueR' },
+    'K': { kind: 'object', walkable: false, tile: 'depotWallL' }, 'N': { kind: 'object', walkable: false, tile: 'depotGate' }, 'M': { kind: 'object', walkable: false, tile: 'depotWallR' },
+    'h': { kind: 'object', walkable: false, tile: 'bench' }, 'l': { kind: 'object', walkable: false, tile: 'lamp' }, 'z': { kind: 'object', walkable: false, tile: 'townSign' },
 };
 
 WORLD_MAPS = {

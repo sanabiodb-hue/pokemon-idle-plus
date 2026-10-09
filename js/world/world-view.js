@@ -20,6 +20,7 @@ class WorldView {
         this.areaId = WORLD_START_MAP_ID;  // área exibida (só visual)
         this.drawCount = 0;                // diagnóstico/testes: quantos desenhos reais ocorreram
         this.lastMetrics = null;
+        this.lastCamera = null;
         this._players = {};                // mapId → estado do personagem (posição preservada ao trocar de área/aba)
         this._unsubs = [];
         this._observer = null;
@@ -214,7 +215,7 @@ class WorldView {
 
         const player = this._player(map);
         const metrics = worldViewMetrics({ cssWidth: rect.width, cssHeight: rect.height, dpr: window.devicePixelRatio, mapWidth: map.width * WORLD_TILE_SIZE, mapHeight: map.height * WORLD_TILE_SIZE });
-        const camera = worldCamera(map, metrics, { x: player.x, y: player.y - 6 });
+        const camera = worldCamera(map, metrics, worldCameraFocus(player));
         this._syncInteraction(map, player);
         const key = [map.id, metrics.bufferWidth, metrics.bufferHeight, metrics.zoom, camera.x, camera.y, player.x, player.y, player.dir, player.moving ? Math.floor(player.distance / 6) % 2 : 'idle'].join('|');
         if (key === this._lastKey) return;                    // nada mudou: não redesenha
@@ -238,6 +239,7 @@ class WorldView {
         }
         this._drawCharacter(ctx, images.hero, player, camera, metrics);
         this.lastMetrics = metrics;
+        this.lastCamera = camera;
         this.drawCount++;
         this._hideMessage();
         this.canvas.setAttribute('aria-label', `Cenário: ${this._mapTitle(map)}${map.label ? ' (' + map.label + ')' : ''}. Um treinador está no cenário.`);

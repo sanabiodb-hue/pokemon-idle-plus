@@ -104,7 +104,7 @@ test('F7.2 motor: autotile liga caminho e água, trata fora do mapa como continu
     assert.ok(seen.size > 1, 'a grama varia entre células');
 });
 
-test('F7.2 motor: métricas usam zoom inteiro, buffer = css x dpr, dpr limitado e mapa pequeno cobre o painel', () => {
+test('F7.2 motor: métricas usam zoom inteiro, buffer = css x dpr, dpr limitado e mapa pequeno aparece inteiro (F7.3)', () => {
     for (const [dpr, zoom] of [[1, 2], [1.5, 3], [2, 4], [3, 6]]) {
         const m = W.worldViewMetrics({ cssWidth: 374, cssHeight: 374, dpr });
         assert.equal(m.zoom, zoom, `dpr ${dpr}`);
@@ -116,8 +116,10 @@ test('F7.2 motor: métricas usam zoom inteiro, buffer = css x dpr, dpr limitado 
     assert.equal(W.worldViewMetrics({ cssWidth: 100, cssHeight: 100, dpr: NaN }).dpr, 1);
     assert.equal(W.worldViewMetrics({ cssWidth: 0, cssHeight: 0, dpr: 1 }).bufferWidth, 1, 'nunca buffer vazio');
     const desktop = W.worldViewMetrics({ cssWidth: 1216, cssHeight: 496, dpr: 1, mapWidth: 512, mapHeight: 384 });
-    assert.equal(desktop.zoom, 3, 'sobe de 2 para 3: o mapa de 512 px cobre 1216 px');
-    assert.ok(512 * desktop.zoom >= desktop.bufferWidth && 384 * desktop.zoom >= desktop.bufferHeight);
+    assert.equal(desktop.zoom, 2, 'F7.3: o mapa é maior que a vista em y com zoom 2 → mantém o zoom base e a câmera acompanha');
+    const tiny = W.worldViewMetrics({ cssWidth: 1216, cssHeight: 496, dpr: 1, mapWidth: 160, mapHeight: 128 });
+    assert.equal(tiny.zoom, 3, 'mapa que cabe inteiro usa o maior zoom inteiro em que ainda cabe');
+    assert.ok(160 * tiny.zoom <= tiny.bufferWidth && 128 * tiny.zoom <= tiny.bufferHeight);
     assert.equal(W.worldViewMetrics({ cssWidth: 374, cssHeight: 374, dpr: 3, mapWidth: 512, mapHeight: 384 }).zoom, 6, 'celular: sem ajuste');
 });
 

@@ -876,6 +876,65 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
             await sleep(300);
             const after = await page.evaluate(() => ({ route: game.gameState.currentRoute, caption: document.getElementById('world-caption').textContent, area: gameUI.worldView.areaId }));
             check(`Mundo ${vp.name}: a lista de rotas segue mudando a rota do jogo (a cena continua na cidade)`, after.route !== routeBefore && after.area === 'starter_town' && /Cidade Inicial/.test(after.caption), JSON.stringify(after));
+
+            // F7.3: câmera de acompanhamento no navegador real (viewport emulada). Mapas sintéticos só em memória, criados e removidos aqui
+            // (sem assets nem API de produção): usa o mesmo mecanismo dos testes acima (gameUI.worldView + WORLD_MAPS global).
+            await page.evaluate(() => {
+                const border = (w, h) => Array.from({ length: h }, (_, y) => (y === 0 || y === h - 1 ? 'T'.repeat(w) : 'T' + '.'.repeat(w - 2) + 'T'));
+                WORLD_MAPS.smoke_big = { id: 'smoke_big', type: 'city', name: 'Mapa grande de teste', width: 120, height: 90, spawn: { x: 60, y: 45, dir: 'down' }, rows: border(120, 90) };
+                WORLD_MAPS.smoke_small = { id: 'smoke_small', type: 'city', name: 'Mapa pequeno de teste', width: 6, height: 5, spawn: { x: 3, y: 2, dir: 'down' }, rows: border(6, 5) };
+            });
+            const camProbe = () => page.evaluate(() => {
+                const wv = gameUI.worldView, map = wv.currentScene().map, p = wv._player(map), m = wv.lastMetrics, c = wv.lastCamera;
+                const feet = worldToScreen(c, m, p.x, p.y - 6);
+                return { area: map.id, px: p.x, py: p.y, cx: c.x, cy: c.y, zoom: m.zoom, bw: m.bufferWidth, bh: m.bufferHeight, vw: m.viewWidth, vh: m.viewHeight, fx: feet.x, fy: feet.y, mw: map.width * 16, mh: map.height * 16, draws: wv.drawCount };
+            });
+            const walk = async (dir, ms) => {
+                const key = { left: 'ArrowLeft', right: 'ArrowRight', up: 'ArrowUp', down: 'ArrowDown' }[dir];
+                if (!vp.isMobile) await page.keyboard.down(key);
+                else await page.evaluate((d) => document.querySelector(`[data-dir="${d}"]`).dispatchEvent(new PointerEvent('pointerdown', { pointerId: 11, bubbles: true, cancelable: true })), dir);
+                await sleep(ms);
+                if (!vp.isMobile) await page.keyboard.up(key);
+                else await page.evaluate((d) => document.querySelector(`[data-dir="${d}"]`).dispatchEvent(new PointerEvent('pointerup', { pointerId: 11, bubbles: true, cancelable: true })), dir);
+                await sleep(150);
+            };
+            const place = async (id, x, y) => {
+                await page.evaluate(([id, x, y]) => { const wv = gameUI.worldView; wv.setArea(id); const m = wv.currentScene().map; wv._players[m.id] = { ...wv._player(m), x, y, moving: false }; wv.requestRedraw(true); }, [id, x, y]);
+                await sleep(250);
+            };
+            await page.setViewportSize({ width: vp.width, height: vp.height });
+            await sleep(250);
+            await place('smoke_big', 60 * 16 + 8, 45 * 16);
+            const c0 = await camProbe();
+            check(`Mundo ${vp.name} [câmera]: em um mapa muito maior que a vista o personagem começa no centro`, c0.area === 'smoke_big' && c0.mw > c0.vw * 2 && c0.mh > c0.vh * 2 && Math.abs(c0.fx - c0.bw / 2) <= c0.zoom && Math.abs(c0.fy - c0.bh / 2) <= c0.zoom, JSON.stringify(c0));
+            await walk('right', 700);
+            const c1 = await camProbe();
+            check(`Mundo ${vp.name} [câmera]: ao andar o cenário acompanha (câmera anda o mesmo que o personagem) e ele continua centralizado`, c1.px - c0.px > 20 && Math.abs((c1.cx - c0.cx) - (c1.px - c0.px)) <= 1 / c1.zoom + 0.01 && Math.abs(c1.fx - c1.bw / 2) <= c1.zoom, JSON.stringify({ c0, c1 }));
+            await place('smoke_big', 4 * 16, 45 * 16);
+            await walk('left', 1200);
+            const c2 = await camProbe();
+            check(`Mundo ${vp.name} [câmera]: na borda esquerda a câmera para em 0 e o personagem sai do centro (colidindo com as árvores)`, c2.cx === 0 && c2.fx < c2.bw / 2 - 8 * c2.zoom && c2.px >= 16 + 5 - 0.01 && c2.px < 16 + 6, JSON.stringify(c2));
+            await place('smoke_big', 116 * 16, 45 * 16);
+            await walk('right', 1200);
+            const c3 = await camProbe();
+            check(`Mundo ${vp.name} [câmera]: na borda direita a câmera para sem mostrar fora do mapa e o personagem passa do centro`, Math.abs(c3.cx + c3.vw - c3.mw) <= 1 / c3.zoom + 0.01 && c3.fx > c3.bw / 2 + 8 * c3.zoom && c3.px <= 119 * 16 - 5 + 0.01, JSON.stringify(c3));
+            await place('smoke_big', 60 * 16, 3 * 16);
+            await walk('up', 1200);
+            const c4 = await camProbe();
+            await place('smoke_big', 60 * 16, 87 * 16);
+            await walk('down', 1200);
+            const c5 = await camProbe();
+            check(`Mundo ${vp.name} [câmera]: topo e base do mapa também limitam a câmera e tiram o personagem do centro`, c4.cy === 0 && c4.fy < c4.bh / 2 - 8 * c4.zoom && Math.abs(c5.cy + c5.vh - c5.mh) <= 1 / c5.zoom + 0.01 && c5.fy > c5.bh / 2 + 8 * c5.zoom, JSON.stringify({ c4, c5 }));
+
+            await place('smoke_small', 3 * 16, 2 * 16 + 13);
+            const s0 = await camProbe();
+            await walk('right', 400);
+            const s1 = await camProbe();
+            const small = await page.evaluate(() => { const wv = gameUI.worldView, m = wv.lastMetrics, c = wv.lastCamera, w = 96, h = 80; const tl = worldToScreen(c, m, 0, 0), br = worldToScreen(c, m, w, h); return { tl, br, bw: m.bufferWidth, bh: m.bufferHeight, zoom: m.zoom }; });
+            check(`Mundo ${vp.name} [câmera]: mapa menor que a tela aparece inteiro e centralizado (zoom inteiro) e a câmera não segue o personagem`,
+                small.tl.x >= 0 && small.tl.y >= 0 && small.br.x <= small.bw && small.br.y <= small.bh && Math.abs(small.tl.x - (small.bw - small.br.x)) <= 1 && Math.abs(small.tl.y - (small.bh - small.br.y)) <= 1 && Number.isInteger(small.zoom) && s1.px > s0.px + 10 && s1.cx === s0.cx && s1.cy === s0.cy, JSON.stringify({ small, s0, s1 }));
+
+            await page.evaluate(() => { gameUI.worldView.setArea('starter_town'); delete WORLD_MAPS.smoke_big; delete WORLD_MAPS.smoke_small; delete gameUI.worldView._players.smoke_big; delete gameUI.worldView._players.smoke_small; });
             await context.close();
         }
 
