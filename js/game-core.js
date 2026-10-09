@@ -44,6 +44,7 @@ class GameCore {
         this._offlineHunt = null;
         this._fastSim = null;
         this._towerMode = false;
+        this.encounterHook = null;                       // F7.6: encontro do mundo ativo (WorldEncounters); null = comportamento de sempre
         this._battleGuard = { refused: 0, last: null };   // F7.0: recusas de startBattle (diagnóstico/testes)
         // 个体名册：个体 / 队伍 / PC / 放生记录，并维护 caughtPokemon、team 这两个旧兼容视图
         this.roster = new PokemonRoster(() => this.gameState, { now: () => this.now() });
@@ -1880,7 +1881,8 @@ class GameCore {
         let wildPokemon = this.gameState.currentEnemy;
         let isExistingEnemy = !!wildPokemon; // 标记是否为已存在的敌人（非新生成）
         if (!wildPokemon) {
-            wildPokemon = this.generateWildPokemon(route);
+            // F7.6: um encontro do mundo que já chegou ao ponto fornece o inimigo (só depois da guarda e só sem inimigo salvo)
+            wildPokemon = (this.encounterHook ? this.encounterHook.takeArrivedEnemy() : null) || this.generateWildPokemon(route);
             if (!wildPokemon) return false;
             this.gameState.currentEnemy = wildPokemon;
             this.save();

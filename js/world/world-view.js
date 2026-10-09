@@ -11,6 +11,9 @@
 //     síncrona e atômica: valida e resolve o mapa primeiro e só então troca a área (o último pedido vence; falha = área anterior
 //     intacta + aviso na interface). O seletor "Ir para" e a busca de espécie são só visuais: nunca chamam changeRoute nem batalha.
 //     Mapas de caça vêm só de getWorldMap('hunt_<espécie>') (cache LRU da F7.4); aqui guarda-se apenas o id e a posição do personagem;
+//   - ENCONTROS (F7.6): a lógica é do WorldEncounters (ui.worldEncounters, sem DOM/Canvas). Aqui só se LÊ o estado dele: o Pokémon é
+//     desenhado no ponto do mundo (pela câmera), o botão "Procurar Pokémon aqui" é uma ação explícita e abrir/trocar de mapa nunca
+//     inicia caçada nem batalha. Sair do mapa avisa o controlador (cancela um encontro que ainda não começou);
 //   - serviços da cidade reaproveitam o que já existe: Centro Pokémon → GameCore.healAtCenter (cura o HP do combatente atual,
 //     mesma regra da poção, sem gastar poção; recusada com a Caça em andamento); Depot → abre a aba PC existente;
 //   - ciclo de vida igual ao HuntView: onShow()/onHide() chamados por GameUI.switchTab.
@@ -19,6 +22,8 @@ class WorldView {
     constructor(ui) {
         this.ui = ui;
         this.game = ui.game;
+        this.encounters = ui.worldEncounters || null;   // F7.6: lógica dos encontros (opcional; sem ela o mundo funciona como antes)
+        this._enc = null;                  // imagem do sprite do encontro atual: { id, img, ready, failed }
         this.root = document.getElementById('world-panel');
         this.active = false;
         this.areaId = WORLD_START_MAP_ID;  // área exibida (só visual)
@@ -54,6 +59,10 @@ class WorldView {
                 <div id="world-message" class="world-message" hidden></div>
             </div>
             <div id="world-caption" class="world-caption"></div>
+            <div id="world-encounter" class="world-encounter" hidden>
+                <button type="button" id="world-encounter-btn" class="world-encounter-btn">Procurar Pokémon aqui</button>
+                <span id="world-encounter-status" class="world-encounter-status" aria-live="polite"></span>
+            </div>
             <div id="world-hint" class="world-hint" aria-live="polite"></div>
             <div id="world-controls" class="world-controls">
                 <div class="world-dpad" role="group" aria-label="Direcional">
@@ -72,11 +81,15 @@ class WorldView {
         this.controlsEl = this.root.querySelector('#world-controls');
         this.interactBtn = this.root.querySelector('#world-interact');
         this.destination = this.root.querySelector('#world-destination');
+        this.encounterBox = this.root.querySelector('#world-encounter');
+        this.encounterBtn = this.root.querySelector('#world-encounter-btn');
+        this.encounterStatus = this.root.querySelector('#world-encounter-status');
         this.huntInput = this.root.querySelector('#world-hunt-input');
         this.huntResults = this.root.querySelector('#world-hunt-results');
         this.controls = new WorldControls({ root: this.root, onChange: () => this._onInput(), onInteract: () => this._interact() });
         this._fillDestinations();
         this.destination.addEventListener('change', () => { this.setArea(this.destination.value); this.destination.value = this.areaId; this.destination.blur(); });
+        this.encounterBtn.addEventListener('click', () => this._requestEncounter());
         this.huntInput.addEventListener('input', () => this._renderHuntResults());
         this.huntInput.addEventListener('keydown', (ev) => {
             if (ev.key !== 'Enter') return;
@@ -98,6 +111,7 @@ class WorldView {
         this._fillDestinations();                              // desbloqueios podem ter mudado desde a última vez
         this.controls.attach();
         this._unsubs.push(this.game.bus.on('route_changed', () => this.requestRedraw()));
+        if (this.encounters) this._unsubs.push(this.encounters.onChange(() => this.requestRedraw(true)));
         if (typeof ResizeObserver !== 'undefined') {
             this._observer = new ResizeObserver(() => this.requestRedraw());
             this._observer.observe(this.viewport);
@@ -242,6 +256,7 @@ WorldView._assets = null; WorldView.failed = true; });   // permite tentar de no
             else this._players[prev] = { ...this._players[prev], moving: false };
         }
         this.areaId = map.id;
+        if (this.encounters) this.encounters.onAreaChanged(map.id);   // sair do mapa cancela um encontro que ainda não começou
         this._lastTs = null;
         this._near = null;
         this._clearNotice();
@@ -265,6 +280,63 @@ WorldView._assets = null; WorldView.failed = true; });   // permite tentar de no
     openHuntMap(speciesId) {
         if (!Number.isInteger(speciesId) || speciesId < 1 || !_worldHas(POKEMON_DATA, String(speciesId))) return this._travelFail('invalid_species', 'Espécie inválida: nenhum mapa de caça foi aberto.');
         return this._travel(`hunt_${speciesId}`);
+    }
+
+    // Ação explícita do jogador: chamar um encontro neste mapa de caça (exige caçada em andamento; nunca é automático)
+    _requestEncounter() {
+        const { map } = this.currentScene();
+        if (!this.encounters || map.type !== 'hunt') return null;
+        const r = this.encounters.request(map.speciesId);
+        if (!r.ok) this._notify(r.message || 'Não foi possível procurar Pokémon agora.');
+        return r;
+    }
+
+    _encounterName(c) { const d = POKEMON_DATA[c.speciesId]; return d && d.name ? d.name : `#${c.speciesId}`; }
+
+    _syncEncounterUi(map) {
+        const enc = this.encounters, hunt = map.type === 'hunt' && !!enc;
+        this.encounterBox.hidden = !hunt;
+        if (!hunt) return;
+        const c = enc.current && enc.current.mapId === map.id ? enc.current : null;
+        const running = typeof this.game.isHuntRunning === 'function' && this.game.isHuntRunning();
+        this.encounterBtn.disabled = enc.isActive() || !running;
+        let text = running ? 'Chame um Pokémon: ele aparece em um ponto do mapa.' : 'Inicie a caçada na aba Caça para procurar Pokémon neste mapa.';
+        if (c) {
+            const name = this._encounterName(c);
+            if (c.state === 'approaching') text = `${name} apareceu a ~${Math.max(1, Math.round(c.etaMs / 1000))} s de distância.`;
+            else if (c.state === 'arrived') text = `${name} chegou ao ponto: aguardando a vez da batalha.`;
+            else if (c.state === 'battling') text = `Batalha contra ${name} em andamento.`;
+            else if (c.state === 'resolved') text = `Encontro com ${name} concluído (${c.outcome === 'defeat' ? 'derrota' : 'vitória'}).`;
+            else if (c.state === 'cancelled') text = `Encontro com ${name} cancelado.`;
+        }
+        this.encounterStatus.textContent = text;
+    }
+
+    // Sprite do Pokémon do encontro (um só em memória); redesenha quando carrega
+    _encounterSprite(speciesId) {
+        if (!this._enc || this._enc.id !== speciesId) {
+            const entry = { id: speciesId, img: null, ready: false, failed: false };
+            this._enc = entry;
+            if (typeof Image !== 'undefined' && typeof getPokemonSpriteUrl === 'function') {
+                const img = new Image();
+                img.onload = () => { entry.ready = true; if (this._enc === entry) this.requestRedraw(true); };
+                img.onerror = () => { entry.failed = true; if (this._enc === entry) this.requestRedraw(true); };
+                img.src = getPokemonSpriteUrl(speciesId);
+                entry.img = img;
+            } else entry.failed = true;
+        }
+        return this._enc;
+    }
+
+    // O Pokémon vive em coordenadas do MUNDO (centro do tile do ponto); a câmera só aplica a transformação
+    _drawEncounter(ctx, c, camera, metrics) {
+        if (!c || !['approaching', 'arrived', 'battling'].includes(c.state)) return;
+        const ts = metrics.tileSize, size = 24, z = metrics.zoom;
+        const wx = (c.point.x + 0.5) * ts, wy = (c.point.y + 0.5) * ts + 6;               // pés do sprite um pouco abaixo do centro do tile
+        const at = worldToScreen(camera, metrics, wx - size / 2, wy - size);
+        const spr = this._encounterSprite(c.speciesId);
+        if (spr.ready && spr.img) ctx.drawImage(spr.img, at.x, at.y, size * z, size * z);
+        else { ctx.fillStyle = '#e5484d'; ctx.fillRect(at.x + 8 * z, at.y + 8 * z, 8 * z, 8 * z); }   // enquanto carrega (ou se falhar): marcador simples
     }
 
     _setHint(text) { this._notify(text, { toast: false }); }
@@ -337,13 +409,16 @@ WorldView._assets = null; WorldView.failed = true; });   // permite tentar de no
         this.controlsEl.hidden = !city;
         this.destination.value = map.id;
         this._updateCaption(map);
+        this._syncEncounterUi(map);
         if (!images) { this._showMessage(WorldView.failed ? 'Não foi possível carregar o cenário.' : 'Carregando o cenário…'); return; }
 
         const player = this._player(map);
         const metrics = worldViewMetrics({ cssWidth: rect.width, cssHeight: rect.height, dpr: window.devicePixelRatio, mapWidth: map.width * WORLD_TILE_SIZE, mapHeight: map.height * WORLD_TILE_SIZE });
         const camera = worldCamera(map, metrics, worldCameraFocus(player));
         this._syncInteraction(map, player);
-        const key = [map.id, metrics.bufferWidth, metrics.bufferHeight, metrics.zoom, camera.x, camera.y, player.x, player.y, player.dir, player.moving ? Math.floor(player.distance / 6) % 2 : 'idle'].join('|');
+        const enc = this.encounters && this.encounters.current && this.encounters.current.mapId === map.id ? this.encounters.current : null;
+        const encKey = enc ? `${enc.id}:${enc.state}:${this._enc && this._enc.id === enc.speciesId ? (this._enc.ready ? 1 : 0) : 0}` : '-';
+        const key = [encKey, map.id, metrics.bufferWidth, metrics.bufferHeight, metrics.zoom, camera.x, camera.y, player.x, player.y, player.dir, player.moving ? Math.floor(player.distance / 6) % 2 : 'idle'].join('|');
         if (key === this._lastKey) return;                    // nada mudou: não redesenha
         this._lastKey = key;
 
@@ -363,6 +438,7 @@ WorldView._assets = null; WorldView.failed = true; });   // permite tentar de no
                 ctx.drawImage(images.tileset, (index % cols) * ts, Math.floor(index / cols) * ts, ts, ts, at.x, at.y, ts * z, ts * z);
             }
         }
+        this._drawEncounter(ctx, enc, camera, metrics);
         this._drawCharacter(ctx, images.hero, player, camera, metrics);
         this.lastMetrics = metrics;
         this.lastCamera = camera;

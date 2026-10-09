@@ -16,13 +16,15 @@ const WORLD_HUNT_CACHE_MAX = 8;
 const _worldHuntCache = new Map();
 const _worldHuntStats = { generated: 0 };
 
-function worldHuntSeed(speciesId) {
-    const str = `hunt:v${WORLD_GEN_VERSION}:${speciesId}`;
+// Semente de 32 bits estável de um texto (FNV-1a + mistura final). Base de toda semente do mundo (mapas, encontros).
+function worldStringSeed(str) {
     let h = 0x811c9dc5;
     for (let i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 0x01000193); }
     h ^= h >>> 16; h = Math.imul(h, 0x85ebca6b); h ^= h >>> 13; h = Math.imul(h, 0xc2b2ae35); h ^= h >>> 16;
     return h >>> 0;
 }
+
+function worldHuntSeed(speciesId) { return worldStringSeed(`hunt:v${WORLD_GEN_VERSION}:${speciesId}`); }
 
 function worldRng(seed) {
     let a = seed >>> 0;

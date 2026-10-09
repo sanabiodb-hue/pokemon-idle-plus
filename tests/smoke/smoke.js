@@ -968,6 +968,38 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
             check(`Mundo ${vp.name} [F7.5]: a busca mostra no máximo 10 espécies, não gera mapas ao digitar e abre o mapa de caça escolhido sem iniciar a caçada`,
                 search.many <= 11 && /Mostrando 10 de/.test(search.total) && search.generatedAfterTyping === search.cachedBefore && search.area === 'hunt_25' && search.routeSame && search.running === false && search.generated === search.cachedBefore + 1 && search.left === 0, JSON.stringify(search));
             check(`Mundo ${vp.name} [F7.5]: depois de abrir o mapa de caça o renderer segue ativo e sem controles de caminhada`, (await probe()).area === 'hunt_25' && (await probe()).controlsHidden === true, JSON.stringify(await probe()));
+            // F7.6: encontros no mapa de caça — botão explícito, chegada lógica (relógio manual), sprite carregado e limpeza ao sair do mapa
+            await page.evaluate(() => { gameUI.worldView.openHuntMap(25); });
+            await sleep(300);
+            const e0 = await page.evaluate(() => ({ hidden: document.getElementById('world-encounter').hidden, disabled: document.getElementById('world-encounter-btn').disabled, enc: gameUI.worldEncounters.current, hook: game.encounterHook, running: game.isHuntRunning(), session: game.getHuntSession() && game.getHuntSession().state }));
+            check(`Mundo ${vp.name} [F7.6]: abrir o mapa de caça mostra o botão, sem caçada ele fica desligado e nada é criado`, e0.hidden === false && e0.disabled === true && e0.enc === null && e0.hook === null && e0.running === false, JSON.stringify(e0));
+            const e1 = await page.evaluate(async () => {
+                const sleepIn = (ms) => new Promise(r => setTimeout(r, ms));
+                const started = game.dispatchAutomationAction({ type: 'START_HUNT' });
+                const realClock = game.clock;
+                game.clock = new ManualClock(game.now());
+                gameUI.worldView.requestRedraw(true);
+                await sleepIn(300);
+                const btn = document.getElementById('world-encounter-btn');
+                const enabled = btn.disabled === false;
+                btn.click();
+                const c = gameUI.worldEncounters.current;
+                const approaching = c && c.state;
+                await sleepIn(400);
+                const sprite = gameUI.worldView._enc && gameUI.worldView._enc.id === 25 && gameUI.worldView._enc.ready;
+                const status = document.getElementById('world-encounter-status').textContent;
+                const hookOn = game.encounterHook === gameUI.worldEncounters;
+                const eta = c.etaMs;
+                game.clock.advance(eta - 1); const justBefore = gameUI.worldEncounters.current.state;
+                game.clock.advance(1); const arrivedState = gameUI.worldEncounters.current.state;
+                gameUI.worldView.setArea('starter_town');
+                const afterLeave = { state: gameUI.worldEncounters.current.state, reason: gameUI.worldEncounters.current.reason, hook: game.encounterHook, timers: game.clock.pendingTimers() };
+                const stopped = game.dispatchAutomationAction({ type: 'STOP_HUNT' });
+                game.clock = realClock;
+                return { started: started.ok, enabled, approaching, sprite, status, hookOn, eta, justBefore, arrivedState, afterLeave, stopped: stopped.ok };
+            });
+            check(`Mundo ${vp.name} [F7.6]: botão chama o encontro; o sprite carrega no navegador e a chegada é lógica (ETA exato, sem quadros)`, e1.started && e1.enabled && e1.approaching === 'approaching' && e1.sprite === true && /Pikachu apareceu/.test(e1.status) && e1.hookOn && e1.eta > 3000 && e1.justBefore === 'approaching' && ['arrived', 'battling'].includes(e1.arrivedState), JSON.stringify(e1));
+            check(`Mundo ${vp.name} [F7.6]: sair do mapa cancela o encontro que não começou e solta gancho e timers`, e1.afterLeave.hook === null && ((e1.afterLeave.state === 'cancelled' && e1.afterLeave.reason === 'left_map' && e1.afterLeave.timers === 0) || e1.afterLeave.state === 'battling'), JSON.stringify(e1.afterLeave));
             await page.evaluate(() => { gameUI.worldView.setArea('starter_town'); delete WORLD_MAPS.smoke_big; delete WORLD_MAPS.smoke_small; delete gameUI.worldView._players.smoke_big; delete gameUI.worldView._players.smoke_small; });
             await context.close();
         }

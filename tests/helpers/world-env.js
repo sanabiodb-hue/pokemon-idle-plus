@@ -8,12 +8,12 @@ const { loadData } = require('../../tools/load-context');
 
 const ROOT = path.resolve(__dirname, '..', '..');
 const read = (f) => fs.readFileSync(path.join(ROOT, f), 'utf8');
-const WORLD_FILES = ['js/world/world-data.js', 'js/world/world-biomes.js', 'js/world/world-gen.js', 'js/world/world-engine.js', 'js/world/world-controls.js', 'js/world/world-view.js'];
+const WORLD_FILES = ['js/world/world-data.js', 'js/world/world-biomes.js', 'js/world/world-gen.js', 'js/world/world-engine.js', 'js/world/world-encounters.js', 'js/world/world-controls.js', 'js/world/world-view.js'];
 const EXPORTS = `WORLD_TILE_SIZE, WORLD_TILESET, WORLD_CHARACTER, WORLD_LEGEND, WORLD_MAPS, WORLD_ROUTE_MAPS, WORLD_START_MAP_ID, WORLD_MOVEMENT,
     getWorldMap, worldMapIdForRoute, worldCharAt, worldKindAt, worldHash, worldResolveTile, worldViewMetrics, worldCamera, worldCameraFocus, worldCellCenter,
     worldToScreen, worldFromScreen, worldVisibleCells, worldCanWalkManually, worldCellBlocked, worldCreateState, worldMoveBy, worldStep,
     worldAdvanceToward, POKEMON_DATA, REGIONS, worldPathLength, WORLD_GEN_VERSION, WORLD_GEN_LIMITS, WORLD_BIOME_FALLBACK, WORLD_TYPE_BIOME, WORLD_TYPE_PRIORITY, WORLD_BIOMES,
-    worldHuntSeed, worldRng, worldBiomeForTypes, worldGenerateHuntMap, worldHuntMap, worldHuntMapById, worldHuntStats, worldHuntCacheClear, worldPathLength, worldTravelTimeMs, worldInteractionNear, DirectionStack, WorldControls, WorldView`;
+    worldHuntSeed, worldRng, worldStringSeed, WorldEncounters, WORLD_ENCOUNTER_STATES, worldEncounterCandidates, worldPickEncounterPoint, worldEncounterOrigin, worldBiomeForTypes, worldGenerateHuntMap, worldHuntMap, worldHuntMapById, worldHuntStats, worldHuntCacheClear, worldPathLength, worldTravelTimeMs, worldInteractionNear, DirectionStack, WorldControls, WorldView`;
 
 // Carrega os scripts clássicos do mundo num contexto vm (como o navegador faz com <script>)
 function loadWorld(globals = {}) {
@@ -48,9 +48,12 @@ function fakeEnv({ width = 374, height = 374, dpr = 3, observer = true } = {}) {
     env.controlsEl = fakeElement();
     env.interactBtn = fakeElement({ disabled: true });
     env.destination = fakeElement();
+    env.encounterBox = fakeElement({ hidden: true });
+    env.encounterBtn = fakeElement();
+    env.encounterStatus = fakeElement();
     env.huntInput = fakeElement();
     env.huntResults = fakeElement();
-    const parts = { '#world-viewport': env.viewport, '#world-canvas': env.canvas, '#world-message': env.message, '#world-caption': env.caption, '#world-hint': env.hint, '#world-controls': env.controlsEl, '#world-interact': env.interactBtn, '#world-destination': env.destination, '#world-hunt-input': env.huntInput, '#world-hunt-results': env.huntResults };
+    const parts = { '#world-viewport': env.viewport, '#world-canvas': env.canvas, '#world-message': env.message, '#world-caption': env.caption, '#world-hint': env.hint, '#world-controls': env.controlsEl, '#world-interact': env.interactBtn, '#world-destination': env.destination, '#world-encounter': env.encounterBox, '#world-encounter-btn': env.encounterBtn, '#world-encounter-status': env.encounterStatus, '#world-hunt-input': env.huntInput, '#world-hunt-results': env.huntResults };
     env.root = fakeElement({ querySelector: (sel) => parts[sel] || null });
     const reg = (store) => ({ addEventListener(t, f) { (store[t] ||= new Set()).add(f); }, removeEventListener(t, f) { if (store[t]) store[t].delete(f); } });
     env.document = { hidden: false, getElementById: (id) => (id === 'world-panel' ? env.root : null), createElement: (tag) => fakeElement({ tagName: tag.toUpperCase() }), ...reg(env.listeners) };
@@ -96,14 +99,16 @@ const tick = () => new Promise(r => setTimeout(r, 0));
 
 // View aberta (onShow) com as imagens falsas já carregadas e o primeiro quadro desenhado
 async function shown(opts = {}) {
-    const env = fakeEnv(opts), game = fakeGame(opts.route, opts.game), ui = fakeUi(game);
-    const world = loadWorld(env.globals);
+    // opts.gameObject = jogo real (GameCore) no lugar do falso; opts.encounters = liga a lógica de encontros (ui.worldEncounters)
+    const env = fakeEnv(opts), game = opts.gameObject || fakeGame(opts.route, opts.game), ui = fakeUi(game);
+    const world = loadWorld({ ...env.globals, ...(opts.globals || {}) });
     if (opts.setup) opts.setup(world);
+    if (opts.encounters) ui.worldEncounters = new world.WorldEncounters(game);
     const view = new world.WorldView(ui);
     view.onShow();
     await tick();
     env.flush();
-    return { env, game, ui, view, world };
+    return { env, game, ui, view, world, encounters: ui.worldEncounters || null };
 }
 
 module.exports = { ROOT, loadWorld, fakeEnv, fakeGame, fakeUi, fakeElement, tick, shown, REAL_ROUTES };

@@ -1031,6 +1031,11 @@ body {
 .world-hunt-result { padding: 8px 10px; min-height: 40px; border-radius: 8px; border: 1px solid var(--border); background: var(--bg-card); color: var(--text-primary); font-size: 13px; }
 .world-hunt-result:active { background: var(--accent); }
 .world-hunt-more { flex-basis: 100%; font-size: 12px; color: var(--text-secondary); }
+.world-encounter { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 6px; }
+.world-encounter[hidden] { display: none; }
+.world-encounter-btn { padding: 8px 12px; min-height: 40px; border-radius: 8px; border: 2px solid var(--accent); background: var(--bg-card); color: var(--text-primary); font-size: 14px; font-weight: 600; }
+.world-encounter-btn:disabled { opacity: 0.45; }
+.world-encounter-status { flex: 1; min-width: 0; font-size: 12px; color: var(--text-secondary); line-height: 1.4; }
 .world-hint { min-height: 18px; margin-top: 4px; font-size: 13px; color: var(--warning); }
 .world-controls { display: flex; align-items: center; justify-content: flex-start; gap: 12px; margin-top: 8px; user-select: none; -webkit-user-select: none; }
 .world-controls[hidden] { display: none; }

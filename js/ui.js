@@ -16,6 +16,7 @@ class GameUI {
         this.guideView = new GuideView(this);
         this.game.onGuideEvent = (e) => this.guideView.onGuideEvent(e);
         this.huntView = new HuntView(this);
+        this.worldEncounters = new WorldEncounters(this.game);   // F7.6: lógica dos encontros do mundo (sem DOM)
         this.worldView = new WorldView(this);
         this.game.onHuntEvent = (kind, data) => { try { this.huntView.onHuntEvent(kind, data); } catch (e) { /* 提示失败不影响游戏 */ } };
         this._setupBetaSettings();
