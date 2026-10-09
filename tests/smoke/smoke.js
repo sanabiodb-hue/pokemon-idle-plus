@@ -721,6 +721,74 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
             await context.close();
         }
 
+        // ---------- Mundo visual (F7.1): a aba Mapa mostra a cena (Canvas), passiva, sem loop, e mantém as listas ----------
+        for (const vp of [
+            { name: 'celular 360x640', width: 360, height: 640, deviceScaleFactor: 3, isMobile: true, hasTouch: true },
+            { name: 'desktop 1280x800', width: 1280, height: 800, deviceScaleFactor: 1 },
+        ]) {
+            const { page, context } = await newPage(() => localStorage.setItem('pokemon_idle_tutorial_done', '1'), { viewport: { width: vp.width, height: vp.height }, deviceScaleFactor: vp.deviceScaleFactor, isMobile: !!vp.isMobile, hasTouch: !!vp.hasTouch });
+            await page.goto(base);
+            await page.waitForFunction(() => typeof game !== 'undefined' && game.currentBattle, null, { timeout: 15000 });
+            await page.evaluate(() => { window.__raf = 0; const raf = window.requestAnimationFrame.bind(window); window.requestAnimationFrame = (fn) => { window.__raf++; return raf(fn); }; });
+            const routeBefore = await page.evaluate(() => game.gameState.currentRoute);
+            const inactive = await page.evaluate(() => ({ active: gameUI.worldView.active, draws: gameUI.worldView.drawCount }));
+            await page.click('[data-tab="tab-map"]');
+            await page.waitForFunction(() => gameUI.worldView.drawCount > 0, null, { timeout: 10000 });
+            const probe = () => page.evaluate(() => {
+                const c = document.getElementById('world-canvas'), r = c.getBoundingClientRect();
+                const px = c.getContext('2d').getImageData(0, 0, c.width, c.height).data;
+                const colors = new Set(); let hero = 0;
+                for (let i = 0; i < px.length; i += 4) { if (i % 20 === 0) colors.add(px[i] << 16 | px[i + 1] << 8 | px[i + 2]); if (px[i] === 31 && px[i + 1] === 163 && px[i + 2] === 163) hero++; }
+                return {
+                    bw: c.width, bh: c.height, cw: r.width, ch: r.height, dpr: window.devicePixelRatio, colors: colors.size, hero,
+                    route: game.gameState.currentRoute, active: gameUI.worldView.active, draws: gameUI.worldView.drawCount,
+                    zoom: gameUI.worldView.lastMetrics && gameUI.worldView.lastMetrics.zoom, sw: document.documentElement.scrollWidth, iw: window.innerWidth,
+                    routes: document.querySelectorAll('#route-list .route-card').length, regions: document.querySelectorAll('#region-list .region-card').length,
+                    rendering: getComputedStyle(c).imageRendering, aria: c.getAttribute('aria-label'), caption: document.getElementById('world-caption').textContent,
+                };
+            });
+            const a = await probe();
+            check(`Mundo ${vp.name}: antes de abrir a aba o renderer está inativo e não desenhou`, inactive.active === false && inactive.draws === 0, JSON.stringify(inactive));
+            check(`Mundo ${vp.name}: cena desenhada com buffer = tamanho CSS x dpr e zoom inteiro`, a.bw === Math.round(a.cw * a.dpr) && a.bh === Math.round(a.ch * a.dpr) && Number.isInteger(a.zoom) && a.zoom >= 2, JSON.stringify(a));
+            check(`Mundo ${vp.name}: cenário variado (não é uma cor lisa) e personagem visível`, a.colors >= 14 && a.hero > 20, JSON.stringify({ colors: a.colors, hero: a.hero }));
+            check(`Mundo ${vp.name}: pixel art nítida, rótulo acessível e legenda em português`, /pixelated|crisp-edges/.test(a.rendering) && /Rota 1/.test(a.aria) && /Rota 1/.test(a.caption), JSON.stringify({ r: a.rendering, aria: a.aria }));
+            check(`Mundo ${vp.name}: sem rolagem horizontal; listas de regiões e rotas continuam na aba`, a.sw <= a.iw + 1 && a.routes > 0 && a.regions > 0, JSON.stringify({ sw: a.sw, iw: a.iw, routes: a.routes, regions: a.regions }));
+            check(`Mundo ${vp.name}: puramente visual: a rota do jogo não mudou`, a.route === routeBefore, `${routeBefore} → ${a.route}`);
+
+            // sem loop contínuo: parado por 1,2 s, nenhum quadro de animação é pedido e nada é redesenhado
+            const rafBefore = await page.evaluate(() => window.__raf);
+            await sleep(1200);
+            const idle = await probe();
+            check(`Mundo ${vp.name}: cena parada não pede quadros nem redesenha (sem loop)`, (await page.evaluate(() => window.__raf)) === rafBefore && idle.draws === a.draws, JSON.stringify({ rafBefore, draws: [a.draws, idle.draws] }));
+
+            // resize/orientação: redesenha com o novo tamanho e continua sem overflow
+            await page.setViewportSize(vp.isMobile ? { width: 640, height: 360 } : { width: 900, height: 700 });
+            await page.waitForFunction((n) => gameUI.worldView.drawCount > n, a.draws, { timeout: 10000 });
+            const b = await probe();
+            check(`Mundo ${vp.name}: após resize/orientação o buffer acompanha o novo tamanho, sem overflow`, b.bw === Math.round(b.cw * b.dpr) && b.bh === Math.round(b.ch * b.dpr) && b.sw <= b.iw + 1 && b.hero > 20, JSON.stringify({ bw: b.bw, cw: b.cw, sw: b.sw, iw: b.iw }));
+
+            // sair da aba: o renderer fica inativo e não redesenha mais
+            await page.click('[data-tab="tab-battle"]');
+            const off = await probe();
+            await page.setViewportSize({ width: vp.width, height: vp.height });
+            await sleep(400);
+            const off2 = await probe();
+            check(`Mundo ${vp.name}: fora da aba o renderer fica inativo e não redesenha`, off.active === false && off2.active === false && off2.draws === off.draws, JSON.stringify({ off: off.draws, off2: off2.draws }));
+
+            // voltar: retoma
+            await page.click('[data-tab="tab-map"]');
+            await page.waitForFunction((n) => gameUI.worldView.drawCount > n, off2.draws, { timeout: 10000 });
+            const back = await probe();
+            check(`Mundo ${vp.name}: ao voltar para a aba o renderer retoma e redesenha`, back.active === true && back.draws > off2.draws && back.hero > 20, JSON.stringify({ active: back.active, draws: back.draws }));
+
+            // as listas continuam funcionais: escolher outra rota pela lista troca a rota do JOGO e a cena apenas acompanha a legenda
+            await page.click('#route-list .route-card:not(.active)');
+            await sleep(300);
+            const after = await page.evaluate(() => ({ route: game.gameState.currentRoute, caption: document.getElementById('world-caption').textContent }));
+            check(`Mundo ${vp.name}: a lista de rotas segue mudando a rota do jogo (a cena é só prévia)`, after.route !== routeBefore && /Prévia visual: Rota 1/.test(after.caption), JSON.stringify(after));
+            await context.close();
+        }
+
         check('整个过程中没有页面错误或 console.error', errors.length === 0, errors.slice(0, 5).join(' | '));
     } catch (e) {
         check('冒烟测试流程', false, e.stack || String(e));

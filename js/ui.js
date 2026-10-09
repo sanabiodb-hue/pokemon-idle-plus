@@ -16,6 +16,7 @@ class GameUI {
         this.guideView = new GuideView(this);
         this.game.onGuideEvent = (e) => this.guideView.onGuideEvent(e);
         this.huntView = new HuntView(this);
+        this.worldView = new WorldView(this);
         this.game.onHuntEvent = (kind, data) => { try { this.huntView.onHuntEvent(kind, data); } catch (e) { /* 提示失败不影响游戏 */ } };
         this._setupBetaSettings();
     }
@@ -346,6 +347,7 @@ class GameUI {
             }
         }
         if (this.currentTab === 'tab-hunt' && tabId !== 'tab-hunt' && this.huntView) this.huntView.onHide();
+        if (this.currentTab === 'tab-map' && tabId !== 'tab-map' && this.worldView) this.worldView.onHide();
         this.currentTab = tabId;
         document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
         document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
@@ -353,7 +355,7 @@ class GameUI {
         document.querySelector(`#tab-nav [data-tab="${tabId}"]`).classList.add('active');
 
         // 切换时刷新对应内容
-        if (tabId === 'tab-map') this.renderMap();
+        if (tabId === 'tab-map') { this.renderMap(); this.worldView.onShow(); }
         if (tabId === 'tab-badge') this.renderBadgePage();
         if (tabId === 'tab-berry') this.renderBerryPage();
         if (tabId === 'tab-skill') this.renderSkillPage();
