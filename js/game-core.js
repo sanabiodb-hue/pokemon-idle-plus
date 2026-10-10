@@ -3342,6 +3342,14 @@ class GameCore {
         this._syncShinyFlags();    // 旧代码直接写 shinyDex 时，让主个体的闪光与之一致
         gs.schemaVersion = SAVE_SCHEMA_VERSION;
         gs.lastSave = this.now();
+        // F7.10: o trecho em andamento de uma caçada ativa só entrava em activeMs numa transição de estado; o save o descartava (ao carregar, running
+        // vira paused e só activeMs sobrevive), e a duração e o limite de tempo recomeçavam do zero a cada recarga. Fixa o trecho em activeMs e
+        // reinicia-o neste instante: idempotente, a duração (activeMs + trecho vivo) não muda. O tempo fechado/offline é somado à parte pelo offline.
+        const huntSession = this.getHuntSession ? this.getHuntSession() : null;
+        if (huntSession && huntSession.state === 'running' && huntSession.resumedAt !== null) {
+            huntSession.activeMs = huntSessionDurationMs(huntSession, gs.lastSave);
+            huntSession.resumedAt = gs.lastSave;
+        }
         if (this.encounterHook && this.encounterHook.beforeSave) this.encounterHook.beforeSave();   // F7.7: progresso da caminhada junto de lastSave (o offline conta a partir daí)
 
         if (this.currentBattle) {
