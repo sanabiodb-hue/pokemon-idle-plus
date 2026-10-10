@@ -62,6 +62,7 @@ class WorldEncounters {
         this._hidden = false;           // página escondida: o avanço online fica congelado
         this._offline = false;          // simulação offline em curso: o Fast Driver conduz o ciclo
         this._supplied = null;          // inimigo entregue a startBattle (para reconhecer a batalha certa)
+        this._leaveAfterOffline = false; // o jogador saiu do mapa durante a simulação offline: o ciclo encerra quando ela termina
         this._listeners = new Set();
         this._paths = null;             // caminhos já calculados do mapa do ciclo (memo)
         this._restore();
@@ -321,6 +322,7 @@ class WorldEncounters {
         const session = g.getHuntSession();
         if (session && session.world) delete session.world;
         this._supplied = null;
+        this._leaveAfterOffline = false;
         this.cycle = null;
         this._paths = null;
         this._detach();
@@ -328,8 +330,13 @@ class WorldEncounters {
     }
 
     // A view avisa quando o jogador troca a área exibida: sair do mapa encerra o ciclo (sem avançar nada invisivelmente)
+    // F7.11: durante a simulação offline o ciclo NÃO pode ser desmontado no meio (o Fast Driver passaria a gerar inimigos de rota para o resto do
+    // intervalo e apagaria o estado da caminhada): a saída fica pendente e é aplicada em onOfflineEnd; voltar ao mapa antes disso a cancela.
     onAreaChanged(areaId) {
-        if (this.cycle && this.cycle.mapId !== areaId) this._teardown('left_map');
+        if (!this.cycle) { this._leaveAfterOffline = false; return; }
+        if (this.cycle.mapId === areaId) { this._leaveAfterOffline = false; return; }
+        if (this._offlineEvent()) { this._leaveAfterOffline = true; return; }
+        this._teardown('left_map');
     }
 
     // ---------- assinaturas ----------
@@ -437,6 +444,7 @@ class WorldEncounters {
     onOfflineEnd() {
         if (!this.cycle) return;
         this._offline = false;
+        if (this._leaveAfterOffline) { this._leaveAfterOffline = false; this._teardown('left_map'); return; }
         const leg = this.cycle.leg;
         if (leg) leg.lastAt = this.game.now();                     // o tempo offline já foi aplicado pelo Fast Driver: não reaplicar
         this._arm();

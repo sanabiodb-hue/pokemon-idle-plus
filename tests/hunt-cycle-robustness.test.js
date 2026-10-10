@@ -169,3 +169,53 @@ test('F7.10 D: recarregar com a caçada do mundo ativa e rodar o offline uma vez
     assert.equal(JSON.stringify(sc.world), worldB, 'nem altera o progresso da perna');
     assert.equal(c.ctx.huntSessionDurationMs(sc, c.game.clock.now()), c.ctx.huntSessionDurationMs(sb, b.game.clock.now()), 'nem a duração');
 });
+
+// =============================================================== E. sair do mapa durante a simulação offline (F7.11)
+async function offlineWithNavigation(navigate) {
+    const a = boot();
+    a.enc.begin(SPECIES);
+    a.game.clock.advance(3000);
+    const generated = [];
+    const gen = a.game.generateWildPokemon.bind(a.game);
+    a.game.generateWildPokemon = (route, cache) => { const w = gen(route, cache); if (w && a.game._isOfflineSimulating) generated.push(w.id); return w; };
+    let end = null;
+    const prev = a.game.onBattleEvent;
+    a.game.onBattleEvent = (e, d) => { if (e === 'offlineEnd') end = d; return prev && prev.call(a.game, e, d); };
+    a.game._processOfflineBattles(60 * MIN);
+    assert.equal(a.game._isOfflineSimulating, true, 'a simulação está em andamento');
+    navigate(a);
+    await new Promise((resolve) => { const t = setInterval(() => { if (end) { clearInterval(t); resolve(); } }, 5); });
+    a.game.stopBattle();
+    if (a.game._nextBattleTimeout) { clearTimeout(a.game._nextBattleTimeout); a.game._nextBattleTimeout = null; }
+    return { a, generated, battles: end.battles };
+}
+
+test('F7.11 E: sair do mapa DURANTE o offline não desmonta o ciclo no meio — a simulação segue uma caçada só e o ciclo encerra ao terminar', async () => {
+    const control = await offlineWithNavigation(() => {});
+    const left = await offlineWithNavigation((a) => a.enc.onAreaChanged('starter_town'));
+    assert.ok(control.battles > 100);
+    assert.equal(left.battles, control.battles, 'mesmo número de batalhas que sem a navegação (antes: 299 × 221, com inimigos de rota)');
+    assert.ok(left.generated.length > 0 && left.generated.every((id) => id === SPECIES), 'todos os inimigos do intervalo são da espécie do mapa');
+    assert.equal(left.a.enc.cycle, null, 'a saída pendente foi aplicada ao fim do offline');
+    assert.equal(left.a.enc.current.reason, 'left_map');
+    assert.equal(left.a.game.encounterHook, null);
+    assert.equal(session(left.a.game).world, undefined, 'o estado da caminhada só some depois, não no meio da simulação');
+    assert.equal(session(left.a.game).state, 'running', 'a caçada da sessão continua, como em qualquer saída do mapa');
+    assert.deepEqual(control.generated, left.generated, 'mesma sequência de inimigos');
+});
+
+test('F7.11 E: voltar ao mapa antes de o offline terminar cancela a saída pendente (o ciclo continua)', async () => {
+    const back = await offlineWithNavigation((a) => { a.enc.onAreaChanged('starter_town'); a.enc.onAreaChanged(a.enc.cycle.mapId); });
+    assert.ok(back.a.enc.cycle, 'o ciclo segue ativo');
+    assert.ok(back.a.game.encounterHook);
+    assert.equal(back.generated.every((id) => id === SPECIES), true);
+});
+
+test('F7.11 E: sem simulação offline, sair do mapa continua encerrando o ciclo na hora (regra da F7.7 intacta)', () => {
+    const a = boot();
+    a.enc.begin(SPECIES);
+    a.game.clock.advance(1000);
+    a.enc.onAreaChanged('starter_town');
+    assert.equal(a.enc.cycle, null);
+    assert.equal(a.enc.current.reason, 'left_map');
+});
