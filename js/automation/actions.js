@@ -59,6 +59,7 @@ const AUTOMATION_ACTION_HANDLERS = {
         validate(game) {
             if (!_huntActive(game)) return _fail('no_running_hunt', 'Não há caçada em execução.');
             if (game._towerMode) return _fail('tower_mode', 'Saia da Torre de Desafio antes de pausar a caçada.');
+            if (game._isOfflineSimulating) return _fail('offline', 'Aguarde o cálculo offline terminar para pausar a caçada.');   // F8.0
             return _pass;
         },
         execute(game) {
@@ -77,6 +78,7 @@ const AUTOMATION_ACTION_HANDLERS = {
             const s = game.getHuntSession();
             if (!s || s.state !== 'paused') return _fail('no_paused_hunt', 'Não há caçada pausada.');
             if (game._towerMode) return _fail('tower_mode', 'Saia da Torre de Desafio para retomar a caçada.');
+            if (game._isOfflineSimulating) return _fail('offline', 'Aguarde o cálculo offline terminar para retomar a caçada.');   // F8.0
             return _pass;
         },
         execute(game) {
@@ -92,9 +94,12 @@ const AUTOMATION_ACTION_HANDLERS = {
     },
 
     STOP_HUNT: {
-        validate(game) {
+        validate(game, a) {
             const s = game.getHuntSession();
-            return s && (s.state === 'running' || s.state === 'paused') ? _pass : _fail('no_active_hunt', 'Não há caçada ativa.');
+            if (!(s && (s.state === 'running' || s.state === 'paused'))) return _fail('no_active_hunt', 'Não há caçada ativa.');
+            // F8.0: durante a simulação offline só o motor de automação encerra a caçada (condição de parada, com motivo); parada manual espera
+            if (game._isOfflineSimulating && !(a.reason && a.reason !== 'manual' && HUNT_STOP_REASONS.includes(a.reason))) return _fail('offline', 'Aguarde o cálculo offline terminar para encerrar a caçada.');
+            return _pass;
         },
         execute(game, a) {
             const s = game.getHuntSession();

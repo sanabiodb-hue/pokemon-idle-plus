@@ -31,6 +31,9 @@ function huntFormatDuration(ms) {
 }
 
 function huntClone(obj) { return JSON.parse(JSON.stringify(obj)); }
+// F8.0: limites vindos dos módulos do mundo/da Central, com valores padrão quando o módulo não está carregado (testes só da aba)
+const WorldView_LIMIT = () => (typeof HUNT_CENTER_RESULT_LIMIT === 'number' ? HUNT_CENTER_RESULT_LIMIT : 10);
+const WORLD_TILE_PX = () => (typeof WORLD_TILE_SIZE === 'number' ? WORLD_TILE_SIZE : 16);
 
 class HuntView {
     constructor(ui) {
@@ -41,6 +44,8 @@ class HuntView {
         this._tick = null;
         this._renderTimer = null;
         this._lastLimits = { battleLimit: 100, timeLimitMinutes: 60 };   // 取消勾选后再勾选时恢复的数值
+        this._targetId = null;       // F8.0: só a espécie ESCOLHIDA na interface (seleção, não é estado do jogo); com ciclo ativo vale a do ciclo
+        this._targetQuery = '';
         if (!this.root) return;
         this.section = 'ops';
         this.eco = new EconomyView(ui, this);
@@ -54,6 +59,7 @@ class HuntView {
                 <button class="hunt-seg" data-hunt-section="analysis">Análise</button>
             </div>
             <div data-section="ops" class="hunt-section">
+                <div id="hunt-target" class="hunt-card"><h3>🎯 Alvo da caçada</h3><div id="hunt-target-pick"></div><div id="hunt-target-live"></div></div>
                 <div id="hunt-status" class="hunt-card"></div>
                 <div id="hunt-activity" class="hunt-card"></div>
                 <div id="hunt-route" class="hunt-card"></div>
@@ -73,6 +79,7 @@ class HuntView {
         });
         this.root.addEventListener('change', (e) => this.handleChange(e.target));
         this.root.addEventListener('input', (e) => {
+            if (e.target.matches && e.target.matches('[data-hunt-target-search]')) { this._targetQuery = e.target.value; this.renderTargetResults(); return; }
             if (e.target.matches && e.target.matches('input[type=range]')) this._syncRangeLabel(e.target);
         });
     }
@@ -82,6 +89,8 @@ class HuntView {
         if (!this.root || !this.game.gameState) return;
         this.onHide();
         for (const type of HUNT_LIVE_EVENTS) this._unsubs.push(this.game.bus.on(type, () => this._scheduleRender()));
+        const enc = this.ui.worldEncounters;
+        if (enc && enc.onChange) this._unsubs.push(enc.onChange(() => this._scheduleRender()));     // F8.0: mudanças do ciclo do mundo (perna, chegada, resultado)
         this._tick = setInterval(() => this._tickUpdate(), 1000);
         this.render();
     }
@@ -104,6 +113,7 @@ class HuntView {
     }
 
     render() {
+        this.renderTargetPicker();
         this.renderLive();
         this.renderSettings();
         this.renderSection();
@@ -134,6 +144,7 @@ class HuntView {
         if (!this.root || !this.game.gameState) return;
         this.eco.renderResources();
         if (this.section === 'ops') {
+            this.renderTarget();
             this.renderStatus();
             this.renderActivity();
             this.renderRoute();
@@ -159,6 +170,7 @@ class HuntView {
             if (txt) txt.textContent = `${Math.max(0, Math.ceil(b.playerCurrentHp))}/${Math.ceil(b.playerMaxHp)}`;
         }
         this.root.querySelectorAll('[data-hunt-potions]').forEach(pot => { pot.textContent = ptNumber(g.getPotions()); });
+        this._tickTarget();
         this.eco.tickResources();
     }
 
@@ -169,6 +181,65 @@ class HuntView {
         return HUNT_STATE_VIEW[s.state] || HUNT_STATE_VIEW.none;
     }
 
+    // ---------- F8.0 · Central de Caça: alvo (tudo derivado do estado real a cada renderização; sem cópia) ----------
+    _snap() { return huntCenterSnapshot(this.game, this.ui.worldEncounters || null); }
+    _matrix(snap) { snap = snap || this._snap(); return huntControlMatrix(snap, huntCenterTargetId(snap, this._targetId)); }
+
+    _speciesLabel(id) {
+        const status = this.game.gameState.pokedex[id], known = status === 'caught' || status === 'seen';
+        return known && POKEMON_DATA[id] ? POKEMON_DATA[id].name : '???';
+    }
+
+    // Busca e seleção: só é redesenhado em render() completo e ao digitar (assim digitar não perde o foco com as atualizações ao vivo)
+    renderTargetPicker() {
+        const el = this.root.querySelector('#hunt-target-pick');
+        if (!el) return;
+        el.innerHTML = `
+            <label class="hunt-field"><span>Escolher espécie</span><input type="search" data-hunt-target-search value="${escapeHtml(this._targetQuery)}" placeholder="Nome ou número" autocomplete="off"></label>
+            <div id="hunt-target-results" class="hunt-chips"></div>`;
+        this.renderTargetResults();
+    }
+
+    renderTargetResults() {
+        const box = this.root.querySelector('#hunt-target-results');
+        if (!box) return;
+        const { list, total } = huntSpeciesMatches(this._targetQuery, this.game.gameState.pokedex, WorldView_LIMIT());
+        box.innerHTML = list.map(r => `<button class="hunt-chip${r.id === this._targetId ? ' prio' : ''}" data-hunt-action="target-pick" data-id="${r.id}">#${String(r.id).padStart(3, '0')} ${escapeHtml(r.name)}</button>`).join('')
+            + (total > list.length ? `<div class="hunt-hint">Mostrando ${list.length} de ${total}. Refine a busca.</div>` : '');
+    }
+
+    renderTarget() {
+        const el = this.root.querySelector('#hunt-target-live');
+        if (!el) return;
+        const g = this.game, enc = this.ui.worldEncounters || null;
+        const snap = this._snap(), targetId = huntCenterTargetId(snap, this._targetId), m = huntControlMatrix(snap, targetId);
+        const info = targetId !== null && enc && enc.describeTarget ? enc.describeTarget(targetId) : null;
+        const name = targetId !== null ? this._speciesLabel(targetId) : '—';
+        const last = snap.cycle && snap.lastResult && snap.lastResult.outcome !== 'cancelled' ? (snap.lastResult.outcome === 'defeat' ? 'derrota' : 'vitória') : null;
+        const btn = (action, label, ctl, cls = '') => `<button class="hunt-btn ${cls}" data-hunt-action="${action}"${ctl.enabled ? '' : ' disabled'}${ctl.reason ? ` title="${escapeHtml(ctl.reason)}"` : ''}>${label}</button>`;
+        const why = [m.startTarget, m.openMap].filter(c => !c.enabled && c.reason).map(c => c.reason)[0];
+        el.innerHTML = `
+            <div class="hunt-target-line"><span>Espécie-alvo: <strong>${escapeHtml(name)}</strong>${targetId !== null ? ` <small>#${String(targetId).padStart(3, '0')}</small>` : ''}</span>
+                <span>Bioma: <strong>${info ? escapeHtml(info.biomeName) : '—'}</strong></span></div>
+            <div class="hunt-target-status" data-hunt-target-text>${escapeHtml(huntCenterStatusText(snap, name, WORLD_TILE_PX()))}</div>
+            ${snap.cycle ? `<div class="hunt-target-bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${snap.cycle.pct}"><i data-hunt-target-bar style="width:${snap.cycle.pct}%"></i></div>` : ''}
+            ${last ? `<div class="hunt-hint">Último resultado: ${last}.</div>` : ''}
+            <div class="hunt-buttons">${btn('target-start', snap.sessionState === 'running' && !snap.cycle ? '🎯 CAÇAR ESTE ALVO' : '▶ INICIAR NESTE ALVO', m.startTarget, 'primary')}${btn('target-open-map', '🗺️ ABRIR NO MAPA', m.openMap)}</div>
+            ${why && !m.startTarget.enabled && targetId !== null ? `<div class="hunt-hint" data-hunt-target-why>${escapeHtml(why)}</div>` : ''}`;
+    }
+
+    // A cada segundo: só texto e barra do deslocamento (sem redesenhar nem tocar na lógica)
+    _tickTarget() {
+        const text = this.root.querySelector('[data-hunt-target-text]');
+        if (!text) return;
+        const snap = this._snap();
+        if (!snap.cycle) return;
+        const name = this._speciesLabel(snap.cycle.speciesId);
+        text.textContent = huntCenterStatusText(snap, name, WORLD_TILE_PX());
+        const bar = this.root.querySelector('[data-hunt-target-bar]');
+        if (bar) bar.style.width = `${snap.cycle.pct}%`;
+    }
+
     renderStatus() {
         const g = this.game;
         const s = g.getHuntSession();
@@ -177,10 +248,12 @@ class HuntView {
         const stats = s ? s.stats : { battles: 0, victories: 0, defeats: 0, captures: 0, shinies: 0, xp: 0, money: 0, healingSpent: 0 };
         const dur = s ? huntSessionDurationMs(s, g.now()) : 0;
         const eff = huntEfficiency(stats, dur);
+        const mx = this._matrix();
+        const dis = (c) => (c.enabled ? '' : ` disabled title="${escapeHtml(c.reason || '')}"`);
         let buttons;
-        if (!s || !active) buttons = '<button class="hunt-btn primary" data-hunt-action="start">▶ INICIAR CAÇA</button>';
-        else if (s.state === 'running') buttons = '<button class="hunt-btn" data-hunt-action="pause">⏸ PAUSAR</button><button class="hunt-btn danger" data-hunt-action="stop">⏹ PARAR</button>';
-        else buttons = '<button class="hunt-btn primary" data-hunt-action="resume">▶ RETOMAR</button><button class="hunt-btn danger" data-hunt-action="stop">⏹ PARAR</button>';
+        if (!s || !active) buttons = `<button class="hunt-btn primary" data-hunt-action="start"${dis(mx.start)}>▶ INICIAR CAÇA</button>`;
+        else if (s.state === 'running') buttons = `<button class="hunt-btn" data-hunt-action="pause"${dis(mx.pause)}>⏸ PAUSAR</button><button class="hunt-btn danger" data-hunt-action="stop"${dis(mx.stop)}>⏹ PARAR</button>`;
+        else buttons = `<button class="hunt-btn primary" data-hunt-action="resume"${dis(mx.resume)}>▶ RETOMAR</button><button class="hunt-btn danger" data-hunt-action="stop"${dis(mx.stop)}>⏹ PARAR</button>`;
 
         let notice = '';
         if (s && s.state === 'stopped') {
@@ -408,11 +481,35 @@ class HuntView {
 
     handleAction(action, data) {
         const g = this.game;
+        // Um clique atrasado (a tela ainda não atualizou) é conferido contra o estado REAL antes de pedir a operação; as operações revalidam também.
+        const gate = { start: 'start', pause: 'pause', resume: 'resume', stop: 'stop', 'target-start': 'startTarget', 'target-open-map': 'openMap' }[action];
+        if (gate) {
+            const ctl = this._matrix()[gate];
+            if (!ctl.enabled) { this.ui.showToast(`⚠️ ${ctl.reason}`); this.render(); return; }
+        }
         switch (action) {
             case 'start': this._report(g.dispatchAutomationAction({ type: 'START_HUNT' }), '🎯 Caçada iniciada!'); break;
             case 'pause': this._report(g.dispatchAutomationAction({ type: 'PAUSE_HUNT' })); break;
             case 'resume': this._report(g.dispatchAutomationAction({ type: 'RESUME_HUNT' })); break;
             case 'stop': this._report(g.dispatchAutomationAction({ type: 'STOP_HUNT' })); break;
+            case 'target-pick': {
+                const id = Number(data.id);
+                if (Number.isInteger(id) && POKEMON_DATA[id]) { this._targetId = id; this.renderTargetResults(); this.renderTarget(); }
+                break;
+            }
+            case 'target-start': {
+                const enc = this.ui.worldEncounters;
+                const id = huntCenterTargetId(this._snap(), this._targetId);
+                if (!enc || id === null) { this.ui.showToast('⚠️ Escolha uma espécie para caçar.'); break; }
+                this._report(enc.begin(id), '🎯 Caçada iniciada!');
+                break;
+            }
+            case 'target-open-map': {
+                const id = huntCenterTargetId(this._snap(), this._targetId);
+                this.ui.switchTab('tab-map');
+                if (id !== null && this.ui.worldView) this.ui.worldView.openHuntMap(id);
+                break;
+            }
             case 'use-recommended': this._report(g.selectHuntRoute(data.id, 'recommended')); break;
             case 'manage-team': this.ui.switchTab('tab-pc'); break;
             case 'toggle-target': this._toggleTarget(Number(data.id)); break;

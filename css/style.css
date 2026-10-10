@@ -4979,3 +4979,11 @@ body {
 @media (min-width: 600px) {
     .hunt-metrics { grid-template-columns: repeat(5, minmax(0, 1fr)); }
 }
+
+/* F8.0 · Central de Caça: alvo da caçada (dentro da aba Caça) */
+.hunt-target-line { display: flex; flex-wrap: wrap; gap: 4px 16px; margin: 6px 0; }
+.hunt-target-status { margin: 4px 0 8px; line-height: 1.35; }
+.hunt-target-bar { height: 8px; border-radius: 4px; background: rgba(255, 255, 255, 0.12); overflow: hidden; margin: 6px 0 10px; }
+.hunt-target-bar > i { display: block; height: 100%; width: 0; background: #4cc38a; }
+#hunt-target input[type="search"] { width: 100%; box-sizing: border-box; min-height: 44px; }
+#hunt-target .hunt-btn { min-height: 44px; }

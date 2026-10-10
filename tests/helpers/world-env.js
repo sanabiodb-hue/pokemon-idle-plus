@@ -8,7 +8,7 @@ const { loadData } = require('../../tools/load-context');
 
 const ROOT = path.resolve(__dirname, '..', '..');
 const read = (f) => fs.readFileSync(path.join(ROOT, f), 'utf8');
-const WORLD_FILES = ['js/world/world-data.js', 'js/world/world-biomes.js', 'js/world/world-gen.js', 'js/world/world-engine.js', 'js/world/world-encounters.js', 'js/world/world-controls.js', 'js/world/world-view.js'];
+const WORLD_FILES = ['js/hunt-center.js', 'js/world/world-data.js', 'js/world/world-biomes.js', 'js/world/world-gen.js', 'js/world/world-engine.js', 'js/world/world-encounters.js', 'js/world/world-controls.js', 'js/world/world-view.js'];
 const EXPORTS = `WORLD_TILE_SIZE, WORLD_TILESET, WORLD_CHARACTER, WORLD_LEGEND, WORLD_MAPS, WORLD_ROUTE_MAPS, WORLD_START_MAP_ID, WORLD_MOVEMENT,
     getWorldMap, worldMapIdForRoute, worldCharAt, worldKindAt, worldHash, worldResolveTile, worldViewMetrics, worldCamera, worldCameraFocus, worldCellCenter,
     worldToScreen, worldFromScreen, worldVisibleCells, worldCanWalkManually, worldCellBlocked, worldCreateState, worldMoveBy, worldStep,

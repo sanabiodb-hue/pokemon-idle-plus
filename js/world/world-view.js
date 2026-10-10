@@ -377,20 +377,8 @@ WorldView._assets = null; WorldView.failed = true; });   // permite tentar de no
 
     // ---------- busca de espécies (no máximo WORLD_HUNT_RESULT_LIMIT resultados; nenhum mapa é gerado para listar) ----------
     _huntMatches(query) {
-        const q = String(query || '').trim().toLowerCase();
-        if (!q) return { list: [], total: 0 };
         const dex = (this.game.gameState && this.game.gameState.pokedex) || {};
-        const out = [];
-        let total = 0;
-        for (const key of Object.keys(POKEMON_DATA)) {
-            const id = Number(key), data = POKEMON_DATA[key], known = dex[id] === 'seen' || dex[id] === 'caught';
-            // mesma regra do catálogo: espécie ainda não vista aparece como ??? e só se acha pelo número
-            const hit = String(id).includes(q) || (known && data && typeof data.name === 'string' && data.name.toLowerCase().includes(q));
-            if (!hit) continue;
-            total++;
-            if (out.length < WorldView.HUNT_RESULT_LIMIT) out.push({ id, name: known && data.name ? data.name : '???' });
-        }
-        return { list: out, total };
+        return huntSpeciesMatches(query, dex, WorldView.HUNT_RESULT_LIMIT);        // F8.0: função pura compartilhada com a Central de Caça (js/hunt-center.js)
     }
 
     _renderHuntResults() {

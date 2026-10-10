@@ -269,6 +269,50 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
             await context.close();
         }
 
+        // ---------- B3. F8.0 Central de Caça: alvo da caçada pela aba Caça (mobile e desktop), efeitos reais sobre a sessão ----------
+        for (const vp of [{ name: 'celular 360x640', width: 360, height: 640 }, { name: 'desktop 1280x800', width: 1280, height: 800 }]) {
+            const { page, context } = await newPage(() => localStorage.setItem('pokemon_idle_tutorial_done', '1'), { viewport: { width: vp.width, height: vp.height } });
+            await page.goto(base);
+            await page.waitForFunction(() => typeof game !== 'undefined' && game.currentBattle, null, { timeout: 10000 });
+            await page.locator('#tab-nav [data-tab="tab-hunt"]').click();
+            await page.waitForSelector('#hunt-target [data-hunt-target-search]');
+            const noOverflow = async () => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1 && document.getElementById('hunt-container').scrollWidth <= document.getElementById('hunt-container').clientWidth + 1);
+            check(`Central ${vp.name}: o card do alvo existe, os botões de alvo começam desabilitados e há busca`, await page.evaluate(() => { const t = document.getElementById('hunt-target'); return /Alvo da caçada/.test(t.innerText) && t.querySelector('[data-hunt-action="target-start"]').disabled && t.querySelector('[data-hunt-action="target-open-map"]').disabled; }));
+            await page.locator('#hunt-target [data-hunt-target-search]').fill('25');
+            await page.waitForSelector('#hunt-target [data-hunt-action="target-pick"]');
+            await page.locator('#hunt-target [data-hunt-action="target-pick"]').first().click();
+            check(`Central ${vp.name}: escolher a espécie mostra bioma e habilita iniciar e abrir no mapa`, await page.evaluate(() => { const t = document.getElementById('hunt-target'); return /Bioma: \S+/.test(t.innerText) && !t.querySelector('[data-hunt-action="target-start"]').disabled && !t.querySelector('[data-hunt-action="target-open-map"]').disabled && game.getHuntSession() === null; }));
+            check(`Central ${vp.name}: botões com pelo menos 44 px de altura e sem rolagem horizontal`, await page.evaluate(() => [...document.querySelectorAll('#hunt-target .hunt-btn')].every(b => b.getBoundingClientRect().height >= 44)) && await noOverflow());
+            await page.locator('#hunt-target [data-hunt-action="target-start"]').click();
+            await page.waitForFunction(() => game.isHuntRunning() && gameUI.worldEncounters.cycle !== null, null, { timeout: 5000 });
+            const started = await page.evaluate(() => ({ id: game.getHuntSession().id, species: gameUI.worldEncounters.cycle.speciesId, text: document.getElementById('hunt-target').innerText }));
+            check(`Central ${vp.name}: iniciar usa o fluxo oficial — sessão ativa, ciclo do mapa da espécie e texto "Caminhando"`, started.species === 25 && /Caminhando|Chegou|Batalha/.test(started.text), JSON.stringify(started));
+            // pausar → retomar rápido pelos botões reais: mesma sessão, progresso preservado
+            await page.evaluate(() => { window.__prog = gameUI.worldEncounters.status().progressPx; });
+            await page.locator('[data-hunt-action="pause"]').click();
+            await page.waitForFunction(() => game.getHuntSession().state === 'paused');
+            const frozen = await page.evaluate(async () => { const a = gameUI.worldEncounters.status().progressPx; await new Promise(r => setTimeout(r, 700)); return { a, b: gameUI.worldEncounters.status().progressPx }; });
+            check(`Central ${vp.name}: pausar congela o deslocamento e a tela mostra Pausada`, frozen.a === frozen.b && await page.evaluate(() => /Pausada/.test(document.getElementById('hunt-target').innerText)), JSON.stringify(frozen));
+            await page.locator('[data-hunt-action="resume"]').click();
+            await page.waitForFunction(() => game.getHuntSession().state === 'running');
+            check(`Central ${vp.name}: retomar mantém a MESMA sessão e o progresso não recua`, await page.evaluate((id) => game.getHuntSession().id === id && gameUI.worldEncounters.status().progressPx >= window.__prog, started.id));
+            // trocar de aba interna e voltar: a caçada não é interrompida e a tela volta ao estado atual
+            await page.locator('#tab-nav [data-tab="tab-map"]').click();
+            await sleep(600);
+            check(`Central ${vp.name}: trocar para o Mapa não interrompe a caçada nem duplica a sessão`, await page.evaluate((id) => game.getHuntSession().id === id && game.isHuntRunning() && gameUI.worldEncounters.cycle !== null, started.id));
+            await page.locator('#tab-nav [data-tab="tab-hunt"]').click();
+            await page.waitForSelector('#hunt-target [data-hunt-target-text]');
+            check(`Central ${vp.name}: voltar à aba Caça mostra o estado atual sem recriar a sessão`, await page.evaluate((id) => game.getHuntSession().id === id && /Caminhando|Chegou|Batalha/.test(document.getElementById('hunt-target').innerText), started.id));
+            // abrir no mapa: só navega
+            await page.locator('#hunt-target [data-hunt-action="target-open-map"]').click();
+            check(`Central ${vp.name}: Abrir no Mapa mostra a aba Mapa na área da espécie, sem trocar a rota nem a sessão`, await page.evaluate((id) => document.getElementById('tab-map').classList.contains('active') && gameUI.worldView.areaId === 'hunt_25' && game.getHuntSession().id === id, started.id));
+            await page.locator('#tab-nav [data-tab="tab-hunt"]').click();
+            await page.locator('[data-hunt-action="stop"]').click();
+            await page.waitForFunction(() => game.getHuntSession().state === 'stopped');
+            check(`Central ${vp.name}: encerrar limpa o ciclo e a tela volta a "Nenhum alvo ativo"`, await page.evaluate(() => gameUI.worldEncounters.cycle === null && /Nenhum alvo ativo|Escolha/.test(document.getElementById('hunt-target').innerText)));
+            await context.close();
+        }
+
         // ---------- C. 恶意导入：HTML/JS 不得进入页面 ----------
         {
             const { page, context } = await newPage(() => localStorage.setItem('pokemon_idle_tutorial_done', '1'));

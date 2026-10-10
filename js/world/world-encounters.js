@@ -257,6 +257,15 @@ class WorldEncounters {
         };
     }
 
+    // F8.0: descrição somente leitura do alvo de uma espécie (nome do bioma do mapa de caça), para a Central de Caça. Usa o cache LRU dos mapas.
+    describeTarget(speciesId) {
+        let map = null;
+        try { map = Number.isInteger(speciesId) ? worldHuntMap(speciesId) : null; } catch (e) { map = null; }
+        if (!map) return null;
+        const biome = WORLD_BIOMES[map.biome];
+        return { speciesId, mapId: map.id, biomeId: map.biome, biomeName: (biome && biome.name) || map.label || map.biome };
+    }
+
     // Estado lógico do personagem no mapa (posição, direção, se está andando), lido pela view. Só avança o relógio; não desenha nada.
     hunterState(map) {
         const c = this.cycle, leg = c && c.leg;
