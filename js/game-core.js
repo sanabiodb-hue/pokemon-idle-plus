@@ -981,6 +981,8 @@ class GameCore {
 
         // 重启战斗循环
         if (restartBattle) this.startBattle();
+        // F8.1: se um alvo da fila terminou durante o cálculo offline, o próximo começa agora (a simulação já acabou; nada é reaplicado)
+        if (this.queueHook && this.queueHook.onOfflineEnd) this.queueHook.onOfflineEnd();
     }
 
     // 预构建进化链映射缓存：进化形态ID → 基础形态ID（O(1)查找）

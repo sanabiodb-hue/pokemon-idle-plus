@@ -166,5 +166,10 @@ function sanitizeAutomationState(raw) {
         const s = sanitizeHuntSession(raw.session);
         if (s) out.session = s;
     }
+    // F8.1: fila de alvos (aditiva: saves anteriores não têm o campo e continuam válidos)
+    if (typeof sanitizeHuntQueue === 'function' && _isObj(raw.queue)) {
+        const q = sanitizeHuntQueue(raw.queue, out.session);
+        if (q) out.queue = q;
+    }
     return out;
 }

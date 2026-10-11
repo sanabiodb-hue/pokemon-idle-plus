@@ -313,6 +313,52 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
             await context.close();
         }
 
+        // ---------- B4. F8.1 fila de alvos na Central (mobile e desktop): montar, iniciar, pausar, interromper, continuar, limpar ----------
+        for (const vp of [{ name: 'celular 360x640', width: 360, height: 640 }, { name: 'desktop 1280x800', width: 1280, height: 800 }]) {
+            const { page, context } = await newPage(() => localStorage.setItem('pokemon_idle_tutorial_done', '1'), { viewport: { width: vp.width, height: vp.height } });
+            await page.goto(base);
+            await page.waitForFunction(() => typeof game !== 'undefined' && game.currentBattle, null, { timeout: 10000 });
+            await page.locator('#tab-nav [data-tab="tab-hunt"]').click();
+            await page.waitForSelector('#hunt-queue');
+            const noOverflow = async () => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1 && document.getElementById('hunt-container').scrollWidth <= document.getElementById('hunt-container').clientWidth + 1);
+            const addTarget = async (id, minutes) => {
+                await page.locator('#hunt-target [data-hunt-target-search]').fill(String(id));
+                await page.locator(`#hunt-target [data-hunt-action="target-pick"][data-id="${id}"]`).click();
+                await page.locator('#hunt-target [data-hunt-queue-minutes]').fill(String(minutes));
+                await page.locator('#hunt-queue [data-hunt-action="queue-add"]').click();
+            };
+            check(`Fila ${vp.name}: começa vazia e sem iniciar`, await page.evaluate(() => /Fila vazia/.test(document.getElementById('hunt-queue').innerText) && document.querySelector('#hunt-queue [data-hunt-action="queue-start"]').disabled));
+            await addTarget(25, 2); await addTarget(16, 3);
+            check(`Fila ${vp.name}: adicionar pela busca monta a fila na ordem, com a duração de cada alvo`, await page.evaluate(() => { const v = gameUI.huntQueue.view(); return v.items.length === 2 && v.items[0].speciesId === 25 && v.items[0].minutes === 2 && v.items[1].speciesId === 16 && v.items[1].minutes === 3 && document.querySelectorAll('#hunt-queue .hunt-queue-item').length === 2; }));
+            await page.locator('#hunt-queue [data-hunt-action="queue-down"][data-index="0"]').click();
+            await page.locator('#hunt-queue [data-hunt-action="queue-up"][data-index="1"]').click();
+            check(`Fila ${vp.name}: reordenar pendentes funciona e a tela lê a fila do jogo`, await page.evaluate(() => gameUI.huntQueue.view().items.map(i => i.speciesId).join() === '25,16'));
+            check(`Fila ${vp.name}: botões com pelo menos 44 px e sem rolagem horizontal`, await page.evaluate(() => [...document.querySelectorAll('#hunt-queue .hunt-btn')].every(b => b.getBoundingClientRect().height >= 44 && b.getBoundingClientRect().width >= 44)) && await noOverflow());
+            await page.locator('#hunt-queue [data-hunt-action="queue-start"]').click();
+            await page.waitForFunction(() => game.isHuntRunning() && gameUI.huntQueue.view().state === 'running', null, { timeout: 5000 });
+            const run = await page.evaluate(() => ({ species: gameUI.worldEncounters.cycle.speciesId, id: game.getHuntSession().id, qs: gameUI.huntQueue.view().sessionId, text: document.getElementById('hunt-queue').innerText }));
+            check(`Fila ${vp.name}: iniciar a fila começa o 1º alvo pela entrada oficial (uma sessão, um ciclo) e marca o ativo`, run.species === 25 && run.id === run.qs && /alvo 1 de 2/.test(run.text), JSON.stringify(run));
+            check(`Fila ${vp.name}: com a fila rodando, iniciar de novo e limpar ficam desabilitados`, await page.evaluate(() => { const plain = document.querySelector('[data-hunt-action="start"]'); return document.querySelector('#hunt-queue [data-hunt-action="queue-start"]').disabled && document.querySelector('#hunt-queue [data-hunt-action="queue-clear"]').disabled && (plain === null || plain.disabled); }));
+            await page.locator('[data-hunt-action="pause"]').click();
+            await page.waitForFunction(() => game.getHuntSession().state === 'paused');
+            check(`Fila ${vp.name}: pausar mantém a fila na mesma posição`, await page.evaluate((id) => gameUI.huntQueue.view().index === 0 && gameUI.huntQueue.view().sessionId === id && /Fila pausada/.test(document.getElementById('hunt-queue').innerText), run.id));
+            await page.locator('#tab-nav [data-tab="tab-map"]').click();
+            await sleep(400);
+            await page.locator('#tab-nav [data-tab="tab-hunt"]').click();
+            check(`Fila ${vp.name}: trocar de aba não altera a fila nem a sessão`, await page.evaluate((id) => gameUI.huntQueue.view().sessionId === id && game.getHuntSession().id === id && gameUI.huntQueue.view().index === 0, run.id));
+            await page.locator('[data-hunt-action="stop"]').click();
+            await page.waitForFunction(() => gameUI.huntQueue.view().state === 'halted');
+            check(`Fila ${vp.name}: encerrar interrompe a fila na posição e oferece continuar`, await page.evaluate(() => /CONTINUAR FILA/.test(document.getElementById('hunt-queue').innerText) && gameUI.huntQueue.view().index === 0 && gameUI.huntQueue.view().total === 2));
+            await page.locator('#hunt-queue [data-hunt-action="queue-start"]').click();
+            await page.waitForFunction(() => game.isHuntRunning());
+            check(`Fila ${vp.name}: continuar recomeça o mesmo alvo numa sessão nova`, await page.evaluate((old) => game.getHuntSession().id !== old && gameUI.worldEncounters.cycle.speciesId === 25, run.id));
+            await page.locator('[data-hunt-action="stop"]').click();
+            await page.waitForFunction(() => gameUI.huntQueue.view().state === 'halted');
+            await page.locator('#hunt-queue [data-hunt-action="queue-clear"]').click();
+            check(`Fila ${vp.name}: limpar volta a fila vazia`, await page.evaluate(() => gameUI.huntQueue.view().total === 0 && /Fila vazia/.test(document.getElementById('hunt-queue').innerText)) && await noOverflow());
+            await context.close();
+        }
+
         // ---------- C. 恶意导入：HTML/JS 不得进入页面 ----------
         {
             const { page, context } = await newPage(() => localStorage.setItem('pokemon_idle_tutorial_done', '1'));

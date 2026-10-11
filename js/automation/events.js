@@ -10,7 +10,7 @@
 // 旧的回调（onBattleEvent / onCatch / onLevelUp / onGuideEvent）保持不变，总线是并行的新通道。
 // ============================================================
 const AUTOMATION_EVENT_TYPES = [
-    'hunt_started', 'hunt_stopped', 'hunt_paused', 'hunt_resumed',
+    'hunt_started', 'hunt_stopped', 'hunt_paused', 'hunt_resumed', 'hunt_queue',
     'battle_started', 'battle_completed', 'pokemon_defeated',
     'capture_attempted', 'pokemon_captured', 'capture_skipped',
     'xp_gained', 'level_up', 'evolution', 'heal', 'hp_low',

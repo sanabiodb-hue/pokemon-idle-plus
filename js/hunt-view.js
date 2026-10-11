@@ -20,7 +20,7 @@ const HUNT_STATE_VIEW = {
 const HUNT_LIVE_EVENTS = [
     'battle_completed', 'pokemon_captured', 'heal', 'hunt_started', 'hunt_paused', 'hunt_resumed', 'hunt_stopped',
     'route_changed', 'policy_changed', 'pokemon_switched', 'level_up', 'evolution',
-    'money_earned', 'money_spent', 'potion_bought', 'upgrade_purchased', 'hunt_completed',
+    'money_earned', 'money_spent', 'potion_bought', 'upgrade_purchased', 'hunt_completed', 'hunt_queue',
 ];
 
 function huntFormatDuration(ms) {
@@ -46,6 +46,7 @@ class HuntView {
         this._lastLimits = { battleLimit: 100, timeLimitMinutes: 60 };   // 取消勾选后再勾选时恢复的数值
         this._targetId = null;       // F8.0: só a espécie ESCOLHIDA na interface (seleção, não é estado do jogo); com ciclo ativo vale a do ciclo
         this._targetQuery = '';
+        this._queueMinutes = (typeof HUNT_QUEUE_DEFAULT_MINUTES === 'number' ? HUNT_QUEUE_DEFAULT_MINUTES : 10);   // F8.1: duração escolhida para o próximo alvo adicionado
         if (!this.root) return;
         this.section = 'ops';
         this.eco = new EconomyView(ui, this);
@@ -60,6 +61,7 @@ class HuntView {
             </div>
             <div data-section="ops" class="hunt-section">
                 <div id="hunt-target" class="hunt-card"><h3>🎯 Alvo da caçada</h3><div id="hunt-target-pick"></div><div id="hunt-target-live"></div></div>
+                <div id="hunt-queue" class="hunt-card"></div>
                 <div id="hunt-status" class="hunt-card"></div>
                 <div id="hunt-activity" class="hunt-card"></div>
                 <div id="hunt-route" class="hunt-card"></div>
@@ -80,6 +82,7 @@ class HuntView {
         this.root.addEventListener('change', (e) => this.handleChange(e.target));
         this.root.addEventListener('input', (e) => {
             if (e.target.matches && e.target.matches('[data-hunt-target-search]')) { this._targetQuery = e.target.value; this.renderTargetResults(); return; }
+            if (e.target.matches && e.target.matches('[data-hunt-queue-minutes]')) { this._queueMinutes = Math.floor(Number(e.target.value)); return; }
             if (e.target.matches && e.target.matches('input[type=range]')) this._syncRangeLabel(e.target);
         });
     }
@@ -145,6 +148,7 @@ class HuntView {
         this.eco.renderResources();
         if (this.section === 'ops') {
             this.renderTarget();
+            this.renderQueue();
             this.renderStatus();
             this.renderActivity();
             this.renderRoute();
@@ -196,7 +200,8 @@ class HuntView {
         if (!el) return;
         el.innerHTML = `
             <label class="hunt-field"><span>Escolher espécie</span><input type="search" data-hunt-target-search value="${escapeHtml(this._targetQuery)}" placeholder="Nome ou número" autocomplete="off"></label>
-            <div id="hunt-target-results" class="hunt-chips"></div>`;
+            <div id="hunt-target-results" class="hunt-chips"></div>
+            <label class="hunt-field"><span>Duração do alvo (minutos)</span><input type="number" inputmode="numeric" min="1" max="1440" step="1" data-hunt-queue-minutes value="${Number.isFinite(this._queueMinutes) ? this._queueMinutes : ''}"></label>`;
         this.renderTargetResults();
     }
 
@@ -226,6 +231,34 @@ class HuntView {
             ${last ? `<div class="hunt-hint">Último resultado: ${last}.</div>` : ''}
             <div class="hunt-buttons">${btn('target-start', snap.sessionState === 'running' && !snap.cycle ? '🎯 CAÇAR ESTE ALVO' : '▶ INICIAR NESTE ALVO', m.startTarget, 'primary')}${btn('target-open-map', '🗺️ ABRIR NO MAPA', m.openMap)}</div>
             ${why && !m.startTarget.enabled && targetId !== null ? `<div class="hunt-hint" data-hunt-target-why>${escapeHtml(why)}</div>` : ''}`;
+    }
+
+    // ---------- F8.1 · fila de alvos (lê gameState.automation.queue via huntQueueView; nunca guarda cópia) ----------
+    renderQueue() {
+        const el = this.root.querySelector('#hunt-queue');
+        if (!el) return;
+        const snap = this._snap(), q = snap.queue;
+        if (!q) { el.innerHTML = ''; return; }
+        const m = huntControlMatrix(snap, huntCenterTargetId(snap, this._targetId));
+        const hq = this.ui.huntQueue;
+        const mark = { done: '✅', active: '▶️', pending: '⏳' };
+        const rows = q.items.map((it, i) => {
+            const st = huntQueueStatusOf(q, i);
+            const locked = hq ? hq.isLocked(i) : true;
+            const nm = this._speciesLabel(it.speciesId);
+            const btn = (action, label, off) => `<button class="hunt-btn small" data-hunt-action="${action}" data-index="${i}"${off ? ' disabled' : ''} aria-label="${label}">${label}</button>`;
+            return `<li class="hunt-queue-item ${st}" data-queue-status="${st}"><span class="hunt-queue-mark">${mark[st]}</span><span class="hunt-queue-name">${i + 1}. ${escapeHtml(nm)} <small>#${String(it.speciesId).padStart(3, '0')} · ${it.minutes} min</small></span>`
+                + `<span class="hunt-queue-ctl">${btn('queue-up', '▲', locked || i === 0 || (hq && hq.isLocked(i - 1)))}${btn('queue-down', '▼', locked || i === q.total - 1)}${btn('queue-remove', '✕', locked)}</span></li>`;
+        }).join('');
+        const startLabel = q.state === 'idle' ? '▶ INICIAR FILA' : (q.state === 'running' && q.sessionId !== null) ? '▶ EM ANDAMENTO' : '▶ CONTINUAR FILA';
+        const cb = (action, label, ctl, cls = '') => `<button class="hunt-btn ${cls}" data-hunt-action="${action}"${ctl.enabled ? '' : ' disabled'}${ctl.reason ? ` title="${escapeHtml(ctl.reason)}"` : ''}>${label}</button>`;
+        const why = [m.queueStart, m.queueAdd].find(c => !c.enabled && c.reason);
+        el.innerHTML = `
+            <h3>📋 Fila de alvos</h3>
+            <div class="hunt-target-status" data-hunt-queue-text>${escapeHtml(huntQueueStatusText(q, snap, (id) => this._speciesLabel(id)))}</div>
+            ${q.total ? `<ol class="hunt-queue-list">${rows}</ol>` : ''}
+            <div class="hunt-buttons">${cb('queue-add', '＋ ADICIONAR À FILA', m.queueAdd)}${cb('queue-start', startLabel, m.queueStart, 'primary')}${cb('queue-clear', '🗑 LIMPAR', m.queueClear)}</div>
+            ${why ? `<div class="hunt-hint" data-hunt-queue-why>${escapeHtml(why.reason)}</div>` : ''}`;
     }
 
     // A cada segundo: só texto e barra do deslocamento (sem redesenhar nem tocar na lógica)
@@ -482,7 +515,7 @@ class HuntView {
     handleAction(action, data) {
         const g = this.game;
         // Um clique atrasado (a tela ainda não atualizou) é conferido contra o estado REAL antes de pedir a operação; as operações revalidam também.
-        const gate = { start: 'start', pause: 'pause', resume: 'resume', stop: 'stop', 'target-start': 'startTarget', 'target-open-map': 'openMap' }[action];
+        const gate = { start: 'start', pause: 'pause', resume: 'resume', stop: 'stop', 'target-start': 'startTarget', 'target-open-map': 'openMap', 'queue-add': 'queueAdd', 'queue-start': 'queueStart', 'queue-clear': 'queueClear' }[action];
         if (gate) {
             const ctl = this._matrix()[gate];
             if (!ctl.enabled) { this.ui.showToast(`⚠️ ${ctl.reason}`); this.render(); return; }
@@ -492,9 +525,20 @@ class HuntView {
             case 'pause': this._report(g.dispatchAutomationAction({ type: 'PAUSE_HUNT' })); break;
             case 'resume': this._report(g.dispatchAutomationAction({ type: 'RESUME_HUNT' })); break;
             case 'stop': this._report(g.dispatchAutomationAction({ type: 'STOP_HUNT' })); break;
+            case 'queue-add': {
+                const hq = this.ui.huntQueue, id = huntCenterTargetId(this._snap(), this._targetId);
+                if (!hq || id === null) { this.ui.showToast('⚠️ Escolha uma espécie para adicionar.'); break; }
+                this._report(hq.add(id, this._queueMinutes), '📋 Alvo adicionado à fila.');
+                break;
+            }
+            case 'queue-start': this._report(this.ui.huntQueue ? this.ui.huntQueue.start() : { ok: false, message: 'Fila indisponível.' }, '🎯 Fila iniciada!'); break;
+            case 'queue-clear': this._report(this.ui.huntQueue ? this.ui.huntQueue.clear() : { ok: false, message: 'Fila indisponível.' }); break;
+            case 'queue-remove': this._report(this.ui.huntQueue.remove(Number(data.index))); break;
+            case 'queue-up': this._report(this.ui.huntQueue.move(Number(data.index), -1)); break;
+            case 'queue-down': this._report(this.ui.huntQueue.move(Number(data.index), 1)); break;
             case 'target-pick': {
                 const id = Number(data.id);
-                if (Number.isInteger(id) && POKEMON_DATA[id]) { this._targetId = id; this.renderTargetResults(); this.renderTarget(); }
+                if (Number.isInteger(id) && POKEMON_DATA[id]) { this._targetId = id; this.renderTargetResults(); this.renderTarget(); this.renderQueue(); }
                 break;
             }
             case 'target-start': {

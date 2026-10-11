@@ -94,8 +94,14 @@ class AutomationEngine {
     _snapshot(stage, extra) {
         const g = this.game;
         const session = g.getHuntSession();
+        // F8.1: a sessão iniciada pela fila usa a duração do alvo como limite de tempo (o mesmo mecanismo time_limit); a política guardada não muda
+        let policy = g.getAutomationPolicy();
+        const q = g.gameState.automation && g.gameState.automation.queue;
+        if (q && q.state === 'running' && q.sessionId === session.id && q.items[q.index]) {
+            policy = { ...policy, stopConditions: { ...policy.stopConditions, timeLimitMinutes: q.items[q.index].minutes } };
+        }
         const snap = {
-            policy: g.getAutomationPolicy(),
+            policy,
             stats: session.stats,
             durationMs: huntSessionDurationMs(session, g.now()),
             currentRouteId: g.gameState.currentRoute,

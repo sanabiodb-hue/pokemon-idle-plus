@@ -47,6 +47,7 @@ function huntCenterSnapshot(game, enc) {
         hasTeam: !!(team && team.length > 0),
         cycle,
         lastResult: enc && enc.lastResult ? enc.lastResult : null,
+        queue: typeof huntQueueView === 'function' ? huntQueueView(game) : null,       // F8.1: leitura da fila (fonte: gameState.automation.queue)
     };
 }
 
@@ -64,11 +65,14 @@ function huntControlMatrix(snap, targetId) {
     const blocked = snap.offline ? 'Aguarde o cálculo offline terminar.' : snap.tower ? 'Saia da Torre de Desafio primeiro.' : null;
     const hasTarget = Number.isInteger(targetId) && targetId >= 1;
 
-    const start = active ? no('Já existe uma caçada em andamento.') : blocked ? no(blocked) : !snap.hasTeam ? no('Monte uma equipe antes de iniciar a caçada.') : yes;
+    const q = snap.queue;
+    const queueRunning = !!q && q.state === 'running';                  // com sessão própria ou aguardando o próximo alvo
+    const start = active ? no('Já existe uma caçada em andamento.') : queueRunning ? no('A fila de alvos está em andamento.') : blocked ? no(blocked) : !snap.hasTeam ? no('Monte uma equipe antes de iniciar a caçada.') : yes;
 
     let startTarget;
     if (!hasTarget) startTarget = no('Escolha uma espécie para caçar.');
     else if (snap.cycle) startTarget = no('Já existe uma caçada ativa em um mapa de caça.');
+    else if (queueRunning) startTarget = no('A fila de alvos está em andamento.');
     else if (snap.sessionState === 'paused') startTarget = no('Retome ou pare a caçada pausada antes de iniciar outra.');
     else if (blocked) startTarget = no(blocked);
     else if (snap.sessionState !== 'running' && !snap.hasTeam) startTarget = no('Monte uma equipe antes de iniciar a caçada.');
@@ -79,7 +83,25 @@ function huntControlMatrix(snap, targetId) {
     const stop = !active ? no('Não há caçada ativa.') : snap.offline ? no('Aguarde o cálculo offline terminar.') : yes;
     // Abrir no Mapa só navega (nunca inicia nem muda a rota). Com um ciclo ativo só abre o mapa DELE: abrir outro cancelaria a caminhada.
     const openMap = hasTarget || snap.cycle ? yes : no('Escolha uma espécie para ver o mapa.');
-    return { start, startTarget, pause, resume, stop, openMap };
+
+    // ---- fila (F8.1): espelha HuntQueue.add/start/clear ----
+    let queueAdd;
+    if (!q) queueAdd = no('Fila indisponível.');
+    else if (!hasTarget) queueAdd = no('Escolha uma espécie para adicionar.');
+    else if (q.state === 'done') queueAdd = no('A fila terminou. Limpe-a para montar outra.');
+    else if (q.items.some(i => i.speciesId === targetId)) queueAdd = no('Essa espécie já está na fila.');
+    else if (q.total >= HUNT_QUEUE_MAX_ITEMS) queueAdd = no(`A fila comporta no máximo ${HUNT_QUEUE_MAX_ITEMS} alvos.`);
+    else queueAdd = yes;
+    let queueStart;
+    if (!q || !q.total) queueStart = no('Adicione alvos à fila primeiro.');
+    else if (q.state === 'done') queueStart = no('A fila terminou. Limpe-a para montar outra.');
+    else if (q.state === 'running' && q.sessionId !== null) queueStart = no('A fila já está em andamento.');
+    else if (active) queueStart = no('Já existe uma caçada em andamento.');
+    else if (blocked) queueStart = no(blocked);
+    else if (!snap.hasTeam) queueStart = no('Monte uma equipe antes de iniciar a caçada.');
+    else queueStart = yes;
+    const queueClear = !q || !q.total ? no('A fila está vazia.') : q.state === 'running' && q.sessionId !== null ? no('Encerre a caçada em andamento antes de limpar a fila.') : yes;
+    return { start, startTarget, pause, resume, stop, openMap, queueAdd, queueStart, queueClear };
 }
 
 // Espécie exibida: a do ciclo ativo (autoritativa); sem ciclo, a escolhida na interface (só uma seleção, não é estado do jogo).
@@ -104,4 +126,21 @@ function huntCenterStatusText(snap, name, tilePx = 16) {
     else text = paused ? 'Pausada: o próximo ponto será escolhido na retomada.' : 'Escolhendo o próximo ponto.';
     if (snap.offline) text += ' (calculando o tempo offline…)';
     return text;
+}
+
+// F8.1: texto de status da fila, só com a fila e a sessão reais.
+function huntQueueStatusText(q, snap, nameOf) {
+    if (!q || !q.total) return 'Fila vazia. Escolha uma espécie, defina a duração e adicione à fila.';
+    const n = (i) => (q.items[i] ? nameOf(q.items[i].speciesId) : '');
+    if (q.state === 'done') return `Fila concluída: ${q.total} ${q.total === 1 ? 'alvo' : 'alvos'}. Limpe a fila para montar outra.`;
+    if (q.state === 'halted') {
+        const why = { manual: 'você encerrou a caçada', no_potions: 'acabaram as poções', battle_limit: 'limite de batalhas', shiny_found: 'um shiny foi encontrado', route_complete: 'a rota foi concluída', start_failed: 'o alvo não pôde ser iniciado', session_lost: 'a sessão não foi encontrada', invalid_data: 'dados da fila inválidos' }[q.haltReason] || 'a caçada foi interrompida';
+        return `Fila interrompida (${why}) no alvo ${q.index + 1} de ${q.total}: ${n(q.index)}. Continue para recomeçar este alvo.`;
+    }
+    if (q.state === 'running' && q.sessionId === null) return `Fila aguardando o alvo ${q.index + 1} de ${q.total}: ${n(q.index)}. Continue para iniciá-lo.`;
+    if (q.state === 'running') {
+        const paused = snap && snap.sessionState === 'paused';
+        return `Fila ${paused ? 'pausada' : 'em andamento'}: alvo ${q.index + 1} de ${q.total} — ${n(q.index)} (${q.items[q.index].minutes} min).`;
+    }
+    return `Fila pronta: ${q.total} ${q.total === 1 ? 'alvo' : 'alvos'}. Inicie para começar pelo primeiro.`;
 }

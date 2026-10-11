@@ -12,7 +12,7 @@ const ROOT = path.resolve(__dirname, '..');
 const DATA_FILES = ['js/pokemon-data.js', 'js/route-data.js', 'js/game-config.js'];
 const GAME_FILES = [
     'js/lzstring.min.js', 'js/util.js', 'js/pokemon-data.js', 'js/route-data.js',
-    'js/game-config.js', 'js/economy/config.js', 'js/automation/clock.js', 'js/automation/events.js', 'js/analytics.js', 'js/pokemon-instance.js', 'js/automation/quality.js', 'js/automation/policy.js', 'js/automation/hunt-session.js', 'js/automation/capture.js', 'js/species-traits.js', 'js/party.js', 'js/pc.js',
+    'js/game-config.js', 'js/economy/config.js', 'js/automation/clock.js', 'js/automation/events.js', 'js/analytics.js', 'js/pokemon-instance.js', 'js/automation/quality.js', 'js/automation/policy.js', 'js/automation/hunt-session.js', 'js/automation/queue.js', 'js/automation/capture.js', 'js/species-traits.js', 'js/party.js', 'js/pc.js',
     'js/pokemon-validation.js', 'js/pokemon-migration.js', 'js/pokemon-roster.js',
     'js/save-manager.js', 'js/game-core.js', 'js/guidance.js', 'js/economy/economy.js', 'js/economy/shop.js', 'js/economy/upgrades.js', 'js/economy/analyzer.js', 'js/economy/route-compare.js', 'js/automation/decision.js', 'js/automation/actions.js', 'js/automation/engine.js', 'js/automation/simulation.js', 'js/economy-view.js', 'js/hunt-center.js', 'js/hunt-view.js',
 ];
@@ -118,7 +118,8 @@ function loadGameContext(opts = {}) {
   ECONOMY_CONFIG, sanitizeEconomyState, sanitizeAnalyzerState, huntRates, goalMetric, emptyRouteAgg, sanitizeUpgradesState, SHOP_ITEMS, baseGoldPerWin, BERRY_SEED_PRICE, TALENT_RESET_COST,
   MAX_POTIONS, INITIAL_POTIONS, POTION_HEAL_PERCENT, potionHealAmount,
   EconomyView, HuntView, huntFormatDuration, HUNT_STATE_VIEW,
-  HUNT_CENTER_RESULT_LIMIT, huntSpeciesMatches, huntCenterSnapshot, huntControlMatrix, huntCenterTargetId, huntCenterStatusText,
+  HuntQueue, huntQueueView, huntQueueStatusOf, sanitizeHuntQueue, defaultHuntQueue, HUNT_QUEUE_MAX_ITEMS, HUNT_QUEUE_DEFAULT_MINUTES,
+  HUNT_CENTER_RESULT_LIMIT, huntQueueStatusText, huntSpeciesMatches, huntCenterSnapshot, huntControlMatrix, huntCenterTargetId, huntCenterStatusText,
   createSimulationRng, createSimulationClone, simulateHunt, huntEfficiency, buildHuntOfflineReport, recommendHuntNext, recommendHuntRoute,
   Analytics, ANALYTICS_STORAGE_KEY, ANALYTICS_QUEUE_MAX, ANALYTICS_EVENT_NAMES, ANALYTICS_SESSION_GAP_MS,
   CAPTURE_DUPLICATE_POLICIES, DEFAULT_CAPTURE_DUPLICATE_POLICY, DUPLICATE_CAPTURE_RATE, DUPLICATE_SPECIES_CAP,
