@@ -57,6 +57,7 @@ class AutomationEngine {
         if (!s || e.tower) return;
         if (e.result === 'victory') huntSessionRecord(s, { battles: 1, victories: 1, xp: e.xp, money: e.gold });
         else if (e.result === 'defeat') huntSessionRecord(s, { battles: 1, defeats: 1 });
+        huntSessionShinyChainRecord(s, e.result, e.enemyId);      // F9.1: cadeia de shiny (mesmo ponto no online e no Fast Driver)
         if (e.offline && !this.game._fastSim) return;   // 非快速驱动的离线事件只累计统计
         this.evaluate('after_battle', { fainted: e.result === 'defeat' });
     }

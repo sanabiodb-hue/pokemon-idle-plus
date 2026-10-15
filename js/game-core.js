@@ -1279,7 +1279,10 @@ class GameCore {
         const ivs = this.generateIVs();
 
         // 闪光判定：基础 1/4096，叠加徽章/天赋/挑战塔加成（公式见 getShinyRate）
-        const isShiny = this.rng() < shinyRate;
+        // F9.1: a cadeia de shiny entra AQUI, no momento do sorteio (não no spawnCache do offline, que é calculado uma vez): taxa × multiplicador da
+        // sessão rodando para esta espécie (1 = sem efeito, valor idêntico). Continua sendo UMA chamada ao RNG; só o limiar muda. Fora da Torre.
+        const chain = this._towerMode ? 1 : huntSessionShinyMult(this.getHuntSession(), pokemonId);
+        const isShiny = this.rng() < (chain === 1 ? shinyRate : shinyRate * chain);
 
         const pokemon = {
             uid: this.generateUID(),

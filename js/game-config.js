@@ -476,6 +476,12 @@ const REGION_POKEDEX_RANGES = {
 const BASE_CRIT_RATE = 0.05;            // 基础会心率（在线/离线统一）
 const BASE_CRIT_MULTIPLIER = 1.5;       // 基础会心倍率
 const BASE_SHINY_RATE = 1 / 4096;       // 基础闪光概率
+
+// F9.1: cadeia de shiny na caçada. Vitórias seguidas contra a MESMA espécie na mesma sessão de caça multiplicam a taxa de shiny dessa espécie
+// (compondo com os multiplicadores existentes): mult = min(MAX_MULT, 1 + STEP × vitórias). Teto fixo: nunca passa de ×3 (40 vitórias com o passo atual).
+const SHINY_CHAIN_STEP = 0.05;        // +5% da taxa base por vitória seguida
+const SHINY_CHAIN_MAX_MULT = 3;       // teto do multiplicador da cadeia
+const SHINY_CHAIN_MAX_COUNT = 1e9;    // só uma guarda de sanidade do contador salvo (o multiplicador já é limitado pelo teto)
 const DEFEAT_HEAL_PERCENT_PER_SEC = 0.2; // 战败后每秒回复最大生命的比例
 const VICTORY_HEAL_PERCENT = 0.1;       // 胜利后回复最大生命的比例
 const TEAM_EXP_RATE = 0.5;              // 队伍其他成员获得的经验比例

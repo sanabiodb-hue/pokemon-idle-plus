@@ -245,6 +245,7 @@ class HuntView {
             <div class="hunt-target-status" data-hunt-target-text>${escapeHtml(huntCenterStatusText(snap, name, WORLD_TILE_PX()))}</div>
             ${snap.cycle ? `<div class="hunt-target-bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${snap.cycle.pct}"><i data-hunt-target-bar style="width:${snap.cycle.pct}%"></i></div>` : ''}
             ${last ? `<div class="hunt-hint">Último resultado: ${last}.</div>` : ''}
+            ${snap.shinyChain ? `<div class="hunt-hint" data-hunt-shiny-chain>Cadeia: ${snap.shinyChain.count} · +${snap.shinyChain.bonusPct}% shiny${snap.shinyChain.capped ? ' (máx.)' : ''}</div>` : ''}
             <div class="hunt-buttons">${btn('target-start', snap.sessionState === 'running' && !snap.cycle ? '🎯 CAÇAR ESTE ALVO' : '▶ INICIAR NESTE ALVO', m.startTarget, 'primary')}${btn('target-open-map', '🗺️ ABRIR NO MAPA', m.openMap)}</div>
             ${why && !m.startTarget.enabled && targetId !== null ? `<div class="hunt-hint" data-hunt-target-why>${escapeHtml(why)}</div>` : ''}`;
     }

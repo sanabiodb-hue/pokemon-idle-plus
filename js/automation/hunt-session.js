@@ -81,6 +81,40 @@ function huntSessionRecord(session, amounts) {
     return true;
 }
 
+// F9.1 · cadeia de shiny: session.shinyChain = { speciesId, count } (campo opcional e aditivo; sessão sem ele = cadeia zerada).
+// Funções puras; quem as chama é o handler compartilhado de battle_completed (online e Fast Driver) e o sorteio do inimigo.
+function huntShinyChainMultiplier(count) {
+    return Math.min(SHINY_CHAIN_MAX_MULT, 1 + SHINY_CHAIN_STEP * Math.max(0, count));
+}
+
+// Multiplicador a aplicar ao sorteio de shiny de `speciesId` (1 = sem efeito). Só vale com a sessão RODANDO.
+function huntSessionShinyMult(session, speciesId) {
+    const c = session && session.state === 'running' ? session.shinyChain : null;
+    return c && c.speciesId === speciesId && c.count > 0 ? huntShinyChainMultiplier(c.count) : 1;
+}
+
+// Registra o fim de uma batalha: vitória contra a mesma espécie soma 1; contra outra recomeça em 1; derrota zera. Devolve se mexeu na cadeia.
+// Encontro cancelado não chega aqui (não há battle_completed), então não conta nem zera.
+function huntSessionShinyChainRecord(session, result, enemyId) {
+    if (!session || session.state !== 'running') return false;
+    if (result === 'victory' && Number.isInteger(enemyId) && enemyId >= 1) {
+        const c = session.shinyChain;
+        if (c && c.speciesId === enemyId) c.count = Math.min(SHINY_CHAIN_MAX_COUNT, c.count + 1);
+        else session.shinyChain = { speciesId: enemyId, count: 1 };
+        return true;
+    }
+    if (result === 'defeat' && session.shinyChain) { delete session.shinyChain; return true; }
+    return false;
+}
+
+// Leitura para a interface: null quando não há cadeia (ou a sessão acabou)
+function huntShinyChainView(session) {
+    const c = session && (session.state === 'running' || session.state === 'paused') ? session.shinyChain : null;
+    if (!c || !(c.count > 0)) return null;
+    const mult = huntShinyChainMultiplier(c.count);
+    return { speciesId: c.speciesId, count: c.count, bonusPct: Math.round((mult - 1) * 100), capped: mult >= SHINY_CHAIN_MAX_MULT };
+}
+
 // 存档清洗：任何东西进来都得到合法会话或 null。读档时 running 一律降为 paused（不会悄悄自己继续跑）
 function sanitizeHuntSession(raw) {
     if (!_isObj(raw) || !HUNT_SESSION_STATES.includes(raw.state)) return null;
@@ -114,6 +148,11 @@ function sanitizeHuntSession(raw) {
             out.world.to = w.to;
             out.world.progressPx = w.progressPx;
         }
+    }
+    // F9.1: cadeia de shiny (aditivo; saves antigos não têm). Qualquer valor inválido derruba só a cadeia (volta a zero), nunca a sessão.
+    if (_isObj(raw.shinyChain) && Number.isInteger(raw.shinyChain.speciesId) && raw.shinyChain.speciesId >= 1 && raw.shinyChain.speciesId <= 9999999
+        && Number.isInteger(raw.shinyChain.count) && raw.shinyChain.count >= 1 && raw.shinyChain.count <= SHINY_CHAIN_MAX_COUNT) {
+        out.shinyChain = { speciesId: raw.shinyChain.speciesId, count: raw.shinyChain.count };
     }
     // 关机期间的时间不算运行时长：running 降为 paused 时只保留已并入 activeMs 的部分
     if (out.routeId === null) return null;

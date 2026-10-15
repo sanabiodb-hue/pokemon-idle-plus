@@ -47,6 +47,7 @@ function huntCenterSnapshot(game, enc) {
         hasTeam: !!(team && team.length > 0),
         cycle,
         lastResult: enc && enc.lastResult ? enc.lastResult : null,
+        shinyChain: typeof huntShinyChainView === 'function' ? huntShinyChainView(s) : null,      // F9.1: { speciesId, count, bonusPct, capped } | null
         queue: typeof huntQueueView === 'function' ? huntQueueView(game) : null,       // F8.1: leitura da fila (fonte: gameState.automation.queue)
     };
 }

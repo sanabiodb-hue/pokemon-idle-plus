@@ -377,6 +377,35 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
             await context.close();
         }
 
+        // ---------- B3d. F9.1 cadeia de shiny na Central de Caça (celular e desktop): linha só com cadeia > 0, no teto e depois da derrota ----------
+        for (const vp of [{ name: 'celular 360x640', width: 360, height: 640 }, { name: 'desktop 1280x800', width: 1280, height: 800 }]) {
+            const { page, context } = await newPage(() => localStorage.setItem('pokemon_idle_tutorial_done', '1'), { viewport: { width: vp.width, height: vp.height } });
+            await page.goto(base);
+            await page.waitForFunction(() => typeof game !== 'undefined' && game.currentBattle, null, { timeout: 10000 });
+            await page.locator('#tab-nav [data-tab="tab-hunt"]').click();
+            await page.waitForSelector('#hunt-target [data-hunt-target-search]');
+            await page.locator('#hunt-target [data-hunt-target-search]').fill('25');
+            await page.waitForSelector('#hunt-target [data-hunt-action="target-pick"]');
+            await page.locator('#hunt-target [data-hunt-action="target-pick"]').first().click();
+            await page.locator('#hunt-target [data-hunt-action="target-start"]').click();
+            await page.waitForFunction(() => game.isHuntRunning(), null, { timeout: 5000 });
+            const line = () => page.evaluate(() => { const el = document.querySelector('#hunt-target [data-hunt-shiny-chain]'); return el ? el.innerText.trim() : null; });
+            const fit = () => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1 && document.getElementById('hunt-container').scrollWidth <= document.getElementById('hunt-container').clientWidth + 1);
+            check(`Cadeia ${vp.name}: sem cadeia a linha não aparece`, (await line()) === null);
+            // vitórias reais pelo evento oficial (o mesmo que o motor emite): a linha aparece e cresce
+            await page.evaluate(() => { for (let i = 0; i < 12; i++) game._emit('battle_completed', { result: 'victory', enemyId: 25, xp: 1, gold: 1, route: game.gameState.currentRoute }); });
+            await page.waitForFunction(() => document.querySelector('#hunt-target [data-hunt-shiny-chain]'), null, { timeout: 5000 });
+            check(`Cadeia ${vp.name}: "Cadeia: 12 · +60% shiny" aparece depois de 12 vitórias seguidas`, /^Cadeia: 12 · \+60% shiny$/.test(await line()), String(await line()));
+            check(`Cadeia ${vp.name}: sem rolagem horizontal com a linha visível`, await fit());
+            await page.evaluate(() => { for (let i = 0; i < 40; i++) game._emit('battle_completed', { result: 'victory', enemyId: 25, xp: 1, gold: 1, route: game.gameState.currentRoute }); });
+            await page.waitForFunction(() => /máx/.test((document.querySelector('#hunt-target [data-hunt-shiny-chain]') || {}).innerText || ''), null, { timeout: 5000 });
+            check(`Cadeia ${vp.name}: no teto mostra "+200% shiny (máx.)"`, /\+200% shiny \(máx\.\)/.test(await line()), String(await line()));
+            await page.evaluate(() => game._emit('battle_completed', { result: 'defeat', enemyId: 25, xp: 0, gold: 0, route: game.gameState.currentRoute, tower: false }));
+            await page.waitForFunction(() => !document.querySelector('#hunt-target [data-hunt-shiny-chain]'), null, { timeout: 5000 });
+            check(`Cadeia ${vp.name}: com o líder derrotado a linha some`, (await line()) === null && !(await page.evaluate(() => game.getHuntSession().shinyChain)));
+            await context.close();
+        }
+
         // ---------- B4. F8.1 fila de alvos na Central (mobile e desktop): montar, iniciar, pausar, interromper, continuar, limpar ----------
         for (const vp of [{ name: 'celular 360x640', width: 360, height: 640 }, { name: 'desktop 1280x800', width: 1280, height: 800 }]) {
             const { page, context } = await newPage(() => localStorage.setItem('pokemon_idle_tutorial_done', '1'), { viewport: { width: vp.width, height: vp.height } });
