@@ -24,7 +24,7 @@ class WorldView {
         this.ui = ui;
         this.game = ui.game;
         this.encounters = ui.worldEncounters || null;   // F7.6: lógica dos encontros (opcional; sem ela o mundo funciona como antes)
-        this._enc = null;                  // imagem do sprite do encontro atual: { id, img, ready, failed }
+        this._enc = null;                  // F8.3: Map { chave -> { id, shiny, img, ready, failed, box } } da espécie do encontro atual
         this.root = document.getElementById('world-panel');
         this.active = false;
         this.areaId = WORLD_START_MAP_ID;  // área exibida (só visual)
@@ -346,31 +346,92 @@ WorldView._assets = null; WorldView.failed = true; });   // permite tentar de no
         if (bar !== null) { this.encounterBar.setAttribute('aria-valuenow', String(bar)); this.encounterBar.firstElementChild.style.width = `${bar}%`; }
     }
 
-    // Sprite do Pokémon do encontro (um só em memória); redesenha quando carrega
-    _encounterSprite(speciesId) {
-        if (!this._enc || this._enc.id !== speciesId) {
-            const entry = { id: speciesId, img: null, ready: false, failed: false };
-            this._enc = entry;
-            if (typeof Image !== 'undefined' && typeof getPokemonSpriteUrl === 'function') {
+    // F8.3: sprite do Pokémon do encontro. Uma entrada por { espécie, variante } da espécie atual (no máximo normal + shiny); o cache é
+    // esvaziado quando o ciclo termina ou a espécie muda, então nada de imagem velha/duplicada. Nenhum timer: tudo vem de onload/onerror.
+    static get ENCOUNTER_SPRITE_SCALE() { return 0.375; }   // 96px do PNG -> 36px do mundo; fator ÚNICO (proporção preservada, tamanhos relativos mantidos)
+
+    _encounterSprite(speciesId, shiny) {
+        const key = `${speciesId}${shiny ? 's' : ''}`;
+        if (!this._enc) this._enc = new Map();
+        for (const [k, e] of this._enc) if (e.id !== speciesId) this._enc.delete(k);          // trocou de espécie: solta as imagens anteriores
+        let entry = this._enc.get(key);
+        if (!entry) {
+            entry = { id: speciesId, shiny: !!shiny, img: null, ready: false, failed: false, box: null };
+            this._enc.set(key, entry);
+            const url = typeof getPokemonSpriteUrl === 'function' ? (shiny && typeof getShinyPokemonSpriteUrl === 'function' ? getShinyPokemonSpriteUrl(speciesId) : getPokemonSpriteUrl(speciesId)) : null;
+            if (typeof Image !== 'undefined' && url) {
                 const img = new Image();
-                img.onload = () => { entry.ready = true; if (this._enc === entry) this.requestRedraw(true); };
-                img.onerror = () => { entry.failed = true; if (this._enc === entry) this.requestRedraw(true); };
-                img.src = getPokemonSpriteUrl(speciesId);
+                img.onload = () => { entry.ready = img.naturalWidth > 0 && img.naturalHeight > 0; entry.failed = !entry.ready; entry.box = entry.ready ? this._opaqueBox(img) : null; if (this._enc && this._enc.get(key) === entry) this.requestRedraw(true); };
+                img.onerror = () => { entry.failed = true; if (this._enc && this._enc.get(key) === entry) this.requestRedraw(true); };
+                img.src = url;
                 entry.img = img;
             } else entry.failed = true;
         }
-        return this._enc;
+        return entry;
     }
 
-    // O Pokémon vive em coordenadas do MUNDO (centro do tile do ponto); a câmera só aplica a transformação
-    _drawEncounter(ctx, c, camera, metrics) {
+    // Caixa opaca do PNG (os sprites têm margem transparente variável; sem ela os pés não ficariam no ponto do mundo). Uma leitura por sprite carregado.
+    _opaqueBox(img) {
+        const w = img.naturalWidth, h = img.naturalHeight, full = { x0: 0, y0: 0, x1: w - 1, y1: h - 1 };
+        try {
+            const cv = document.createElement('canvas');
+            cv.width = w; cv.height = h;
+            const cx = cv.getContext('2d');
+            cx.drawImage(img, 0, 0);
+            const d = cx.getImageData(0, 0, w, h).data;
+            let x0 = w, y0 = h, x1 = -1, y1 = -1;
+            for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) if (d[(y * w + x) * 4 + 3] > 0) { if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }
+            return x1 < 0 ? full : { x0, y0, x1, y1 };
+        } catch (e) { return full; }                                                         // canvas "contaminado"/sem 2D: ancora na borda do PNG
+    }
+
+    // Variante shiny: só quando o inimigo da espécie do encontro já foi gerado (chegada/batalha). Durante a aproximação ele ainda não existe
+    _encounterShiny(c) {
+        if (!c || c.state === 'approaching') return false;
+        const g = this.game, battle = g && g.currentBattle, wild = (battle && battle.wild) || (g && g.gameState && g.gameState.currentEnemy);
+        return !!(wild && wild.id === c.speciesId && wild.isShiny);
+    }
+
+    // O treinador termina a caminhada em cima do ponto; para o Pokémon não ficar escondido atrás dele, o desenho fica um passo À FRENTE do treinador,
+    // no sentido do último trecho do caminho (fixo durante toda a perna: não "pula" na chegada). Só visual: ponto, caminho e colisão não mudam.
+    static get ENCOUNTER_STAND_OFF() { return { side: 16, up: 24, down: 14 }; }   // 24 = altura do quadro do treinador: acima dele o Pokémon não fica escondido
+    _encounterOffset(c) {
+        const cyc = this.encounters && this.encounters.cycle, leg = cyc && cyc.leg, w = leg && leg.sequence === c.sequence && leg.waypoints;
+        if (!w || w.length < 2) return { dx: 0, dy: 0 };
+        for (let i = w.length - 1; i > 0; i--) {
+            const sx = Math.sign(w[i].x - w[i - 1].x), sy = Math.sign(w[i].y - w[i - 1].y);
+            const so = WorldView.ENCOUNTER_STAND_OFF;
+            if (sx || sy) return { dx: sx * so.side, dy: sy < 0 ? -so.up : sy * so.down };
+        }
+        return { dx: 0, dy: 0 };
+    }
+
+    // O Pokémon vive em coordenadas do MUNDO (centro do tile do ponto); a câmera só aplica a transformação.
+    // `front`: false = desenho antes do treinador (atrás dele); true = depois (à frente, quando fica abaixo dele na tela)
+    _drawEncounter(ctx, c, camera, metrics, front = false) {
         if (!c || !['approaching', 'arrived', 'battling'].includes(c.state)) return;
-        const ts = metrics.tileSize, size = 24, z = metrics.zoom;
-        const wx = (c.point.x + 0.5) * ts, wy = (c.point.y + 0.5) * ts + 6;               // pés do sprite um pouco abaixo do centro do tile
-        const at = worldToScreen(camera, metrics, wx - size / 2, wy - size);
-        const spr = this._encounterSprite(c.speciesId);
-        if (spr.ready && spr.img) ctx.drawImage(spr.img, at.x, at.y, size * z, size * z);
-        else { ctx.fillStyle = '#e5484d'; ctx.fillRect(at.x + 8 * z, at.y + 8 * z, 8 * z, 8 * z); }   // enquanto carrega (ou se falhar): marcador simples
+        const off = this._encounterOffset(c);
+        if ((off.dy > 0) !== front) return;
+        const ts = metrics.tileSize, z = metrics.zoom;
+        const wx = (c.point.x + 0.5) * ts + off.dx, wy = (c.point.y + 0.5) * ts + 6 + off.dy;   // pés do sprite um pouco abaixo do centro do tile, um passo à frente
+        const spr = this._encounterSprite(c.speciesId, this._encounterShiny(c));
+        if (spr.ready && spr.img) {
+            const k = WorldView.ENCOUNTER_SPRITE_SCALE, box = spr.box, w = spr.img.naturalWidth, h = spr.img.naturalHeight;
+            const at = worldToScreen(camera, metrics, wx - (box.x0 + box.x1 + 1) / 2 * k, wy - (box.y1 + 1) * k);   // centro horizontal e base do conteúdo no ponto
+            ctx.drawImage(spr.img, Math.round(at.x), Math.round(at.y), Math.round(w * k * z), Math.round(h * k * z));
+            return;
+        }
+        // Sem imagem: marcador visível e distinto (carregando = caixa vazada; falha = caixa com o número da espécie). Nunca outra espécie.
+        const at = worldToScreen(camera, metrics, wx - 12, wy - 24), px = 24 * z;
+        ctx.fillStyle = spr.failed ? 'rgba(20,32,43,0.85)' : 'rgba(20,32,43,0.35)';
+        ctx.fillRect(at.x, at.y, px, px);
+        ctx.strokeStyle = spr.failed ? '#e5484d' : '#9fb3c8';
+        ctx.lineWidth = Math.max(1, z);
+        ctx.strokeRect(at.x + ctx.lineWidth / 2, at.y + ctx.lineWidth / 2, px - ctx.lineWidth, px - ctx.lineWidth);
+        if (spr.failed) {
+            ctx.fillStyle = '#ffffff'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.font = `bold ${8 * z}px sans-serif`;
+            ctx.fillText(`#${c.speciesId}`, at.x + px / 2, at.y + px / 2);
+        }
     }
 
     _setHint(text) { this._notify(text, { toast: false }); }
@@ -439,7 +500,9 @@ WorldView._assets = null; WorldView.failed = true; });   // permite tentar de no
         const camera = worldCamera(map, metrics, worldCameraFocus(player));
         this._syncInteraction(map, player);
         const enc = this.encounters && this.encounters.current && this.encounters.current.mapId === map.id ? this.encounters.current : null;
-        const encKey = enc ? `${enc.id}:${enc.state}:${this._enc && this._enc.id === enc.speciesId ? (this._enc.ready ? 1 : 0) : 0}` : '-';
+        if (this._enc && !(this.encounters && this.encounters.cycle && enc)) this._enc = null;     // ciclo encerrado / outro mapa: solta as imagens do encontro
+        let encKey = '-';
+        if (enc) { const sh = this._encounterShiny(enc), e = this._enc && this._enc.get(`${enc.speciesId}${sh ? 's' : ''}`); encKey = `${enc.id}:${enc.state}:${sh ? 1 : 0}:${e ? (e.ready ? 1 : e.failed ? 2 : 0) : 0}`; }
         const key = [encKey, map.id, metrics.bufferWidth, metrics.bufferHeight, metrics.zoom, camera.x, camera.y, player.x, player.y, player.dir, player.moving ? Math.floor(player.distance / 6) % 2 : 'idle'].join('|');
         if (key === this._lastKey) return;                    // nada mudou: não redesenha
         this._lastKey = key;
@@ -460,8 +523,9 @@ WorldView._assets = null; WorldView.failed = true; });   // permite tentar de no
                 ctx.drawImage(images.tileset, (index % cols) * ts, Math.floor(index / cols) * ts, ts, ts, at.x, at.y, ts * z, ts * z);
             }
         }
-        this._drawEncounter(ctx, enc, camera, metrics);
+        this._drawEncounter(ctx, enc, camera, metrics, false);
         this._drawCharacter(ctx, images.hero, player, camera, metrics);
+        this._drawEncounter(ctx, enc, camera, metrics, true);
         this.lastMetrics = metrics;
         this.lastCamera = camera;
         this.drawCount++;

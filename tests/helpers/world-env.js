@@ -39,8 +39,8 @@ function fakeElement(extra = {}) {
 }
 
 function fakeEnv({ width = 374, height = 374, dpr = 3, observer = true } = {}) {
-    const env = { w: width, h: height, now: 1000, frames: [], listeners: {}, winListeners: {}, observers: [], draws: [], fills: 0 };
-    env.ctx = { imageSmoothingEnabled: true, fillStyle: '', fillRect() { env.fills++; }, drawImage(...a) { env.draws.push(a); } };
+    const env = { w: width, h: height, now: 1000, frames: [], listeners: {}, winListeners: {}, observers: [], draws: [], fills: 0, strokes: 0, texts: [], images: [], imageSize: { w: 96, h: 96 }, failUrls: new Set(), alpha: null };
+    env.ctx = { imageSmoothingEnabled: true, fillStyle: '', fillRect() { env.fills++; }, strokeRect() { env.strokes++; }, fillText(t, x, y) { env.texts.push([t, x, y]); }, drawImage(...a) { env.draws.push(a); } };
     env.canvas = fakeElement({ width: 300, height: 150, attrs: {}, getContext: () => env.ctx, setAttribute(k, v) { this.attrs[k] = v; }, getBoundingClientRect: () => ({ width: env.w, height: env.h }) });
     env.viewport = fakeElement({ getBoundingClientRect: () => ({ width: env.w + 4, height: env.h + 4 }) });   // com borda: maior que o canvas
     env.message = fakeElement({ hidden: true });
@@ -57,10 +57,13 @@ function fakeEnv({ width = 374, height = 374, dpr = 3, observer = true } = {}) {
     env.huntResults = fakeElement();
     const parts = { '#world-viewport': env.viewport, '#world-canvas': env.canvas, '#world-message': env.message, '#world-caption': env.caption, '#world-hint': env.hint, '#world-controls': env.controlsEl, '#world-interact': env.interactBtn, '#world-destination': env.destination, '#world-encounter': env.encounterBox, '#world-encounter-btn': env.encounterBtn, '#world-encounter-status': env.encounterStatus, '#world-encounter-bar': env.encounterBar, '#world-hunt-input': env.huntInput, '#world-hunt-results': env.huntResults };
     env.root = fakeElement({ querySelector: (sel) => parts[sel] || null });
+    // env.alpha = { x0, y0, x1, y1 }: canvas falso cujo getImageData devolve alpha > 0 só dentro dessa caixa (leitura da caixa opaca do sprite)
+    env.alphaReads = 0;
+    env.fakeAlphaCanvas = () => ({ width: 0, height: 0, getContext() { const cv = this; return { drawImage() {}, getImageData(x, y, w, h) { env.alphaReads++; const d = new Uint8ClampedArray(w * h * 4), b = env.alpha; for (let j = b.y0; j <= b.y1; j++) for (let i = b.x0; i <= b.x1; i++) d[(j * w + i) * 4 + 3] = 255; return { data: d }; } }; } });
     const reg = (store) => ({ addEventListener(t, f) { (store[t] ||= new Set()).add(f); }, removeEventListener(t, f) { if (store[t]) store[t].delete(f); } });
-    env.document = { hidden: false, getElementById: (id) => (id === 'world-panel' ? env.root : null), createElement: (tag) => fakeElement({ tagName: tag.toUpperCase() }), ...reg(env.listeners) };
+    env.document = { hidden: false, getElementById: (id) => (id === 'world-panel' ? env.root : null), createElement: (tag) => (tag === 'canvas' && env.alpha ? env.fakeAlphaCanvas() : fakeElement({ tagName: tag.toUpperCase() })), ...reg(env.listeners) };
     env.window = { devicePixelRatio: dpr, ...reg(env.winListeners) };
-    class FakeImage { set src(v) { this._src = v; Promise.resolve().then(() => this.onload && this.onload()); } }
+    class FakeImage { constructor() { env.images.push(this); } set src(v) { this._src = v; const sz = env.imageSize; Promise.resolve().then(() => { if (env.failUrls.has(v)) { this.onerror && this.onerror(); return; } this.naturalWidth = sz.w; this.naturalHeight = sz.h; this.onload && this.onload(); }); } get src() { return this._src; } }
     class FakeObserver { constructor(cb) { this.cb = cb; this.targets = []; this.disconnected = false; env.observers.push(this); } observe(t) { this.targets.push(t); } disconnect() { this.disconnected = true; } }
     env.globals = { document: env.document, window: env.window, Image: FakeImage, requestAnimationFrame: (fn) => { env.frames.push(fn); return env.frames.length; }, cancelAnimationFrame: (id) => { env.frames[id - 1] = null; }, setTimeout, clearTimeout };
     if (observer) env.globals.ResizeObserver = FakeObserver;

@@ -313,6 +313,29 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
             await context.close();
         }
 
+        // ---------- B3b. F8.3 sprites do encontro no Mapa (mobile e desktop): espécie certa, proporção, sem imagem retida após parar ----------
+        for (const vp of [{ name: 'celular 360x640', width: 360, height: 640, dpr: 3 }, { name: 'desktop 1280x800', width: 1280, height: 800, dpr: 1 }]) {
+            const { page, context } = await newPage(() => localStorage.setItem('pokemon_idle_tutorial_done', '1'), { viewport: { width: vp.width, height: vp.height }, deviceScaleFactor: vp.dpr });
+            await page.goto(base);
+            await page.waitForFunction(() => typeof game !== 'undefined' && game.currentBattle, null, { timeout: 10000 });
+            await page.click('[data-tab="tab-map"]');
+            await page.waitForFunction(() => gameUI.worldView.drawCount > 0, null, { timeout: 10000 });
+            await page.evaluate(() => gameUI.worldView.openHuntMap(25));
+            await page.waitForFunction(() => !document.getElementById('world-encounter-btn').disabled, null, { timeout: 5000 });
+            await page.evaluate(() => document.getElementById('world-encounter-btn').click());
+            await page.waitForFunction(() => gameUI.worldView._enc && [...gameUI.worldView._enc.values()].some(e => e.ready), null, { timeout: 10000 });
+            const spr = await page.evaluate(() => { const e = [...gameUI.worldView._enc.values()][0]; return { n: gameUI.worldView._enc.size, id: e.id, src: e.img.getAttribute('src'), w: e.img.naturalWidth, h: e.img.naturalHeight, box: e.box, smooth: document.getElementById('world-canvas').getContext('2d').imageSmoothingEnabled }; });
+            check(`Sprite ${vp.name}: imagem da espécie do ciclo (#25), normal, carregada com o tamanho real do PNG`, spr.n === 1 && spr.id === 25 && spr.src === 'sprites/pokemon/25.png' && spr.w === 96 && spr.h === 96, JSON.stringify(spr));
+            check(`Sprite ${vp.name}: caixa opaca lida do PNG e canvas sem suavização`, !!spr.box && spr.box.x1 > spr.box.x0 && spr.box.y1 > spr.box.y0 && spr.smooth === false, JSON.stringify(spr));
+            await page.evaluate(() => { const e = gameUI.worldEncounters, lg = e.cycle.leg; lg.progressPx = lg.lengthPx; lg.state = 'arrived'; e.current.state = 'arrived'; window.__dc = gameUI.worldView.drawCount; gameUI.worldView.requestRedraw(true); });   // sonda visual: coloca o treinador no ponto (só estado de teste)
+            await page.waitForFunction(() => gameUI.worldView.drawCount > window.__dc, null, { timeout: 5000 });
+            check(`Sprite ${vp.name}: o Pokémon está pintado no canvas, junto ao ponto (pixels amarelos do Pikachu na região do sprite)`, await page.evaluate(() => { const wv = gameUI.worldView, c = gameUI.worldEncounters.current, m = wv.lastMetrics, cam = wv.lastCamera, off = wv._encounterOffset(c), cv = document.getElementById('world-canvas'); const p = worldToScreen(cam, m, (c.point.x + 0.5) * 16 + off.dx, (c.point.y + 0.5) * 16 + 6 + off.dy), z = m.zoom; const x0 = Math.max(0, Math.round(p.x - 24 * z)), y0 = Math.max(0, Math.round(p.y - 36 * z)), w = Math.min(cv.width - x0, 48 * z), h = Math.min(cv.height - y0, 36 * z); if (w <= 0 || h <= 0) return false; const px = cv.getContext('2d').getImageData(x0, y0, w, h).data; let yellow = 0; for (let i = 0; i < px.length; i += 4) if (px[i] > 200 && px[i + 1] > 170 && px[i + 2] < 90) yellow++; return yellow > 10 * z; }));
+            await page.evaluate(() => { game.dispatchAutomationAction({ type: 'STOP_HUNT' }); gameUI.worldEncounters.cancel('smoke'); gameUI.worldView.requestRedraw(true); });
+            await page.waitForFunction(() => gameUI.worldView._enc === null, null, { timeout: 5000 });
+            check(`Sprite ${vp.name}: ao parar a caçada nenhuma imagem do encontro fica retida`, await page.evaluate(() => gameUI.worldView._enc === null && gameUI.worldEncounters.cycle === null));
+            await context.close();
+        }
+
         // ---------- B4. F8.1 fila de alvos na Central (mobile e desktop): montar, iniciar, pausar, interromper, continuar, limpar ----------
         for (const vp of [{ name: 'celular 360x640', width: 360, height: 640 }, { name: 'desktop 1280x800', width: 1280, height: 800 }]) {
             const { page, context } = await newPage(() => localStorage.setItem('pokemon_idle_tutorial_done', '1'), { viewport: { width: vp.width, height: vp.height } });
@@ -1078,7 +1101,7 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
                 const c = gameUI.worldEncounters.current;
                 const noRouteBattle = !game.battleTimer && !game.gameState.currentEnemy;
                 const status = document.getElementById('world-encounter-status').textContent;
-                const sprite = !!(wv._enc && wv._enc.id === 25 && wv._enc.ready);
+                const sprite = !!(wv._enc && wv._enc.get('25') && wv._enc.get('25').ready);
                 const poses = [], cams = [];
                 for (let i = 0; i < 4; i++) {
                     game.clock.advance(2000);
