@@ -4907,6 +4907,9 @@ body {
 .hunt-chips, .hunt-tags { display: flex; flex-wrap: wrap; gap: 6px; }
 .hunt-chip { display: inline-flex; align-items: center; gap: 4px; max-width: 100%; padding: 4px 8px; border-radius: 16px; border: 1px solid var(--border); background: var(--bg-primary); color: var(--text-primary); font-size: 13px; cursor: pointer; }
 .hunt-chip.prio { border-color: var(--warning); }
+.hunt-target-sprite { display: flex; align-items: center; justify-content: center; min-height: 64px; margin: 6px 0 2px; font-weight: bold; color: var(--text-secondary); }
+.hunt-target-sprite:empty { display: none; }
+.hunt-target-sprite img { width: 64px; height: 64px; image-rendering: pixelated; }
 .hunt-chip img { width: 28px; height: 28px; image-rendering: pixelated; }
 .hunt-chip-unknown { width: 28px; text-align: center; }
 .hunt-tag { display: inline-flex; align-items: center; gap: 4px; padding: 4px 8px; border-radius: 12px; background: var(--bg-primary); font-size: 13px; }

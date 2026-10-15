@@ -33,13 +33,16 @@ class WorldView {
         this.lastCamera = null;
         this._players = {};                // mapId → estado do personagem (posição preservada ao trocar de área/aba)
         this._unsubs = [];
+        this._seen = null;                 // F8.4: última observação do encontro { mapId, id, active, ... } (para detectar transições)
+        this._fx = null;                   // F8.4: efeitos visuais curtos { enter, alert, flash, exit }; só existem enquanto duram
+        this._capture = null;              // F8.4: último pokemon_captured (online) { id, at }
         this._observer = null;
         this._raf = null;
         this._lastTs = null;
         this._lastKey = null;
         this._near = null;
         this._onVisibility = () => {
-            if (document.hidden) { this._lastTs = null; if (this.controls) this.controls.clear(); }
+            if (document.hidden) { this._lastTs = null; this._clearFx(); if (this.controls) this.controls.clear(); }     // escondida (pode haver offline): sem efeitos ao voltar
             else this.requestRedraw(true);
         };
         this._onWindowResize = () => this.requestRedraw();
@@ -115,6 +118,7 @@ class WorldView {
         this._fillDestinations();                              // desbloqueios podem ter mudado desde a última vez
         this.controls.attach();
         this._unsubs.push(this.game.bus.on('route_changed', () => this.requestRedraw()));
+        this._unsubs.push(this.game.bus.on('pokemon_captured', (e) => { if (e && !e.offline) this._capture = { id: e.id, at: this._fxNow() }; }));
         if (this.encounters) this._unsubs.push(this.encounters.onChange(() => this.requestRedraw(true)));
         if (typeof ResizeObserver !== 'undefined') {
             this._observer = new ResizeObserver(() => this.requestRedraw());
@@ -137,6 +141,7 @@ class WorldView {
         if (typeof document !== 'undefined') document.removeEventListener('visibilitychange', this._onVisibility);
         if (this._raf !== null) { WorldView._cancelFrame(this._raf); this._raf = null; }
         this._lastTs = null;
+        this._clearFx();
         this._clearNotice();
         for (const id in this._players) if (this._players[id].moving) this._players[id] = { ...this._players[id], moving: false };
     }
@@ -184,7 +189,8 @@ class WorldView {
             if (player.moving) this._players[map.id] = { ...player, moving: false };
         }
         this.draw();
-        if (dir || (hunter && hunter.moving)) this._scheduleFrame();      // loop de quadros só enquanto há movimento visível
+        if (this._fx && !this._fxRunning()) { this._expireFx(this._fxNow()); this._scheduleFrame(); }   // o efeito acabou entre dois quadros: um último quadro limpa o resíduo (e só ele)
+        else if (dir || (hunter && hunter.moving) || this._fxRunning()) this._scheduleFrame();      // loop de quadros só enquanto há movimento visível ou um efeito curto em andamento
     }
 
     _player(map) {
@@ -327,6 +333,7 @@ WorldView._assets = null; WorldView.failed = true; });   // permite tentar de no
             } else {
                 text = `Caçada ${paused ? 'pausada' : 'ativa'} · ${name}: ${paused ? 'o próximo ponto será escolhido quando você retomar' : 'escolhendo o próximo ponto'}.`;
             }
+            if (st.phase !== 'approaching' && this._encounterShiny(enc.current)) text += ' ⭐ Shiny!';
             if (st.offline) text += ' (calculando o tempo offline…)';
         } else {
             const c = enc.current && enc.current.mapId === map.id ? enc.current : null;
@@ -406,32 +413,148 @@ WorldView._assets = null; WorldView.failed = true; });   // permite tentar de no
         return { dx: 0, dy: 0 };
     }
 
+    // ---------- F8.4: transições e indicadores do encontro ----------
+    // Só transformações simples do MESMO PNG (opacidade, deslocamento vertical, piscar) guiadas pelo relógio do jogo. Nenhum timer: os quadros
+    // (rAF) só são agendados enquanto um efeito dura (< 1 s); parado ou ocioso o custo é zero. Os efeitos nascem de transições OBSERVADAS do
+    // registro real do encontro (estado/outcome do WorldEncounters + pokemon_captured), então nada disso toca motor, resultado ou offline.
+    static get FX() { return { enter: 300, alert: 400, flash: 240, exit: 400, label: 900, step: 80 }; }
+
+    _fxNow() { const g = this.game; return g && typeof g.now === 'function' ? g.now() : Date.now(); }
+
+    _reducedMotion() {
+        try { return typeof window !== 'undefined' && typeof window.matchMedia === 'function' && !!window.matchMedia('(prefers-reduced-motion: reduce)').matches; } catch (e) { return false; }
+    }
+
+    _clearFx() { this._fx = null; this._seen = null; this._capture = null; }
+
+    // Há efeito ainda em andamento? (pelo relógio, para o laço de quadros saber se continua)
+    _fxRunning() {
+        const f = this._fx;
+        if (!f) return false;
+        const now = this._fxNow(), D = WorldView.FX;
+        return !!((f.enter && now - f.enter.t0 < D.enter) || (f.alert && now - f.alert.t0 < D.alert) || (f.flash && now - f.flash.t0 < D.flash) || (f.exit && now - f.exit.t0 < (f.exit.label ? D.label : D.exit)));
+    }
+
+    _expireFx(now) {
+        const f = this._fx, D = WorldView.FX;
+        if (!f) return;
+        if (f.enter && now - f.enter.t0 >= D.enter) f.enter = null;
+        if (f.alert && now - f.alert.t0 >= D.alert) f.alert = null;
+        if (f.flash && now - f.flash.t0 >= D.flash) f.flash = null;
+        if (f.exit && now - f.exit.t0 >= (f.exit.label ? D.label : D.exit)) f.exit = null;     // sem rótulo (encontro cancelado): só a saída do sprite
+        if (!f.enter && !f.alert && !f.flash && !f.exit) this._fx = null;
+    }
+
+    // Parte do `key` de redesenho: muda a cada passo da animação (e some quando acaba), então o quadro final limpa o efeito
+    _fxKey(now) {
+        const f = this._fx, D = WorldView.FX;
+        if (!f) return '-';
+        const st = (e, d) => (e ? Math.min(d, Math.max(0, now - e.t0)) / D.step | 0 : 'x');
+        return `${st(f.enter, D.enter)}.${st(f.alert, D.alert)}.${st(f.flash, D.flash)}.${f.exit ? st(f.exit, f.exit.label ? D.label : D.exit) : 'x'}`;
+    }
+
+    // Compara a observação anterior com o registro atual e dispara efeitos. Primeira observação, outro mapa, aba escondida/oculta → só ressincroniza.
+    _beginFx(map, enc, now) {
+        const rec = enc && ['approaching', 'arrived', 'battling'].includes(enc.state) ? enc : null;
+        const prev = this._seen;
+        if (prev && prev.mapId === map.id) {
+            const reduced = this._reducedMotion(), fx = this._fx || (this._fx = {});
+            if (prev.active && (!rec || rec.id !== prev.id)) {
+                const lr = this.encounters && this.encounters.lastResult, outcome = lr && lr.id === prev.id ? lr.outcome : 'cancelled';
+                const cap = this._capture && this._capture.id === prev.c.speciesId && now - this._capture.at <= 5000;
+                const label = outcome === 'victory' ? (cap ? { text: 'Capturado!', color: '#ffd23f' } : { text: 'Vitória', color: '#7be495' }) : outcome === 'defeat' ? { text: 'Derrota', color: '#ff7b7b' } : null;
+                fx.exit = { t0: now, c: { ...prev.c, state: 'exiting', spr: prev.spr, shiny: prev.shiny, off: prev.off }, label, reduced };
+                fx.enter = fx.alert = fx.flash = null;
+                this._capture = null;
+            }
+            if (rec && (!prev.active || rec.id !== prev.id)) { if (!reduced) fx.enter = { t0: now }; }
+            else if (rec && rec.state !== prev.state && !reduced) {
+                if (rec.state === 'arrived') fx.alert = { t0: now };
+                else if (rec.state === 'battling') fx.flash = { t0: now };
+            }
+        } else this._fx = null;
+        if (!rec) { this._seen = { mapId: map.id, id: null, active: false }; return; }
+        const shiny = this._encounterShiny(rec);
+        this._seen = { mapId: map.id, id: rec.id, state: rec.state, active: true, shiny, off: this._encounterOffset(rec), spr: this._encounterSprite(rec.speciesId, shiny),
+            c: { id: rec.id, sequence: rec.sequence, mapId: rec.mapId, speciesId: rec.speciesId, point: { x: rec.point.x, y: rec.point.y } } };
+    }
+
+    // Efeitos que valem para o encontro ativo neste instante
+    _fxFor(rec, now) {
+        const f = this._fx, D = WorldView.FX, out = { alpha: 1, lift: 0, alert: false };
+        if (!f) return out;
+        if (f.enter) { const p = Math.min(1, (now - f.enter.t0) / D.enter); out.alpha = Math.round(p * 4) / 4; out.lift = Math.round((1 - p) * 4); }
+        if (f.alert) out.alert = true;
+        if (f.flash && Math.floor((now - f.flash.t0) / D.step) % 2 === 0) out.alpha = Math.min(out.alpha, 0.4);
+        return out;
+    }
+
     // O Pokémon vive em coordenadas do MUNDO (centro do tile do ponto); a câmera só aplica a transformação.
-    // `front`: false = desenho antes do treinador (atrás dele); true = depois (à frente, quando fica abaixo dele na tela)
-    _drawEncounter(ctx, c, camera, metrics, front = false) {
-        if (!c || !['approaching', 'arrived', 'battling'].includes(c.state)) return;
-        const off = this._encounterOffset(c);
+    // `front`: false = desenho antes do treinador (atrás dele); true = depois (à frente, quando fica abaixo dele na tela).
+    // `fx` (opcional): { alpha, lift, alert, label, labelRise } da F8.4; `c.state === 'exiting'` desenha a saída do snapshot guardado.
+    _drawEncounter(ctx, c, camera, metrics, front = false, fx = null) {
+        if (!c || !['approaching', 'arrived', 'battling', 'exiting'].includes(c.state)) return;
+        const exiting = c.state === 'exiting';
+        const off = exiting ? c.off : this._encounterOffset(c);
         if ((off.dy > 0) !== front) return;
-        const ts = metrics.tileSize, z = metrics.zoom;
+        const ts = metrics.tileSize, z = metrics.zoom, u = Math.max(1, z);
         const wx = (c.point.x + 0.5) * ts + off.dx, wy = (c.point.y + 0.5) * ts + 6 + off.dy;   // pés do sprite um pouco abaixo do centro do tile, um passo à frente
-        const spr = this._encounterSprite(c.speciesId, this._encounterShiny(c));
-        if (spr.ready && spr.img) {
+        const shiny = exiting ? c.shiny : this._encounterShiny(c);
+        const spr = exiting ? c.spr : this._encounterSprite(c.speciesId, shiny);
+        const feet = worldToScreen(camera, metrics, wx, wy), lift = fx && fx.lift ? Math.round(fx.lift * z) : 0;
+        let top = feet.y - 24 * z, right = feet.x + 12 * z, drawn = false;
+        if (c.state === 'battling') { ctx.fillStyle = 'rgba(229,72,77,0.85)'; ctx.fillRect(Math.round(feet.x - 10 * z), Math.round(feet.y), 20 * z, 2 * z); }   // combate em curso (estático)
+        if (spr && spr.ready && spr.img) {
             const k = WorldView.ENCOUNTER_SPRITE_SCALE, box = spr.box, w = spr.img.naturalWidth, h = spr.img.naturalHeight;
             const at = worldToScreen(camera, metrics, wx - (box.x0 + box.x1 + 1) / 2 * k, wy - (box.y1 + 1) * k);   // centro horizontal e base do conteúdo no ponto
-            ctx.drawImage(spr.img, Math.round(at.x), Math.round(at.y), Math.round(w * k * z), Math.round(h * k * z));
+            const ax = Math.round(at.x), ay = Math.round(at.y) - lift;
+            const alpha = fx && fx.alpha < 1 ? fx.alpha : 1;
+            if (alpha < 1) ctx.globalAlpha = alpha;
+            ctx.drawImage(spr.img, ax, ay, Math.round(w * k * z), Math.round(h * k * z));
+            if (alpha < 1) ctx.globalAlpha = 1;
+            top = ay + Math.round(box.y0 * k * z); right = ax + Math.round((box.x1 + 1) * k * z); drawn = true;
+        } else if (!exiting) {
+            // Sem imagem: marcador visível e distinto (carregando = caixa vazada; falha = caixa com o número da espécie). Nunca outra espécie.
+            const at = worldToScreen(camera, metrics, wx - 12, wy - 24), px = 24 * z;
+            ctx.fillStyle = spr.failed ? 'rgba(20,32,43,0.85)' : 'rgba(20,32,43,0.35)';
+            ctx.fillRect(at.x, at.y, px, px);
+            ctx.strokeStyle = spr.failed ? '#e5484d' : '#9fb3c8';
+            ctx.lineWidth = Math.max(1, z);
+            ctx.strokeRect(at.x + ctx.lineWidth / 2, at.y + ctx.lineWidth / 2, px - ctx.lineWidth, px - ctx.lineWidth);
+            if (spr.failed) {
+                ctx.fillStyle = '#ffffff'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.font = `bold ${8 * z}px sans-serif`;
+                ctx.fillText(`#${c.speciesId}`, at.x + px / 2, at.y + px / 2);
+            }
+            top = at.y; right = at.x + px;
+        }
+        if (shiny && (drawn || !exiting)) {        // brilho de 5x5 px (sem fonte), fixo: legível também com movimento reduzido
+            const sx = Math.round(right - 2 * u), sy = Math.round(top + 2 * u - lift);
+            ctx.fillStyle = '#5a3a00'; ctx.fillRect(sx - 3 * u, sy - u, 7 * u, 3 * u); ctx.fillRect(sx - u, sy - 3 * u, 3 * u, 7 * u);
+            ctx.fillStyle = '#ffd23f'; ctx.fillRect(sx - 2 * u, sy, 5 * u, u); ctx.fillRect(sx, sy - 2 * u, u, 5 * u);
+        }
+        const text = fx && fx.label ? fx.label.text : fx && fx.alert ? '!' : null;
+        if (text) {
+            const color = fx.label ? fx.label.color : '#ffd23f', half = Math.ceil(text.length * 3.4 * z);
+            const x = Math.round(Math.min(Math.max(feet.x, half), Math.max(half, metrics.bufferWidth - half))), y = Math.round(top - 3 * z - (fx.labelRise || 0) * z - lift);   // rótulo sempre inteiro dentro do canvas
+            ctx.textAlign = 'center'; ctx.textBaseline = 'bottom'; ctx.font = `bold ${6 * z}px sans-serif`;
+            ctx.fillStyle = 'rgba(0,0,0,0.85)'; ctx.fillText(text, x + u, y + u);
+            ctx.fillStyle = color; ctx.fillText(text, x, y);
+        }
+    }
+
+    // Saída: o Pokémon sobe e some, com o rótulo do desfecho; com movimento reduzido some de uma vez e só o rótulo (estático) permanece
+    _drawExit(ctx, camera, metrics, front, now) {
+        const ex = this._fx && this._fx.exit, D = WorldView.FX;
+        if (!ex) return;
+        const el = now - ex.t0, inSprite = !ex.reduced && el < D.exit, p = Math.min(1, el / D.exit);
+        const fx = { alpha: inSprite ? Math.round((1 - p) * 4) / 4 : 0, lift: inSprite ? Math.round(p * 6) : 0, label: ex.label, labelRise: ex.reduced ? 0 : Math.round(p * 4), alert: false };
+        if (!inSprite) {                           // sem o sprite: só o rótulo (desenhado uma vez, na passagem da frente/trás certa)
+            if (!ex.label || (ex.c.off.dy > 0) !== front) return;
+            const snap = { ...ex.c, spr: { ready: false, failed: false }, shiny: false };
+            this._drawEncounter(ctx, snap, camera, metrics, front, fx);
             return;
         }
-        // Sem imagem: marcador visível e distinto (carregando = caixa vazada; falha = caixa com o número da espécie). Nunca outra espécie.
-        const at = worldToScreen(camera, metrics, wx - 12, wy - 24), px = 24 * z;
-        ctx.fillStyle = spr.failed ? 'rgba(20,32,43,0.85)' : 'rgba(20,32,43,0.35)';
-        ctx.fillRect(at.x, at.y, px, px);
-        ctx.strokeStyle = spr.failed ? '#e5484d' : '#9fb3c8';
-        ctx.lineWidth = Math.max(1, z);
-        ctx.strokeRect(at.x + ctx.lineWidth / 2, at.y + ctx.lineWidth / 2, px - ctx.lineWidth, px - ctx.lineWidth);
-        if (spr.failed) {
-            ctx.fillStyle = '#ffffff'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.font = `bold ${8 * z}px sans-serif`;
-            ctx.fillText(`#${c.speciesId}`, at.x + px / 2, at.y + px / 2);
-        }
+        this._drawEncounter(ctx, ex.c, camera, metrics, front, fx);
     }
 
     _setHint(text) { this._notify(text, { toast: false }); }
@@ -501,9 +624,12 @@ WorldView._assets = null; WorldView.failed = true; });   // permite tentar de no
         this._syncInteraction(map, player);
         const enc = this.encounters && this.encounters.current && this.encounters.current.mapId === map.id ? this.encounters.current : null;
         if (this._enc && !(this.encounters && this.encounters.cycle && enc)) this._enc = null;     // ciclo encerrado / outro mapa: solta as imagens do encontro
+        const fxNow = this._fxNow();
+        this._beginFx(map, enc, fxNow);                                   // F8.4: transições observadas → efeitos curtos (ou só ressincroniza)
+        this._expireFx(fxNow);
         let encKey = '-';
         if (enc) { const sh = this._encounterShiny(enc), e = this._enc && this._enc.get(`${enc.speciesId}${sh ? 's' : ''}`); encKey = `${enc.id}:${enc.state}:${sh ? 1 : 0}:${e ? (e.ready ? 1 : e.failed ? 2 : 0) : 0}`; }
-        const key = [encKey, map.id, metrics.bufferWidth, metrics.bufferHeight, metrics.zoom, camera.x, camera.y, player.x, player.y, player.dir, player.moving ? Math.floor(player.distance / 6) % 2 : 'idle'].join('|');
+        const key = [encKey, this._fxKey(fxNow), map.id, metrics.bufferWidth, metrics.bufferHeight, metrics.zoom, camera.x, camera.y, player.x, player.y, player.dir, player.moving ? Math.floor(player.distance / 6) % 2 : 'idle'].join('|');
         if (key === this._lastKey) return;                    // nada mudou: não redesenha
         this._lastKey = key;
 
@@ -523,9 +649,12 @@ WorldView._assets = null; WorldView.failed = true; });   // permite tentar de no
                 ctx.drawImage(images.tileset, (index % cols) * ts, Math.floor(index / cols) * ts, ts, ts, at.x, at.y, ts * z, ts * z);
             }
         }
-        this._drawEncounter(ctx, enc, camera, metrics, false);
+        const fx = enc ? this._fxFor(enc, fxNow) : null;
+        this._drawExit(ctx, camera, metrics, false, fxNow);
+        this._drawEncounter(ctx, enc, camera, metrics, false, fx);
         this._drawCharacter(ctx, images.hero, player, camera, metrics);
-        this._drawEncounter(ctx, enc, camera, metrics, true);
+        this._drawExit(ctx, camera, metrics, true, fxNow);
+        this._drawEncounter(ctx, enc, camera, metrics, true, fx);
         this.lastMetrics = metrics;
         this.lastCamera = camera;
         this.drawCount++;

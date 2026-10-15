@@ -61,7 +61,7 @@ class HuntView {
                 <button class="hunt-seg" data-hunt-section="analysis">Análise</button>
             </div>
             <div data-section="ops" class="hunt-section">
-                <div id="hunt-target" class="hunt-card"><h3>🎯 Alvo da caçada</h3><div id="hunt-target-pick"></div><div id="hunt-target-live"></div></div>
+                <div id="hunt-target" class="hunt-card"><h3>🎯 Alvo da caçada</h3><div id="hunt-target-pick"></div><div id="hunt-target-sprite" class="hunt-target-sprite"></div><div id="hunt-target-live"></div></div>
                 <div id="hunt-queue" class="hunt-card"></div>
                 <div id="hunt-status" class="hunt-card"></div>
                 <div id="hunt-activity" class="hunt-card"></div>
@@ -92,6 +92,7 @@ class HuntView {
     onShow() {
         if (!this.root || !this.game.gameState) return;
         this.onHide();
+        this._spriteKey = null;                                    // F8.4: o sprite do alvo é remontado uma vez ao abrir
         for (const type of HUNT_LIVE_EVENTS) this._unsubs.push(this.game.bus.on(type, () => this._scheduleRender()));
         const enc = this.ui.worldEncounters;
         if (enc && enc.onChange) this._unsubs.push(enc.onChange(() => this._scheduleRender()));     // F8.0: mudanças do ciclo do mundo (perna, chegada, resultado)
@@ -216,11 +217,23 @@ class HuntView {
             + (total > list.length ? `<div class="hunt-hint">Mostrando ${list.length} de ${total}. Refine a busca.</div>` : '');
     }
 
+    // F8.4: sprite da espécie-alvo (a mesma do ciclo/escolha; nunca outra). Contêiner próprio, só reescrito quando a espécie muda: o
+    // renderTarget roda a cada ≤ 400 ms e recriar o <img> a cada vez piscaria. Se a imagem falhar, o próprio contêiner mostra "#id".
+    renderTargetSprite(targetId) {
+        const box = this.root.querySelector('#hunt-target-sprite');
+        if (!box) return;
+        const key = Number.isInteger(targetId) ? String(targetId) : '';
+        if (this._spriteKey === key) return;
+        this._spriteKey = key;
+        box.innerHTML = key === '' ? '' : `<img src="${escapeHtml(getPokemonSpriteUrl(targetId))}" alt="" width="64" height="64" onerror="this.parentElement.textContent='#${key}'">`;
+    }
+
     renderTarget() {
         const el = this.root.querySelector('#hunt-target-live');
         if (!el) return;
         const g = this.game, enc = this.ui.worldEncounters || null;
         const snap = this._snap(), targetId = huntCenterTargetId(snap, this._targetId), m = huntControlMatrix(snap, targetId);
+        this.renderTargetSprite(targetId);
         const info = targetId !== null && enc && enc.describeTarget ? enc.describeTarget(targetId) : null;
         const name = targetId !== null ? this._speciesLabel(targetId) : '—';
         const last = snap.cycle && snap.lastResult && snap.lastResult.outcome !== 'cancelled' ? (snap.lastResult.outcome === 'defeat' ? 'derrota' : 'vitória') : null;

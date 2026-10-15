@@ -31,7 +31,7 @@ test('F7.5 cidade: continua a área inicial, navegável, e sair/voltar preserva 
     assert.equal(view._player(map).x, x1, 'voltou exatamente de onde saiu (sem reset)');
     assert.equal(env.listenerCount('keydown'), 1);
     assert.equal(env.listenerCount('visibilitychange'), 2, 'um da view e um dos controles (como antes de navegar)');
-    assert.equal(game.subCount(), 1, 'uma única assinatura do jogo');
+    assert.equal(game.subCount(), 2, 'duas assinaturas do jogo (route_changed e, desde a F8.4, pokemon_captured), sem duplicar');
     assert.equal(game.healCalls, 0);
 });
 
@@ -204,7 +204,7 @@ test('F7.5 abas: a área ativa é preservada ao sair e voltar para a aba, sem du
     assert.equal(env.destination.value, 'hunt_7');
     assert.equal(world.worldHuntStats().generated, generated, 'mesma área, mesmo mapa em cache');
     assert.equal(env.listenerCount('keydown'), 1);
-    assert.equal(game.subCount(), 1);
+    assert.equal(game.subCount(), 2);
     assert.equal(env.observers.filter(o => !o.disconnected).length, 1);
     assert.equal(game.healCalls, 0);
 });

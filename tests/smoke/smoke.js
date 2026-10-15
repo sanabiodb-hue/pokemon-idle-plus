@@ -328,11 +328,52 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
             check(`Sprite ${vp.name}: imagem da espécie do ciclo (#25), normal, carregada com o tamanho real do PNG`, spr.n === 1 && spr.id === 25 && spr.src === 'sprites/pokemon/25.png' && spr.w === 96 && spr.h === 96, JSON.stringify(spr));
             check(`Sprite ${vp.name}: caixa opaca lida do PNG e canvas sem suavização`, !!spr.box && spr.box.x1 > spr.box.x0 && spr.box.y1 > spr.box.y0 && spr.smooth === false, JSON.stringify(spr));
             await page.evaluate(() => { const e = gameUI.worldEncounters, lg = e.cycle.leg; lg.progressPx = lg.lengthPx; lg.state = 'arrived'; e.current.state = 'arrived'; window.__dc = gameUI.worldView.drawCount; gameUI.worldView.requestRedraw(true); });   // sonda visual: coloca o treinador no ponto (só estado de teste)
-            await page.waitForFunction(() => gameUI.worldView.drawCount > window.__dc, null, { timeout: 5000 });
+            await page.waitForFunction(() => gameUI.worldView.drawCount > window.__dc && !gameUI.worldView._fxRunning(), null, { timeout: 5000 });     // F8.4: espera a entrada (fade) terminar
+            await page.waitForTimeout(100);
             check(`Sprite ${vp.name}: o Pokémon está pintado no canvas, junto ao ponto (pixels amarelos do Pikachu na região do sprite)`, await page.evaluate(() => { const wv = gameUI.worldView, c = gameUI.worldEncounters.current, m = wv.lastMetrics, cam = wv.lastCamera, off = wv._encounterOffset(c), cv = document.getElementById('world-canvas'); const p = worldToScreen(cam, m, (c.point.x + 0.5) * 16 + off.dx, (c.point.y + 0.5) * 16 + 6 + off.dy), z = m.zoom; const x0 = Math.max(0, Math.round(p.x - 24 * z)), y0 = Math.max(0, Math.round(p.y - 36 * z)), w = Math.min(cv.width - x0, 48 * z), h = Math.min(cv.height - y0, 36 * z); if (w <= 0 || h <= 0) return false; const px = cv.getContext('2d').getImageData(x0, y0, w, h).data; let yellow = 0; for (let i = 0; i < px.length; i += 4) if (px[i] > 200 && px[i + 1] > 170 && px[i + 2] < 90) yellow++; return yellow > 10 * z; }));
             await page.evaluate(() => { game.dispatchAutomationAction({ type: 'STOP_HUNT' }); gameUI.worldEncounters.cancel('smoke'); gameUI.worldView.requestRedraw(true); });
             await page.waitForFunction(() => gameUI.worldView._enc === null, null, { timeout: 5000 });
             check(`Sprite ${vp.name}: ao parar a caçada nenhuma imagem do encontro fica retida`, await page.evaluate(() => gameUI.worldView._enc === null && gameUI.worldEncounters.cycle === null));
+            await context.close();
+        }
+
+        // ---------- B3c. F8.4 transições do encontro no Mapa (celular, desktop e movimento reduzido): efeitos reais, limpeza e ociosidade ----------
+        for (const vp of [{ name: 'celular 360x640', width: 360, height: 640, dpr: 3, reduced: false }, { name: 'desktop 1280x800', width: 1280, height: 800, dpr: 1, reduced: false }, { name: 'celular com movimento reduzido', width: 360, height: 640, dpr: 3, reduced: true }]) {
+            const { page, context } = await newPage(() => localStorage.setItem('pokemon_idle_tutorial_done', '1'), { viewport: { width: vp.width, height: vp.height }, deviceScaleFactor: vp.dpr, reducedMotion: vp.reduced ? 'reduce' : 'no-preference' });
+            await page.goto(base);
+            await page.waitForFunction(() => typeof game !== 'undefined' && game.currentBattle, null, { timeout: 10000 });
+            await page.click('[data-tab="tab-map"]');
+            await page.waitForFunction(() => gameUI.worldView.drawCount > 0, null, { timeout: 10000 });
+            await page.evaluate(() => gameUI.worldView.openHuntMap(25));
+            await page.waitForFunction(() => !document.getElementById('world-encounter-btn').disabled, null, { timeout: 5000 });
+            await page.evaluate(() => { window.__raf = 0; const raf = window.requestAnimationFrame.bind(window); window.requestAnimationFrame = (fn) => { window.__raf++; return raf(fn); }; window.__tm = 0; const st = window.setTimeout.bind(window); window.setTimeout = (...a) => { window.__tm++; return st(...a); }; window.__si = 0; const si = window.setInterval.bind(window); window.setInterval = (...a) => { window.__si++; return si(...a); }; });
+            await page.evaluate(() => document.getElementById('world-encounter-btn').click());
+            await page.waitForFunction(() => gameUI.worldView._enc && [...gameUI.worldView._enc.values()].some(e => e.ready), null, { timeout: 10000 });
+            const entered = await page.evaluate(() => { const f = gameUI.worldView._fx; return !!(f && f.enter); });
+            check(`Transição ${vp.name}: a entrada do Pokémon ${vp.reduced ? 'não anima (movimento reduzido)' : 'anima'}`, entered === !vp.reduced);
+            // chegada pelo caminho oficial; termina a batalha de rota em curso até a do encontro começar
+            await page.evaluate(() => { const e = gameUI.worldEncounters, lg = e.cycle.leg; lg.progressPx = lg.lengthPx; e._advance(game.now()); });
+            for (let i = 0; i < 100 && await page.evaluate(() => gameUI.worldEncounters.current.state) !== 'battling'; i++) {
+                await page.evaluate(() => { const bt = game.currentBattle; if (bt) { bt.wildCurrentHp = 1; bt.playerTimer = bt.playerNextAttack; bt.enemyTimer = 0; const sv = game.rng; game.rng = () => 0.99; game.battleTick(); game.rng = sv; } });
+                await page.waitForTimeout(300);
+            }
+            check(`Transição ${vp.name}: a batalha do encontro começa e o indicador de combate aparece (anel vermelho no canvas)`, await page.evaluate(async () => {
+                await new Promise(r => setTimeout(r, 900));
+                const wv = gameUI.worldView, cv = document.getElementById('world-canvas'), px = cv.getContext('2d').getImageData(0, 0, cv.width, cv.height).data;
+                let red = 0; for (let i = 0; i < px.length; i += 4) if (px[i] === 229 && px[i + 1] === 72 && px[i + 2] === 77) red++;
+                return gameUI.worldEncounters.current.state === 'battling' && red > 20 && !wv._fxRunning();
+            }));
+            const idle = await page.evaluate(async () => { const a = window.__raf, t = window.__tm, i = window.__si; await new Promise(r => setTimeout(r, 900)); return { raf: window.__raf - a, setTimeout: window.__tm - t - 1, setInterval: window.__si - i }; });
+            check(`Transição ${vp.name}: batalha em curso e treinador parado → nenhum quadro nem timer novo (ocioso)`, idle.raf === 0 && idle.setInterval === 0, JSON.stringify(idle));
+            await page.evaluate(() => { const bt = game.currentBattle; bt.wildCurrentHp = 1; bt.playerTimer = bt.playerNextAttack; bt.enemyTimer = 0; const sv = game.rng; game.rng = () => 0.99; game.battleTick(); game.rng = sv; });
+            await page.waitForTimeout(100);
+            const exit = await page.evaluate(() => { const f = gameUI.worldView._fx; return f && f.exit ? { label: f.exit.label && f.exit.label.text, reduced: f.exit.reduced } : null; });
+            check(`Transição ${vp.name}: o desfecho real (captura) aparece como rótulo e respeita o movimento reduzido`, !!exit && /^(Capturado!|Vitória)$/.test(exit.label) && exit.reduced === vp.reduced, JSON.stringify(exit));
+            await page.waitForFunction(() => gameUI.worldView._fx === null, null, { timeout: 5000 });
+            check(`Transição ${vp.name}: depois do desfecho nenhum efeito sobra`, await page.evaluate(() => gameUI.worldView._fx === null));
+            await page.evaluate(() => { gameUI.worldEncounters.cancel('smoke'); game.dispatchAutomationAction({ type: 'STOP_HUNT' }); gameUI.worldView.requestRedraw(true); });
+            await page.waitForFunction(() => gameUI.worldView._enc === null && gameUI.worldView._fx === null, null, { timeout: 5000 });
+            check(`Transição ${vp.name}: ao parar a caçada não restam imagem, efeito nem observação ativa`, await page.evaluate(() => gameUI.worldView._enc === null && !gameUI.worldView._fxRunning() && !(gameUI.worldView._seen && gameUI.worldView._seen.active)));
             await context.close();
         }
 

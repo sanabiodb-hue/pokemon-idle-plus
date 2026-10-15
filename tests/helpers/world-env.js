@@ -39,8 +39,8 @@ function fakeElement(extra = {}) {
 }
 
 function fakeEnv({ width = 374, height = 374, dpr = 3, observer = true } = {}) {
-    const env = { w: width, h: height, now: 1000, frames: [], listeners: {}, winListeners: {}, observers: [], draws: [], fills: 0, strokes: 0, texts: [], images: [], imageSize: { w: 96, h: 96 }, failUrls: new Set(), alpha: null };
-    env.ctx = { imageSmoothingEnabled: true, fillStyle: '', fillRect() { env.fills++; }, strokeRect() { env.strokes++; }, fillText(t, x, y) { env.texts.push([t, x, y]); }, drawImage(...a) { env.draws.push(a); } };
+    const env = { w: width, h: height, now: 1000, frames: [], listeners: {}, winListeners: {}, observers: [], draws: [], fills: 0, strokes: 0, texts: [], alphas: [], rects: [], reduced: false, images: [], imageSize: { w: 96, h: 96 }, failUrls: new Set(), alpha: null };
+    env.ctx = { imageSmoothingEnabled: true, fillStyle: '', fillRect(x, y, w, h) { env.fills++; env.rects.push([env.ctx.fillStyle, x, y, w, h]); }, strokeRect() { env.strokes++; }, fillText(t, x, y) { env.texts.push([t, x, y]); }, drawImage(...a) { env.draws.push(a); env.alphas.push(env.ctx.globalAlpha === undefined ? 1 : env.ctx.globalAlpha); } };
     env.canvas = fakeElement({ width: 300, height: 150, attrs: {}, getContext: () => env.ctx, setAttribute(k, v) { this.attrs[k] = v; }, getBoundingClientRect: () => ({ width: env.w, height: env.h }) });
     env.viewport = fakeElement({ getBoundingClientRect: () => ({ width: env.w + 4, height: env.h + 4 }) });   // com borda: maior que o canvas
     env.message = fakeElement({ hidden: true });
@@ -62,7 +62,7 @@ function fakeEnv({ width = 374, height = 374, dpr = 3, observer = true } = {}) {
     env.fakeAlphaCanvas = () => ({ width: 0, height: 0, getContext() { const cv = this; return { drawImage() {}, getImageData(x, y, w, h) { env.alphaReads++; const d = new Uint8ClampedArray(w * h * 4), b = env.alpha; for (let j = b.y0; j <= b.y1; j++) for (let i = b.x0; i <= b.x1; i++) d[(j * w + i) * 4 + 3] = 255; return { data: d }; } }; } });
     const reg = (store) => ({ addEventListener(t, f) { (store[t] ||= new Set()).add(f); }, removeEventListener(t, f) { if (store[t]) store[t].delete(f); } });
     env.document = { hidden: false, getElementById: (id) => (id === 'world-panel' ? env.root : null), createElement: (tag) => (tag === 'canvas' && env.alpha ? env.fakeAlphaCanvas() : fakeElement({ tagName: tag.toUpperCase() })), ...reg(env.listeners) };
-    env.window = { devicePixelRatio: dpr, ...reg(env.winListeners) };
+    env.window = { devicePixelRatio: dpr, matchMedia: (q) => ({ matches: /prefers-reduced-motion/.test(q) && env.reduced }), ...reg(env.winListeners) };
     class FakeImage { constructor() { env.images.push(this); } set src(v) { this._src = v; const sz = env.imageSize; Promise.resolve().then(() => { if (env.failUrls.has(v)) { this.onerror && this.onerror(); return; } this.naturalWidth = sz.w; this.naturalHeight = sz.h; this.onload && this.onload(); }); } get src() { return this._src; } }
     class FakeObserver { constructor(cb) { this.cb = cb; this.targets = []; this.disconnected = false; env.observers.push(this); } observe(t) { this.targets.push(t); } disconnect() { this.disconnected = true; } }
     env.globals = { document: env.document, window: env.window, Image: FakeImage, requestAnimationFrame: (fn) => { env.frames.push(fn); return env.frames.length; }, cancelAnimationFrame: (id) => { env.frames[id - 1] = null; }, setTimeout, clearTimeout };
