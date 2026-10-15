@@ -110,6 +110,7 @@ async function shown(opts = {}) {
     if (opts.setup) opts.setup(world);
     if (opts.encounters) ui.worldEncounters = new world.WorldEncounters(game);
     const view = new world.WorldView(ui);
+    if (opts.follower === false) view._leader = () => null;        // F9.2: isola testes que contam desenhos/imagens do encontro do seguidor do líder
     view.onShow();
     await tick();
     env.flush();

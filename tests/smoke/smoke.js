@@ -406,6 +406,40 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
             await context.close();
         }
 
+        // ---------- B3e. F9.2 Pokémon líder seguindo o treinador (celular e desktop): desenhado no canvas, atrás do treinador, ocioso sem quadros, limpo ao sair ----------
+        for (const vp of [{ name: 'celular 360x640', width: 360, height: 640, dpr: 3 }, { name: 'desktop 1280x800', width: 1280, height: 800, dpr: 1 }]) {
+            const { page, context } = await newPage(() => localStorage.setItem('pokemon_idle_tutorial_done', '1'), { viewport: { width: vp.width, height: vp.height }, deviceScaleFactor: vp.dpr });
+            await page.goto(base);
+            await page.waitForFunction(() => typeof game !== 'undefined' && game.currentBattle, null, { timeout: 10000 });
+            await page.click('[data-tab="tab-map"]');
+            await page.waitForFunction(() => gameUI.worldView.drawCount > 0 && gameUI.worldView._fol && gameUI.worldView._fol.cur && gameUI.worldView._fol.cur.ready, null, { timeout: 10000 });
+            await page.evaluate(() => { window.__raf = 0; const raf = window.requestAnimationFrame.bind(window); window.requestAnimationFrame = (fn) => { window.__raf++; return raf(fn); }; window.__tm = 0; const st = window.setTimeout.bind(window); window.setTimeout = (...a) => { window.__tm++; return st(...a); }; });
+            check(`Seguidor ${vp.name}: o sprite do líder (Pikachu #25) é carregado numa entrada própria`, await page.evaluate(() => { const f = gameUI.worldView._fol.cur; return f.id === 25 && f.shiny === false && f.img.getAttribute('src') === 'sprites/pokemon/25.png' && f.img.naturalWidth > 0; }));
+            check(`Seguidor ${vp.name}: o líder aparece pintado no canvas junto do treinador (pixels amarelos na região do seguidor)`, await page.evaluate(() => {
+                const wv = gameUI.worldView, map = wv.currentScene().map, pl = wv._player(map), m = wv.lastMetrics, cam = wv.lastCamera, cv = document.getElementById('world-canvas'), z = m.zoom;
+                const fp = wv._followerPoint(map, pl), p = worldToScreen(cam, m, fp.x, fp.y);
+                const x0 = Math.max(0, Math.round(p.x - 14 * z)), y0 = Math.max(0, Math.round(p.y - 26 * z)), w = Math.min(cv.width - x0, 28 * z), h = Math.min(cv.height - y0, 28 * z);
+                if (w <= 0 || h <= 0) return false;
+                const px = cv.getContext('2d').getImageData(x0, y0, w, h).data; let yellow = 0;
+                for (let i = 0; i < px.length; i += 4) if (px[i] > 200 && px[i + 1] > 170 && px[i + 2] < 90) yellow++;
+                return yellow > 6 * z;
+            }));
+            const idle = await page.evaluate(async () => { const a = window.__raf, t = window.__tm; await new Promise(r => setTimeout(r, 800)); return { raf: window.__raf - a, tm: window.__tm - t - 1 }; });
+            check(`Seguidor ${vp.name}: treinador parado → nenhum quadro nem timer novo (ocioso)`, idle.raf === 0 && idle.tm === 0, JSON.stringify(idle));
+            // caminhada da caçada: o seguidor fica atrás do treinador (entre 8 e 34 px de distância, nunca em cima)
+            await page.evaluate(() => gameUI.worldView.openHuntMap(25));
+            await page.waitForFunction(() => !document.getElementById('world-encounter-btn').disabled, null, { timeout: 5000 });
+            await page.evaluate(() => document.getElementById('world-encounter-btn').click());
+            await page.waitForTimeout(3500);
+            const gap = await page.evaluate(() => { const wv = gameUI.worldView, map = wv.currentScene().map, pl = wv._player(map), fp = wv._followerPoint(map, pl); return { d: Math.hypot(pl.x - fp.x, pl.y - fp.y), moving: !!pl.moving }; });
+            check(`Seguidor ${vp.name}: andando, fica 1 a 2 passos atrás do treinador (${gap.d.toFixed(1)} px)`, gap.moving && gap.d >= 8 && gap.d <= 34, JSON.stringify(gap));
+            await page.evaluate(() => { gameUI.worldEncounters.cancel('smoke'); game.dispatchAutomationAction({ type: 'STOP_HUNT' }); });
+            await page.click('[data-tab="tab-hunt"]');
+            await page.waitForFunction(() => gameUI.worldView._fol === null && gameUI.worldView._trail === null, null, { timeout: 5000 });
+            check(`Seguidor ${vp.name}: ao sair da aba do mapa o seguidor e o rastro são limpos`, true);
+            await context.close();
+        }
+
         // ---------- B4. F8.1 fila de alvos na Central (mobile e desktop): montar, iniciar, pausar, interromper, continuar, limpar ----------
         for (const vp of [{ name: 'celular 360x640', width: 360, height: 640 }, { name: 'desktop 1280x800', width: 1280, height: 800 }]) {
             const { page, context } = await newPage(() => localStorage.setItem('pokemon_idle_tutorial_done', '1'), { viewport: { width: vp.width, height: vp.height } });
@@ -921,6 +955,8 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
             const inactive = await page.evaluate(() => ({ active: gameUI.worldView.active, draws: gameUI.worldView.drawCount }));
             await page.click('[data-tab="tab-map"]');
             await page.waitForFunction(() => gameUI.worldView.drawCount > 0, null, { timeout: 10000 });
+            await page.waitForFunction(() => gameUI.worldView._fol && gameUI.worldView._fol.cur && gameUI.worldView._fol.cur.ready, null, { timeout: 10000 });     // F9.2: o sprite do líder carrega depois do 1º quadro e pede UM redesenho; espera antes de medir a ociosidade
+            await sleep(150);
             const probe = () => page.evaluate(() => {
                 const c = document.getElementById('world-canvas'), r = c.getBoundingClientRect();
                 const px = c.getContext('2d').getImageData(0, 0, c.width, c.height).data;

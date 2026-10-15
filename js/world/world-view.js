@@ -36,13 +36,15 @@ class WorldView {
         this._seen = null;                 // F8.4: última observação do encontro { mapId, id, active, ... } (para detectar transições)
         this._fx = null;                   // F8.4: efeitos visuais curtos { enter, alert, flash, exit }; só existem enquanto duram
         this._capture = null;              // F8.4: último pokemon_captured (online) { id, at }
+        this._fol = null;                  // F9.2: sprite do líder seguidor { cur, prev }
+        this._trail = null;                // F9.2: rastro do treinador { mapId, pts:[{d,x,y}] } (só memória)
         this._observer = null;
         this._raf = null;
         this._lastTs = null;
         this._lastKey = null;
         this._near = null;
         this._onVisibility = () => {
-            if (document.hidden) { this._lastTs = null; this._clearFx(); if (this.controls) this.controls.clear(); }     // escondida (pode haver offline): sem efeitos ao voltar
+            if (document.hidden) { this._lastTs = null; this._clearFx(); this._clearFollower(); if (this.controls) this.controls.clear(); }     // escondida (pode haver offline): sem efeitos ao voltar
             else this.requestRedraw(true);
         };
         this._onWindowResize = () => this.requestRedraw();
@@ -118,6 +120,7 @@ class WorldView {
         this._fillDestinations();                              // desbloqueios podem ter mudado desde a última vez
         this.controls.attach();
         this._unsubs.push(this.game.bus.on('route_changed', () => this.requestRedraw()));
+        for (const type of ['pokemon_switched', 'evolution']) this._unsubs.push(this.game.bus.on(type, () => this.requestRedraw()));      // F9.2: o líder mudou (troca ou evolução): redesenha o seguidor
         this._unsubs.push(this.game.bus.on('pokemon_captured', (e) => { if (e && !e.offline) this._capture = { id: e.id, at: this._fxNow() }; }));
         if (this.encounters) this._unsubs.push(this.encounters.onChange(() => this.requestRedraw(true)));
         if (typeof ResizeObserver !== 'undefined') {
@@ -142,6 +145,7 @@ class WorldView {
         if (this._raf !== null) { WorldView._cancelFrame(this._raf); this._raf = null; }
         this._lastTs = null;
         this._clearFx();
+        this._clearFollower();
         this._clearNotice();
         for (const id in this._players) if (this._players[id].moving) this._players[id] = { ...this._players[id], moving: false };
     }
@@ -357,24 +361,93 @@ WorldView._assets = null; WorldView.failed = true; });   // permite tentar de no
     // esvaziado quando o ciclo termina ou a espécie muda, então nada de imagem velha/duplicada. Nenhum timer: tudo vem de onload/onerror.
     static get ENCOUNTER_SPRITE_SCALE() { return 0.375; }   // 96px do PNG -> 36px do mundo; fator ÚNICO (proporção preservada, tamanhos relativos mantidos)
 
+    // Entrada de sprite { id, shiny, img, ready, failed, box }. `alive(entry)` diz se a entrada ainda é a vigente (onload tardio de entrada velha não redesenha).
+    _spriteEntry(speciesId, shiny, alive) {
+        const entry = { id: speciesId, shiny: !!shiny, img: null, ready: false, failed: false, box: null };
+        const url = typeof getPokemonSpriteUrl === 'function' ? (shiny && typeof getShinyPokemonSpriteUrl === 'function' ? getShinyPokemonSpriteUrl(speciesId) : getPokemonSpriteUrl(speciesId)) : null;
+        if (typeof Image !== 'undefined' && url) {
+            const img = new Image();
+            img.onload = () => { entry.ready = img.naturalWidth > 0 && img.naturalHeight > 0; entry.failed = !entry.ready; entry.box = entry.ready ? this._opaqueBox(img) : null; if (alive(entry)) this.requestRedraw(true); };
+            img.onerror = () => { entry.failed = true; if (alive(entry)) this.requestRedraw(true); };
+            img.src = url;
+            entry.img = img;
+        } else entry.failed = true;
+        return entry;
+    }
+
     _encounterSprite(speciesId, shiny) {
         const key = `${speciesId}${shiny ? 's' : ''}`;
         if (!this._enc) this._enc = new Map();
         for (const [k, e] of this._enc) if (e.id !== speciesId) this._enc.delete(k);          // trocou de espécie: solta as imagens anteriores
         let entry = this._enc.get(key);
         if (!entry) {
-            entry = { id: speciesId, shiny: !!shiny, img: null, ready: false, failed: false, box: null };
+            entry = this._spriteEntry(speciesId, shiny, (e) => !!this._enc && this._enc.get(key) === e);
             this._enc.set(key, entry);
-            const url = typeof getPokemonSpriteUrl === 'function' ? (shiny && typeof getShinyPokemonSpriteUrl === 'function' ? getShinyPokemonSpriteUrl(speciesId) : getPokemonSpriteUrl(speciesId)) : null;
-            if (typeof Image !== 'undefined' && url) {
-                const img = new Image();
-                img.onload = () => { entry.ready = img.naturalWidth > 0 && img.naturalHeight > 0; entry.failed = !entry.ready; entry.box = entry.ready ? this._opaqueBox(img) : null; if (this._enc && this._enc.get(key) === entry) this.requestRedraw(true); };
-                img.onerror = () => { entry.failed = true; if (this._enc && this._enc.get(key) === entry) this.requestRedraw(true); };
-                img.src = url;
-                entry.img = img;
-            } else entry.failed = true;
         }
         return entry;
+    }
+
+    // Retângulo de desenho de um sprite com a lógica da F8.3: fator único (proporção preservada), centro horizontal e BASE do conteúdo opaco no ponto (wx, wy) do mundo
+    _spriteRect(spr, wx, wy, k, camera, metrics) {
+        const box = spr.box, z = metrics.zoom, w = spr.img.naturalWidth, h = spr.img.naturalHeight;
+        const at = worldToScreen(camera, metrics, wx - (box.x0 + box.x1 + 1) / 2 * k, wy - (box.y1 + 1) * k);
+        return { x: Math.round(at.x), y: Math.round(at.y), w: Math.round(w * k * z), h: Math.round(h * k * z), top: Math.round(box.y0 * k * z), right: Math.round((box.x1 + 1) * k * z) };
+    }
+
+    // ---------- F9.2: Pokémon líder seguindo o treinador (só visual; nada vai para o save, o motor ou o caminho) ----------
+    // O renderer só conhece a posição ATUAL do treinador; o histórico é um rastro de amostras indexado pela DISTÂNCIA percorrida (player.distance, que
+    // cresce igual na cidade e na caçada). O seguidor fica `lagSteps` tiles atrás ao longo desse rastro e, quando o treinador para, para junto.
+    _leader() {
+        const gs = this.game && this.game.gameState;
+        const inst = gs && Array.isArray(gs.party) && gs.ownedPokemon ? gs.ownedPokemon[gs.party[gs.activePokemonIndex]] : null;
+        return inst && Number.isInteger(inst.speciesId) ? { id: inst.speciesId, shiny: inst.shiny === true } : null;
+    }
+
+    // Sprite do líder: entrada própria (não mistura com o cache do encontro). Na troca de líder o anterior continua até o novo carregar (sem piscar);
+    // se o novo falhar, nada é desenhado (nunca outra espécie).
+    _followerSprite(leader) {
+        const key = `${leader.id}${leader.shiny ? 's' : ''}`;
+        const f = this._fol || (this._fol = { cur: null, prev: null });
+        if (!f.cur || f.cur.key !== key) {
+            if (f.cur && f.cur.ready) f.prev = f.cur;
+            f.cur = this._spriteEntry(leader.id, leader.shiny, (e) => !!this._fol && this._fol.cur === e);
+            f.cur.key = key;
+        }
+        if (f.cur.ready) { f.prev = null; return f.cur; }
+        if (f.cur.failed) { f.prev = null; return null; }
+        return f.prev && f.prev.ready ? f.prev : null;
+    }
+
+    _clearFollower() { this._fol = null; this._trail = null; }
+
+    // Atualiza o rastro com a posição atual e devolve onde o seguidor deve ficar { x, y }
+    _followerPoint(map, player) {
+        const lag = WORLD_FOLLOWER.lagSteps * WORLD_TILE_SIZE;
+        let t = this._trail;
+        const last = t && t.pts[t.pts.length - 1];
+        if (t && t.mapId === map.id && last) {
+            const moved = Math.hypot(player.x - last.x, player.y - last.y), dd = player.distance - last.d;
+            if (moved > 0.01) {
+                if (dd <= 0 || moved > dd * 2 + 2) t = null;                       // teletransporte / novo ciclo (a distância recomeçou): recomeça o rastro
+                else t.pts.push({ d: player.distance, x: player.x, y: player.y });
+            }
+        } else t = null;
+        if (!t) {
+            const v = { up: [0, -1], down: [0, 1], left: [-1, 0], right: [1, 0] }[player.dir] || [0, 1];     // parado: fica atrás, no sentido oposto ao que o treinador olha
+            t = this._trail = { mapId: map.id, pts: [{ d: player.distance - lag, x: player.x - v[0] * lag, y: player.y - v[1] * lag }, { d: player.distance, x: player.x, y: player.y }] };
+        }
+        const pts = t.pts, target = player.distance - lag;
+        while (pts.length > 2 && pts[1].d <= target) pts.shift();               // descarta o que o seguidor já passou
+        const a = pts[0], b = pts[1];
+        if (target <= a.d) return { x: a.x, y: a.y };
+        const f = b.d > a.d ? Math.min(1, (target - a.d) / (b.d - a.d)) : 1;
+        return { x: a.x + (b.x - a.x) * f, y: a.y + (b.y - a.y) * f };
+    }
+
+    _drawFollower(ctx, spr, point, camera, metrics) {
+        if (!spr || !spr.ready || !spr.img || !spr.box) return;
+        const r = this._spriteRect(spr, point.x, point.y, WORLD_FOLLOWER.scale, camera, metrics);
+        ctx.drawImage(spr.img, r.x, r.y, r.w, r.h);
     }
 
     // Caixa opaca do PNG (os sprites têm margem transparente variável; sem ela os pés não ficariam no ponto do mundo). Uma leitura por sprite carregado.
@@ -505,14 +578,12 @@ WorldView._assets = null; WorldView.failed = true; });   // permite tentar de no
         let top = feet.y - 24 * z, right = feet.x + 12 * z, drawn = false;
         if (c.state === 'battling') { ctx.fillStyle = 'rgba(229,72,77,0.85)'; ctx.fillRect(Math.round(feet.x - 10 * z), Math.round(feet.y), 20 * z, 2 * z); }   // combate em curso (estático)
         if (spr && spr.ready && spr.img) {
-            const k = WorldView.ENCOUNTER_SPRITE_SCALE, box = spr.box, w = spr.img.naturalWidth, h = spr.img.naturalHeight;
-            const at = worldToScreen(camera, metrics, wx - (box.x0 + box.x1 + 1) / 2 * k, wy - (box.y1 + 1) * k);   // centro horizontal e base do conteúdo no ponto
-            const ax = Math.round(at.x), ay = Math.round(at.y) - lift;
+            const r = this._spriteRect(spr, wx, wy, WorldView.ENCOUNTER_SPRITE_SCALE, camera, metrics), ay = r.y - lift;      // centro horizontal e base do conteúdo no ponto
             const alpha = fx && fx.alpha < 1 ? fx.alpha : 1;
             if (alpha < 1) ctx.globalAlpha = alpha;
-            ctx.drawImage(spr.img, ax, ay, Math.round(w * k * z), Math.round(h * k * z));
+            ctx.drawImage(spr.img, r.x, ay, r.w, r.h);
             if (alpha < 1) ctx.globalAlpha = 1;
-            top = ay + Math.round(box.y0 * k * z); right = ax + Math.round((box.x1 + 1) * k * z); drawn = true;
+            top = ay + r.top; right = r.x + r.right; drawn = true;
         } else if (!exiting) {
             // Sem imagem: marcador visível e distinto (carregando = caixa vazada; falha = caixa com o número da espécie). Nunca outra espécie.
             const at = worldToScreen(camera, metrics, wx - 12, wy - 24), px = 24 * z;
@@ -629,7 +700,13 @@ WorldView._assets = null; WorldView.failed = true; });   // permite tentar de no
         this._expireFx(fxNow);
         let encKey = '-';
         if (enc) { const sh = this._encounterShiny(enc), e = this._enc && this._enc.get(`${enc.speciesId}${sh ? 's' : ''}`); encKey = `${enc.id}:${enc.state}:${sh ? 1 : 0}:${e ? (e.ready ? 1 : e.failed ? 2 : 0) : 0}`; }
-        const key = [encKey, this._fxKey(fxNow), map.id, metrics.bufferWidth, metrics.bufferHeight, metrics.zoom, camera.x, camera.y, player.x, player.y, player.dir, player.moving ? Math.floor(player.distance / 6) % 2 : 'idle'].join('|');
+        const cyc = !!(this.encounters && this.encounters.cycle);
+        if (this._folCycle && !cyc) this._trail = null;                  // F9.2: a caçada acabou — o seguidor recomeça junto do treinador, sem rastro velho
+        this._folCycle = cyc;
+        const leader = this._leader(), folPoint = this._followerPoint(map, player), folSpr = leader ? this._followerSprite(leader) : null;
+        if (!leader && this._fol) this._fol = null;
+        const folKey = folSpr ? `${folSpr.id}${folSpr.shiny ? 's' : ''}` : '-';
+        const key = [encKey, this._fxKey(fxNow), folKey, map.id, metrics.bufferWidth, metrics.bufferHeight, metrics.zoom, camera.x, camera.y, player.x, player.y, player.dir, player.moving ? Math.floor(player.distance / 6) % 2 : 'idle'].join('|');
         if (key === this._lastKey) return;                    // nada mudou: não redesenha
         this._lastKey = key;
 
@@ -650,11 +727,18 @@ WorldView._assets = null; WorldView.failed = true; });   // permite tentar de no
             }
         }
         const fx = enc ? this._fxFor(enc, fxNow) : null;
-        this._drawExit(ctx, camera, metrics, false, fxNow);
-        this._drawEncounter(ctx, enc, camera, metrics, false, fx);
-        this._drawCharacter(ctx, images.hero, player, camera, metrics);
-        this._drawExit(ctx, camera, metrics, true, fxNow);
-        this._drawEncounter(ctx, enc, camera, metrics, true, fx);
+        // Ordem de desenho por PROFUNDIDADE (pés mais abaixo na tela = mais à frente). Treinador, seguidor (F9.2) e Pokémon do encontro entram num só conjunto
+        // ordenado; as regras da F8.4 para o encontro/saída em relação ao treinador (atrás/à frente) são preservadas.
+        const hy = player.y, eps = 0.001, items = [];
+        const encY = enc && ['approaching', 'arrived', 'battling'].includes(enc.state) ? (enc.point.y + 0.5) * ts + 6 + this._encounterOffset(enc).dy : hy;
+        items.push({ y: hy - eps, run: () => this._drawExit(ctx, camera, metrics, false, fxNow) });
+        items.push({ y: Math.min(encY, hy - eps), run: () => this._drawEncounter(ctx, enc, camera, metrics, false, fx) });
+        if (folPoint && folSpr) items.push({ y: folPoint.y <= hy ? Math.min(folPoint.y, hy - eps) : Math.max(folPoint.y, hy + eps), run: () => this._drawFollower(ctx, folSpr, folPoint, camera, metrics) });
+        items.push({ y: hy, run: () => this._drawCharacter(ctx, images.hero, player, camera, metrics) });
+        items.push({ y: hy + eps, run: () => this._drawExit(ctx, camera, metrics, true, fxNow) });
+        items.push({ y: Math.max(encY, hy + eps), run: () => this._drawEncounter(ctx, enc, camera, metrics, true, fx) });
+        items.sort((a, b) => a.y - b.y);                                    // estável: empates mantêm a ordem de inserção
+        for (const it of items) it.run();
         this.lastMetrics = metrics;
         this.lastCamera = camera;
         this.drawCount++;

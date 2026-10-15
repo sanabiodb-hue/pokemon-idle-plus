@@ -235,7 +235,7 @@ test('F7.2 view: reabrir a aba é idempotente (um observador ativo por vez) e re
     assert.equal(env.observers.filter(o => !o.disconnected).length, 1);
     assert.equal(env.listenerCount('visibilitychange'), 2);
     assert.equal(env.listenerCount('keydown'), 1);
-    assert.equal(game.subCount(), 2);
+    assert.equal(game.subCount(), 4);
     assert.ok(view.drawCount >= 2, 'a reabertura redesenha');
 });
 

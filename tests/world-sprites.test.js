@@ -212,7 +212,7 @@ test('F8.3 ciclo real: o sprite acompanha caminhada/chegada/batalha; ao parar ou
     const { newGame } = require('./helpers/game');
     const { game, ctx } = newGame({ seed: 11 });
     game.clock = new ctx.ManualClock(2_000_000);
-    const r = await shown({ gameObject: game, encounters: true, globals: globalsUrls });
+    const r = await shown({ gameObject: game, encounters: true, globals: globalsUrls, follower: false });
     const { env, view, encounters } = r;
     const sprites = () => urlsLoaded(env);
     view.openHuntMap(25); env.flush();
@@ -247,7 +247,7 @@ test('F8.3 visibilidade: o Pokémon fica um passo à frente do treinador (sentid
     const { newGame } = require('./helpers/game');
     const { game, ctx } = newGame({ seed: 11 });
     game.clock = new ctx.ManualClock(2_000_000);
-    const r = await shown({ gameObject: game, encounters: true, globals: globalsUrls });
+    const r = await shown({ gameObject: game, encounters: true, globals: globalsUrls, follower: false });
     const { env, view, encounters } = r;
     view.openHuntMap(25); env.flush();
     env.encounterBtn.fire('click'); env.flush();

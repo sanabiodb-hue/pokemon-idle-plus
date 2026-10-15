@@ -29,7 +29,7 @@ function chain(game) {
 async function boot(opts = {}) {
     const { game, ctx } = newGame({ seed: opts.seed ?? 11 });
     game.clock = new ctx.ManualClock(2_000_000);
-    const r = await shown({ gameObject: game, encounters: true, globals, ...opts.shown });
+    const r = await shown({ gameObject: game, encounters: true, globals, follower: false, ...opts.shown });
     if (opts.reduced) r.env.reduced = true;
     r.view.openHuntMap(25); r.env.flush();
     r.game = game; r.ctx = ctx;
@@ -183,7 +183,7 @@ test('F8.4 limpeza: esconder a aba, trocar de mapa, parar e remontar descartam e
     const withView = subs(r.game);
     r.view.onHide();
     assert.equal(r.view._fx, null); assert.equal(r.view._seen, null); assert.equal(r.view._raf, null);
-    assert.equal(withView - subs(r.game), 2, 'as duas assinaturas da view (route_changed e pokemon_captured) foram soltas');
+    assert.equal(withView - subs(r.game), 4, 'as quatro assinaturas da view (route_changed, pokemon_captured, pokemon_switched e evolution) foram soltas');
     r.env.flush(); assert.equal(r.env.pending(), 0);
     // remontar: primeira observação só ressincroniza (nenhum efeito, mesmo com o encontro em curso)
     r.view.onShow(); r.env.flush();

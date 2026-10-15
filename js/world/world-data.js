@@ -8,6 +8,10 @@
 // ============================================================
 const WORLD_TILE_SIZE = 16;
 
+// F9.2: Pokémon líder que segue o treinador (só visual). scale = fator próprio do seguidor (menor que o do encontro, 0,375): PNG de 96 px -> 24 px do
+// mundo. lagSteps = atraso em passos (1 passo = 1 tile) ao longo do CAMINHO do treinador. Ajuste aqui; nada disso vai para o save.
+const WORLD_FOLLOWER = { scale: 0.25, lagSteps: 2 };
+
 // Movimento: unidades consistentes e independentes da taxa de quadros. Posição e distância em px do mundo (1 tile = 16 px),
 // velocidade em px/s, tempo em ms. O mesmo modelo serve ao controle manual (cidades), à caminhada automática das caçadas e à
 // simulação offline (mesma matemática, sem desenhar passos). hitbox: meia-largura/meia-altura da caixa dos pés.
