@@ -46,7 +46,8 @@ class HuntView {
         this._lastLimits = { battleLimit: 100, timeLimitMinutes: 60 };   // 取消勾选后再勾选时恢复的数值
         this._targetId = null;       // F8.0: só a espécie ESCOLHIDA na interface (seleção, não é estado do jogo); com ciclo ativo vale a do ciclo
         this._targetQuery = '';
-        this._queueMinutes = (typeof HUNT_QUEUE_DEFAULT_MINUTES === 'number' ? HUNT_QUEUE_DEFAULT_MINUTES : 10);   // F8.1: duração escolhida para o próximo alvo adicionado
+        this._queueType = 'time';    // F8.1/F8.2: condição escolhida para o PRÓXIMO alvo adicionado (seleção da interface, não é estado do jogo)
+        this._queueValue = HUNT_QUEUE_DEFAULT_MINUTES;
         if (!this.root) return;
         this.section = 'ops';
         this.eco = new EconomyView(ui, this);
@@ -82,7 +83,7 @@ class HuntView {
         this.root.addEventListener('change', (e) => this.handleChange(e.target));
         this.root.addEventListener('input', (e) => {
             if (e.target.matches && e.target.matches('[data-hunt-target-search]')) { this._targetQuery = e.target.value; this.renderTargetResults(); return; }
-            if (e.target.matches && e.target.matches('[data-hunt-queue-minutes]')) { this._queueMinutes = Math.floor(Number(e.target.value)); return; }
+            if (e.target.matches && e.target.matches('[data-hunt-queue-value]')) { this._queueValue = Math.floor(Number(e.target.value)); return; }
             if (e.target.matches && e.target.matches('input[type=range]')) this._syncRangeLabel(e.target);
         });
     }
@@ -175,6 +176,7 @@ class HuntView {
         }
         this.root.querySelectorAll('[data-hunt-potions]').forEach(pot => { pot.textContent = ptNumber(g.getPotions()); });
         this._tickTarget();
+        this._tickQueue();
         this.eco.tickResources();
     }
 
@@ -201,7 +203,8 @@ class HuntView {
         el.innerHTML = `
             <label class="hunt-field"><span>Escolher espécie</span><input type="search" data-hunt-target-search value="${escapeHtml(this._targetQuery)}" placeholder="Nome ou número" autocomplete="off"></label>
             <div id="hunt-target-results" class="hunt-chips"></div>
-            <label class="hunt-field"><span>Duração do alvo (minutos)</span><input type="number" inputmode="numeric" min="1" max="1440" step="1" data-hunt-queue-minutes value="${Number.isFinite(this._queueMinutes) ? this._queueMinutes : ''}"></label>`;
+            <label class="hunt-field"><span>Concluir o alvo por</span><select data-hunt-queue-type><option value="time"${this._queueType === 'time' ? ' selected' : ''}>Duração (minutos)</option><option value="battles"${this._queueType === 'battles' ? ' selected' : ''}>Batalhas concluídas</option></select></label>
+            <label class="hunt-field"><span>${this._queueType === 'battles' ? 'Quantidade de batalhas' : 'Duração do alvo (minutos)'}</span><input type="number" inputmode="numeric" min="1" max="${this._queueType === 'battles' ? HUNT_QUEUE_MAX_BATTLES : HUNT_QUEUE_MAX_MINUTES}" step="1" data-hunt-queue-value value="${Number.isFinite(this._queueValue) ? this._queueValue : ''}"></label>`;
         this.renderTargetResults();
     }
 
@@ -241,13 +244,14 @@ class HuntView {
         if (!q) { el.innerHTML = ''; return; }
         const m = huntControlMatrix(snap, huntCenterTargetId(snap, this._targetId));
         const hq = this.ui.huntQueue;
+        const prog = q.activeItem ? huntQueueProgress(q.activeItem, this.game.getHuntSession(), this.game.now()) : null;   // derivado da sessão real
         const mark = { done: '✅', active: '▶️', pending: '⏳' };
         const rows = q.items.map((it, i) => {
             const st = huntQueueStatusOf(q, i);
             const locked = hq ? hq.isLocked(i) : true;
             const nm = this._speciesLabel(it.speciesId);
             const btn = (action, label, off) => `<button class="hunt-btn small" data-hunt-action="${action}" data-index="${i}"${off ? ' disabled' : ''} aria-label="${label}">${label}</button>`;
-            return `<li class="hunt-queue-item ${st}" data-queue-status="${st}"><span class="hunt-queue-mark">${mark[st]}</span><span class="hunt-queue-name">${i + 1}. ${escapeHtml(nm)} <small>#${String(it.speciesId).padStart(3, '0')} · ${it.minutes} min</small></span>`
+            return `<li class="hunt-queue-item ${st}" data-queue-status="${st}"><span class="hunt-queue-mark">${mark[st]}</span><span class="hunt-queue-name">${i + 1}. ${escapeHtml(nm)} <small>#${String(it.speciesId).padStart(3, '0')} · ${huntQueueConditionLabel(it.condition)}${st === 'active' && prog ? ` · ${prog.current}/${prog.value}` : ''}</small></span>`
                 + `<span class="hunt-queue-ctl">${btn('queue-up', '▲', locked || i === 0 || (hq && hq.isLocked(i - 1)))}${btn('queue-down', '▼', locked || i === q.total - 1)}${btn('queue-remove', '✕', locked)}</span></li>`;
         }).join('');
         const startLabel = q.state === 'idle' ? '▶ INICIAR FILA' : (q.state === 'running' && q.sessionId !== null) ? '▶ EM ANDAMENTO' : '▶ CONTINUAR FILA';
@@ -255,10 +259,19 @@ class HuntView {
         const why = [m.queueStart, m.queueAdd].find(c => !c.enabled && c.reason);
         el.innerHTML = `
             <h3>📋 Fila de alvos</h3>
-            <div class="hunt-target-status" data-hunt-queue-text>${escapeHtml(huntQueueStatusText(q, snap, (id) => this._speciesLabel(id)))}</div>
+            <div class="hunt-target-status" data-hunt-queue-text>${escapeHtml(huntQueueStatusText(q, snap, (id) => this._speciesLabel(id), prog))}</div>
             ${q.total ? `<ol class="hunt-queue-list">${rows}</ol>` : ''}
             <div class="hunt-buttons">${cb('queue-add', '＋ ADICIONAR À FILA', m.queueAdd)}${cb('queue-start', startLabel, m.queueStart, 'primary')}${cb('queue-clear', '🗑 LIMPAR', m.queueClear)}</div>
             ${why ? `<div class="hunt-hint" data-hunt-queue-why>${escapeHtml(why.reason)}</div>` : ''}`;
+    }
+
+    // A cada segundo: o texto da fila acompanha o progresso real (tempo decorrido ou batalhas), sem redesenhar
+    _tickQueue() {
+        const text = this.root.querySelector('[data-hunt-queue-text]');
+        if (!text) return;
+        const snap = this._snap(), q = snap.queue;
+        if (!q || !q.activeItem) return;
+        text.textContent = huntQueueStatusText(q, snap, (id) => this._speciesLabel(id), huntQueueProgress(q.activeItem, this.game.getHuntSession(), this.game.now()));
     }
 
     // A cada segundo: só texto e barra do deslocamento (sem redesenhar nem tocar na lógica)
@@ -528,7 +541,7 @@ class HuntView {
             case 'queue-add': {
                 const hq = this.ui.huntQueue, id = huntCenterTargetId(this._snap(), this._targetId);
                 if (!hq || id === null) { this.ui.showToast('⚠️ Escolha uma espécie para adicionar.'); break; }
-                this._report(hq.add(id, this._queueMinutes), '📋 Alvo adicionado à fila.');
+                this._report(hq.add(id, { type: this._queueType, value: this._queueValue }), '📋 Alvo adicionado à fila.');
                 break;
             }
             case 'queue-start': this._report(this.ui.huntQueue ? this.ui.huntQueue.start() : { ok: false, message: 'Fila indisponível.' }, '🎯 Fila iniciada!'); break;
@@ -580,6 +593,12 @@ class HuntView {
 
     handleChange(el) {
         const g = this.game;
+        if (el.matches('[data-hunt-queue-type]')) {                  // F8.2: trocar o tipo reinicia o valor para o padrão do tipo
+            this._queueType = el.value === 'battles' ? 'battles' : 'time';
+            this._queueValue = this._queueType === 'battles' ? HUNT_QUEUE_DEFAULT_BATTLES : HUNT_QUEUE_DEFAULT_MINUTES;
+            this.renderTargetPicker();
+            return;
+        }
         if (el.matches('[data-hunt-route]')) { this._report(g.selectHuntRoute(el.value)); return; }
         const p = huntClone(g.getAutomationPolicy());
         if (el.matches('[data-hunt-route-mode]')) {

@@ -2,20 +2,52 @@
 // F8.1 · Fila sequencial de alvos da caça
 //
 // FONTE DE VERDADE: gameState.automation.queue (persistida junto da política e da sessão):
-//   { items: [{ speciesId, minutes }], index, state, sessionId, haltReason }
+//   { items: [{ speciesId, condition: { type: 'time'|'battles', value } }], index, state, sessionId, haltReason }
 //   state: 'idle' (montada, nada rodou) | 'running' (o alvo `index` está em andamento — sessionId — ou aguarda o início, sessionId null)
 //          | 'halted' (parou por outro motivo; mantém a posição) | 'done' (todos concluídos; estado final estável)
 //   Alvo i: concluído se i < index; ativo se state='running' e i === index; pendente se i >= index (fora o ativo).
 //   Não há "status por item": um único índice evita cópias que divirjam.
 // Cada alvo é uma SESSÃO de caça própria, iniciada pela entrada oficial (WorldEncounters.begin). A duração do alvo usa o mecanismo de parada
-// por tempo que já existe: o motor lê `minutes` do alvo ativo como limite de tempo (engine._snapshot) e a sessão para com motivo time_limit.
-// Só time_limit da sessão DA FILA conclui o alvo; qualquer outro motivo de parada interrompe a fila (halted) sem avançar.
+// por tempo/por batalhas que já existem: o motor lê a condição do alvo ativo como ÚNICO limite da sessão (engine._snapshot: o limite escolhido vale e o
+// outro limite global fica desligado; condições globais de interrupção — shiny, sem poções, rota completa — continuam valendo). A sessão para com o
+// motivo da condição: time_limit (type 'time', value = minutos) ou battle_limit (type 'battles', value = batalhas concluídas, vitórias e derrotas).
+// Só esse motivo, vindo da sessão DA FILA, conclui o alvo; qualquer outro motivo de parada interrompe a fila (halted) sem avançar.
+// O progresso NUNCA é um contador novo: batalhas = session.stats.battles (contado uma vez pelo motor em cada battle_completed da sessão em andamento e
+// salvo com a sessão); tempo = huntSessionDurationMs. Itens de saves antigos ({ speciesId, minutes }) viram { type: 'time', value: minutes } ao carregar.
 // ============================================================
 
 const HUNT_QUEUE_MAX_ITEMS = 20;
 const HUNT_QUEUE_MIN_MINUTES = 1;
 const HUNT_QUEUE_MAX_MINUTES = 1440;
 const HUNT_QUEUE_DEFAULT_MINUTES = 10;
+// Batalhas por alvo: 24 h de caçada no ciclo do mundo rendem ~6.200 batalhas (medido na F7.11), então 10.000 cobre o teto de 24 h do tempo com folga e
+// fica muito abaixo do limite de política do motor (1e9), que é o mecanismo reutilizado.
+const HUNT_QUEUE_MIN_BATTLES = 1;
+const HUNT_QUEUE_MAX_BATTLES = 10000;
+const HUNT_QUEUE_DEFAULT_BATTLES = 50;
+const HUNT_QUEUE_CONDITION_TYPES = ['time', 'battles'];
+const HUNT_QUEUE_COMPLETION_REASON = { time: 'time_limit', battles: 'battle_limit' };
+
+// Condição válida { type, value } ou null. Atalho aceito: um número = minutos (contrato da F8.1).
+function huntQueueNormalizeCondition(c) {
+    if (typeof c === 'number') c = { type: 'time', value: c };
+    if (!_isObj(c) || !HUNT_QUEUE_CONDITION_TYPES.includes(c.type) || !Number.isInteger(c.value)) return null;
+    const [lo, hi] = c.type === 'time' ? [HUNT_QUEUE_MIN_MINUTES, HUNT_QUEUE_MAX_MINUTES] : [HUNT_QUEUE_MIN_BATTLES, HUNT_QUEUE_MAX_BATTLES];
+    return c.value >= lo && c.value <= hi ? { type: c.type, value: c.value } : null;
+}
+// Item de save (formato novo ou o antigo só com minutes) → condição única; novo formato vale se existir.
+function huntQueueItemCondition(it) {
+    if (!_isObj(it)) return null;
+    if (_isObj(it.condition)) return huntQueueNormalizeCondition(it.condition);
+    return Object.prototype.hasOwnProperty.call(it, 'minutes') ? huntQueueNormalizeCondition({ type: 'time', value: it.minutes }) : null;
+}
+function huntQueueConditionLabel(c) { return c.type === 'battles' ? `${c.value} ${c.value === 1 ? 'batalha' : 'batalhas'}` : `${c.value} min`; }
+// Progresso do alvo ATIVO, derivado da sessão real: { type, value, current } (current = batalhas concluídas ou minutos decorridos)
+function huntQueueProgress(item, session, nowMs) {
+    if (!item || !session) return null;
+    const c = item.condition;
+    return { type: c.type, value: c.value, current: c.type === 'battles' ? Math.min(session.stats.battles, c.value) : Math.min(c.value, Math.floor(huntSessionDurationMs(session, nowMs) / 60000)) };
+}
 const HUNT_QUEUE_STATES = ['idle', 'running', 'halted', 'done'];
 
 function defaultHuntQueue() { return { items: [], index: 0, state: 'idle', sessionId: null, haltReason: null }; }
@@ -28,11 +60,11 @@ function sanitizeHuntQueue(raw, session) {
     let dropped = false;
     const list = Array.isArray(raw.items) ? raw.items : [];
     for (const it of list.slice(0, HUNT_QUEUE_MAX_ITEMS)) {
-        const ok = _isObj(it) && Number.isInteger(it.speciesId) && it.speciesId >= 1 && it.speciesId <= 9999999
-            && Number.isInteger(it.minutes) && it.minutes >= HUNT_QUEUE_MIN_MINUTES && it.minutes <= HUNT_QUEUE_MAX_MINUTES && !seen.has(it.speciesId);
+        const condition = huntQueueItemCondition(it);
+        const ok = _isObj(it) && Number.isInteger(it.speciesId) && it.speciesId >= 1 && it.speciesId <= 9999999 && condition !== null && !seen.has(it.speciesId);
         if (!ok) { dropped = true; continue; }
         seen.add(it.speciesId);
-        items.push({ speciesId: it.speciesId, minutes: it.minutes });
+        items.push({ speciesId: it.speciesId, condition });
     }
     if (list.length > HUNT_QUEUE_MAX_ITEMS) dropped = true;
     const q = defaultHuntQueue();
@@ -63,7 +95,7 @@ function huntQueueView(game) {
     const total = q.items.length;
     const awaiting = q.state === 'running' && q.sessionId === null && q.index < total;
     return {
-        items: q.items.map(i => ({ speciesId: i.speciesId, minutes: i.minutes })),
+        items: q.items.map(i => ({ speciesId: i.speciesId, condition: { type: i.condition.type, value: i.condition.value } })),
         index: q.index, state: q.state, sessionId: q.sessionId, haltReason: q.haltReason, total, awaiting,
         activeItem: (q.state === 'running' && q.sessionId !== null) ? q.items[q.index] || null : null,
         nextItem: q.index < total ? q.items[q.index] : null,
@@ -81,9 +113,11 @@ class HuntQueue {
         this.game = game;
         this.enc = enc;
         this._unsubs = [];
+        this._encUnsub = null;
         this._pending = false;              // avanço agendado e ainda não consumido (garante UMA só execução)
         this._kickAfterOffline = false;     // o alvo terminou durante o cálculo offline: o próximo começa quando ele acabar
         game.queueHook = this;
+        this._reconcile();                  // depois de carregar: a sessão da fila precisa ainda ter o seu ciclo do mundo
         this.sync();
     }
 
@@ -109,14 +143,20 @@ class HuntQueue {
     }
 
     // ---------- edição ----------
-    add(speciesId, minutes = HUNT_QUEUE_DEFAULT_MINUTES) {
+    // condition: { type: 'time', value: minutos } | { type: 'battles', value: batalhas } | um número (= minutos, como na F8.1)
+    add(speciesId, condition = HUNT_QUEUE_DEFAULT_MINUTES) {
         if (!Number.isInteger(speciesId) || speciesId < 1 || typeof POKEMON_DATA === 'undefined' || !POKEMON_DATA[speciesId]) return this._fail('invalid_species', 'Espécie inválida.');
-        if (!Number.isInteger(minutes) || minutes < HUNT_QUEUE_MIN_MINUTES || minutes > HUNT_QUEUE_MAX_MINUTES) return this._fail('invalid_minutes', `A duração deve ser de ${HUNT_QUEUE_MIN_MINUTES} a ${HUNT_QUEUE_MAX_MINUTES} minutos.`);
+        const cond = huntQueueNormalizeCondition(condition);
+        if (!cond) {
+            const battles = _isObj(condition) && condition.type === 'battles';
+            return battles ? this._fail('invalid_battles', `A quantidade deve ser de ${HUNT_QUEUE_MIN_BATTLES} a ${HUNT_QUEUE_MAX_BATTLES} batalhas.`)
+                : this._fail('invalid_minutes', `A duração deve ser de ${HUNT_QUEUE_MIN_MINUTES} a ${HUNT_QUEUE_MAX_MINUTES} minutos.`);
+        }
         const v = this.view();
         if (v.state === 'done') return this._fail('queue_done', 'A fila terminou. Limpe-a para montar outra.');
         if (v.items.some(i => i.speciesId === speciesId)) return this._fail('duplicate', 'Essa espécie já está na fila.');
         if (v.total >= HUNT_QUEUE_MAX_ITEMS) return this._fail('queue_full', `A fila comporta no máximo ${HUNT_QUEUE_MAX_ITEMS} alvos.`);
-        this._w().items.push({ speciesId, minutes });
+        this._w().items.push({ speciesId, condition: cond });
         this._changed('edited', { op: 'add', speciesId });
         return { ok: true };
     }
@@ -194,13 +234,37 @@ class HuntQueue {
         const want = !!q && q.state === 'running';
         if (want && !this._unsubs.length) this._unsubs = [this.game.bus.on('hunt_stopped', (e) => this._onStopped(e))];
         else if (!want && this._unsubs.length) { for (const off of this._unsubs) off(); this._unsubs = []; }     // sem fila rodando: nenhum ouvinte (offline continua sem custo extra)
+        if (want && !this._encUnsub && this.enc && this.enc.onChange) this._encUnsub = this.enc.onChange(() => this._onCycleChange());
+        else if (!want && this._encUnsub) { this._encUnsub(); this._encUnsub = null; }
+    }
+
+    // F8.2: se o ciclo do mundo da sessão da fila acaba SEM a sessão parar (o jogador saiu do mapa de caça, Torre, falha de geração...), a sessão passa a ser
+    // uma caçada comum por rota. Batalhas de rota não podem contar para o alvo (nem o tempo dela concluí-lo): a fila pára na posição.
+    _onCycleChange() {
+        const q = this._q();
+        if (!q || q.state !== 'running' || q.sessionId === null || this.game._isOfflineSimulating) return;
+        const s = this.game.getHuntSession();
+        if (!s || s.id !== q.sessionId || !(s.state === 'running' || s.state === 'paused')) return;      // sessão parada: quem trata é _onStopped
+        if (this.enc.status().active) return;
+        q.state = 'halted'; q.haltReason = 'cycle_lost'; q.sessionId = null;
+        this._changed('halted', { reason: 'cycle_lost' });
+    }
+
+    _reconcile() {
+        const q = this._q();
+        if (!q || q.state !== 'running' || q.sessionId === null) return;
+        const s = this.game.getHuntSession();
+        if (s && s.id === q.sessionId && (s.state === 'running' || s.state === 'paused') && !this.enc.status().active) {
+            q.state = 'halted'; q.haltReason = 'cycle_lost'; q.sessionId = null;
+        }
     }
 
     _onStopped(e) {
         const q = this._q();
         if (!q || q.state !== 'running' || q.sessionId === null || !e || e.id !== q.sessionId) return;   // só a sessão DA fila; evento repetido é inofensivo
         q.sessionId = null;                                                                          // consome o sinal: uma conclusão = um processamento
-        if (e.reason === 'time_limit') {
+        const item = q.items[q.index];
+        if (item && e.reason === HUNT_QUEUE_COMPLETION_REASON[item.condition.type]) {              // a razão da condição DESTE alvo (tempo → time_limit; batalhas → battle_limit)
             q.index += 1;
             if (q.index >= q.items.length) { q.state = 'done'; this._changed('done', {}); return; }
             this._changed('completed', { index: q.index - 1 });

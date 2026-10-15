@@ -44,7 +44,7 @@ test('F8.1 A: adicionar, remover e ordenar — duplicatas recusadas, limites, e 
     assert.equal(t.hq.add(999999, 5).code, 'invalid_species');
     for (const bad of [0, -1, 1.5, 1441, NaN, '5']) assert.equal(t.hq.add(16, bad).code, 'invalid_minutes', String(bad));
     t.hq.add(16, 5); t.hq.add(1, 7);
-    assert.equal(JSON.stringify(t.hq.view().items.map(i => [i.speciesId, i.minutes])), JSON.stringify([[25, 10], [16, 5], [1, 7]]));
+    assert.equal(JSON.stringify(t.hq.view().items.map(i => [i.speciesId, i.condition.value])), JSON.stringify([[25, 10], [16, 5], [1, 7]]));
     assert.equal(t.hq.move(1, -1).ok, true);
     assert.equal(JSON.stringify(t.hq.view().items.map(i => i.speciesId)), '[16,25,1]');
     assert.equal(t.hq.move(0, -1).code, 'invalid_index'); assert.equal(t.hq.move(2, 1).code, 'invalid_index'); assert.equal(t.hq.move(0, 2).code, 'invalid_index');
@@ -240,7 +240,7 @@ test('F8.1 I: salvar e carregar com vários alvos — posição, pendentes e dur
     a.game.saveNow();
     const b = boot({ load: true, storage: a.storage, clock: a.game.clock.now() });
     const v = b.hq.view();
-    assert.equal(JSON.stringify(v.items), JSON.stringify([{ speciesId: 25, minutes: 3 }, { speciesId: 16, minutes: 4 }, { speciesId: 1, minutes: 5 }]));
+    assert.equal(JSON.stringify(v.items), JSON.stringify([{ speciesId: 25, condition: { type: 'time', value: 3 } }, { speciesId: 16, condition: { type: 'time', value: 4 } }, { speciesId: 1, condition: { type: 'time', value: 5 } }]));
     assert.equal(v.state, 'running'); assert.equal(v.index, 0); assert.equal(v.sessionId, session(b.game).id);
     assert.equal(session(b.game).state, 'paused'); assert.equal(b.enc.cycle.speciesId, 25);
     assert.equal(b.ctx.huntSessionDurationMs(session(b.game), b.game.clock.now()), MIN, 'a duração acumulada sobreviveu');
@@ -283,7 +283,10 @@ test('F8.1 I: saves antigos (sem fila) e dados inválidos da fila carregam sem e
     const S = a.ctx.sanitizeHuntQueue;
     const sess = { id: 'h1', state: 'paused' };
     const good = { items: [{ speciesId: 25, minutes: 3 }, { speciesId: 16, minutes: 4 }], index: 1, state: 'running', sessionId: 'h1', haltReason: null };
-    assert.equal(JSON.stringify(S(good, sess)), JSON.stringify(good));
+    // formato ANTIGO (só minutes) é migrado para a condição única de tempo, mantendo as durações
+    const migrated = { items: [{ speciesId: 25, condition: { type: 'time', value: 3 } }, { speciesId: 16, condition: { type: 'time', value: 4 } }], index: 1, state: 'running', sessionId: 'h1', haltReason: null };
+    assert.equal(JSON.stringify(S(good, sess)), JSON.stringify(migrated));
+    assert.equal(JSON.stringify(S(migrated, sess)), JSON.stringify(migrated), 'o formato novo é estável');
     const ok = (raw, expect) => { const r = S(raw, sess); assert.equal(JSON.stringify(r && { s: r.state, i: r.index, n: r.items.length }), JSON.stringify(expect), JSON.stringify(raw).slice(0, 90)); };
     ok(null, null); ok('x', null); ok({}, null); ok({ items: [] }, null); ok({ items: 'a' }, null);
     ok({ ...good, index: -3 }, { s: 'running', i: 0, n: 2 });
@@ -412,13 +415,13 @@ test('F8.1 K: a Central monta a fila pela interface — adicionar, ordenar, remo
     try {
         assert.match(qtext(t), /Fila vazia/);
         assert.match(qhtml(t), /data-hunt-action="queue-add" disabled/);
-        t.view.handleAction('target-pick', { id: '25' }); t.view._queueMinutes = 3;
+        t.view.handleAction('target-pick', { id: '25' }); t.view._queueValue = 3;
         t.view.handleAction('queue-add', {});
-        t.view.handleAction('target-pick', { id: '16' }); t.view._queueMinutes = 4;
+        t.view.handleAction('target-pick', { id: '16' }); t.view._queueValue = 4;
         t.view.handleAction('queue-add', {});
         t.view.handleAction('queue-add', {});                      // duplicata: recusada
         assert.match(t.ui.toasts.at(-1), /já está na fila|Já está na fila|Essa espécie/i);
-        assert.equal(JSON.stringify(t.hq.view().items), JSON.stringify([{ speciesId: 25, minutes: 3 }, { speciesId: 16, minutes: 4 }]));
+        assert.equal(JSON.stringify(t.hq.view().items), JSON.stringify([{ speciesId: 25, condition: { type: 'time', value: 3 } }, { speciesId: 16, condition: { type: 'time', value: 4 } }]));
         assert.match(qtext(t), /1\. (Pikachu|\?\?\?) #025 · 3 min/); assert.match(qtext(t), /Fila pronta: 2 alvos/);
         t.view.handleAction('queue-down', { index: '0' });
         assert.equal(JSON.stringify(t.hq.view().items.map(i => i.speciesId)), '[16,25]');

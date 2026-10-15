@@ -119,6 +119,7 @@ function loadGameContext(opts = {}) {
   MAX_POTIONS, INITIAL_POTIONS, POTION_HEAL_PERCENT, potionHealAmount,
   EconomyView, HuntView, huntFormatDuration, HUNT_STATE_VIEW,
   HuntQueue, huntQueueView, huntQueueStatusOf, sanitizeHuntQueue, defaultHuntQueue, HUNT_QUEUE_MAX_ITEMS, HUNT_QUEUE_DEFAULT_MINUTES,
+  HUNT_QUEUE_MAX_MINUTES, HUNT_QUEUE_MIN_BATTLES, HUNT_QUEUE_MAX_BATTLES, HUNT_QUEUE_DEFAULT_BATTLES, huntQueueNormalizeCondition, huntQueueItemCondition, huntQueueConditionLabel, huntQueueProgress,
   HUNT_CENTER_RESULT_LIMIT, huntQueueStatusText, huntSpeciesMatches, huntCenterSnapshot, huntControlMatrix, huntCenterTargetId, huntCenterStatusText,
   createSimulationRng, createSimulationClone, simulateHunt, huntEfficiency, buildHuntOfflineReport, recommendHuntNext, recommendHuntRoute,
   Analytics, ANALYTICS_STORAGE_KEY, ANALYTICS_QUEUE_MAX, ANALYTICS_EVENT_NAMES, ANALYTICS_SESSION_GAP_MS,

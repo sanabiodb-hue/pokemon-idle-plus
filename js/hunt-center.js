@@ -129,18 +129,20 @@ function huntCenterStatusText(snap, name, tilePx = 16) {
 }
 
 // F8.1: texto de status da fila, só com a fila e a sessão reais.
-function huntQueueStatusText(q, snap, nameOf) {
+function huntQueueStatusText(q, snap, nameOf, progress) {
     if (!q || !q.total) return 'Fila vazia. Escolha uma espécie, defina a duração e adicione à fila.';
     const n = (i) => (q.items[i] ? nameOf(q.items[i].speciesId) : '');
     if (q.state === 'done') return `Fila concluída: ${q.total} ${q.total === 1 ? 'alvo' : 'alvos'}. Limpe a fila para montar outra.`;
     if (q.state === 'halted') {
-        const why = { manual: 'você encerrou a caçada', no_potions: 'acabaram as poções', battle_limit: 'limite de batalhas', shiny_found: 'um shiny foi encontrado', route_complete: 'a rota foi concluída', start_failed: 'o alvo não pôde ser iniciado', session_lost: 'a sessão não foi encontrada', invalid_data: 'dados da fila inválidos' }[q.haltReason] || 'a caçada foi interrompida';
+        const why = { manual: 'você encerrou a caçada', no_potions: 'acabaram as poções', battle_limit: 'limite de batalhas', shiny_found: 'um shiny foi encontrado', route_complete: 'a rota foi concluída', start_failed: 'o alvo não pôde ser iniciado', session_lost: 'a sessão não foi encontrada', cycle_lost: 'o treinador saiu do mapa de caça', invalid_data: 'dados da fila inválidos' }[q.haltReason] || 'a caçada foi interrompida';
         return `Fila interrompida (${why}) no alvo ${q.index + 1} de ${q.total}: ${n(q.index)}. Continue para recomeçar este alvo.`;
     }
     if (q.state === 'running' && q.sessionId === null) return `Fila aguardando o alvo ${q.index + 1} de ${q.total}: ${n(q.index)}. Continue para iniciá-lo.`;
     if (q.state === 'running') {
         const paused = snap && snap.sessionState === 'paused';
-        return `Fila ${paused ? 'pausada' : 'em andamento'}: alvo ${q.index + 1} de ${q.total} — ${n(q.index)} (${q.items[q.index].minutes} min).`;
+        const c = q.items[q.index].condition;
+        const prog = progress ? (c.type === 'battles' ? `${progress.current}/${progress.value} ${progress.value === 1 ? 'batalha' : 'batalhas'}` : `${progress.current}/${progress.value} min`) : huntQueueConditionLabel(c);
+        return `Fila ${paused ? 'pausada' : 'em andamento'}: alvo ${q.index + 1} de ${q.total} — ${n(q.index)} (${prog}).`;
     }
     return `Fila pronta: ${q.total} ${q.total === 1 ? 'alvo' : 'alvos'}. Inicie para começar pelo primeiro.`;
 }

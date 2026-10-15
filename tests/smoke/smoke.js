@@ -321,15 +321,19 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
             await page.locator('#tab-nav [data-tab="tab-hunt"]').click();
             await page.waitForSelector('#hunt-queue');
             const noOverflow = async () => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1 && document.getElementById('hunt-container').scrollWidth <= document.getElementById('hunt-container').clientWidth + 1);
-            const addTarget = async (id, minutes) => {
+            const addTarget = async (id, value, type = 'time') => {
                 await page.locator('#hunt-target [data-hunt-target-search]').fill(String(id));
                 await page.locator(`#hunt-target [data-hunt-action="target-pick"][data-id="${id}"]`).click();
-                await page.locator('#hunt-target [data-hunt-queue-minutes]').fill(String(minutes));
+                await page.locator('#hunt-target [data-hunt-queue-type]').selectOption(type);
+                await page.locator('#hunt-target [data-hunt-queue-value]').fill(String(value));
                 await page.locator('#hunt-queue [data-hunt-action="queue-add"]').click();
             };
             check(`Fila ${vp.name}: começa vazia e sem iniciar`, await page.evaluate(() => /Fila vazia/.test(document.getElementById('hunt-queue').innerText) && document.querySelector('#hunt-queue [data-hunt-action="queue-start"]').disabled));
             await addTarget(25, 2); await addTarget(16, 3);
-            check(`Fila ${vp.name}: adicionar pela busca monta a fila na ordem, com a duração de cada alvo`, await page.evaluate(() => { const v = gameUI.huntQueue.view(); return v.items.length === 2 && v.items[0].speciesId === 25 && v.items[0].minutes === 2 && v.items[1].speciesId === 16 && v.items[1].minutes === 3 && document.querySelectorAll('#hunt-queue .hunt-queue-item').length === 2; }));
+            check(`Fila ${vp.name}: adicionar pela busca monta a fila na ordem, com a duração de cada alvo`, await page.evaluate(() => { const v = gameUI.huntQueue.view(); return v.items.length === 2 && v.items[0].speciesId === 25 && v.items[0].condition.type === 'time' && v.items[0].condition.value === 2 && v.items[1].speciesId === 16 && v.items[1].condition.value === 3 && document.querySelectorAll('#hunt-queue .hunt-queue-item').length === 2; }));
+            await addTarget(1, 7, 'battles');
+            check(`Fila ${vp.name}: alvo por batalhas — o campo muda para quantidade, a fila mostra "7 batalhas" e guarda a condição`, await page.evaluate(() => { const v = gameUI.huntQueue.view(); const it = v.items[2]; return it && it.speciesId === 1 && it.condition.type === 'battles' && it.condition.value === 7 && /7 batalhas/.test(document.getElementById('hunt-queue').innerText) && /Quantidade de batalhas/.test(document.getElementById('hunt-target-pick').innerText); }));
+            await page.locator('#hunt-queue [data-hunt-action="queue-remove"][data-index="2"]').click();
             await page.locator('#hunt-queue [data-hunt-action="queue-down"][data-index="0"]').click();
             await page.locator('#hunt-queue [data-hunt-action="queue-up"][data-index="1"]').click();
             check(`Fila ${vp.name}: reordenar pendentes funciona e a tela lê a fila do jogo`, await page.evaluate(() => gameUI.huntQueue.view().items.map(i => i.speciesId).join() === '25,16'));
