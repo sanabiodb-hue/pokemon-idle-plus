@@ -17,6 +17,17 @@ const DUPLICATE_CAPTURE_RATE = 0.05;
 const DUPLICATE_SPECIES_CAP = 20;
 
 // ===================== 消耗品：药水（阶段 5A 的第一个消耗品）=====================
+// F9.4: Poké Bolas. Catálogo (dados) e limite por item. `catchMultiplier` é só GUARDADO: nesta fase nenhuma bola influencia a captura
+// (a mecânica de captura com chance fica para a fase seguinte). Preço = max(basePrice, ceil(winsPerBall × ouro por vitória do nível de preço)):
+// o piso vale no começo e o preço acompanha o progresso, como a poção. A Master Bola não é comprável na loja.
+const BALL_STACK_MAX = 99;
+const BALL_TYPES = [
+    { id: 'pokeball',   name: 'Poké Bola',   icon: '⚪', basePrice: 20,  winsPerBall: 1, catchMultiplier: 1,   buyable: true },
+    { id: 'greatball',  name: 'Great Bola',  icon: '🔵', basePrice: 60,  winsPerBall: 3, catchMultiplier: 1.5, buyable: true },
+    { id: 'ultraball',  name: 'Ultra Bola',  icon: '🟡', basePrice: 120, winsPerBall: 6, catchMultiplier: 2,   buyable: true },
+    { id: 'masterball', name: 'Master Bola', icon: '🟣', basePrice: 0,   winsPerBall: 0, catchMultiplier: 255, buyable: false },
+];
+
 const INITIAL_POTIONS = 10;          // 新玩家（以及还没有 inventory 的旧存档）的初始药水数
 const MAX_POTIONS = 99999;           // 存档清洗上限
 const POTION_HEAL_PERCENT = 0.5;     // 一瓶药水回复出战宝可梦最大生命的比例

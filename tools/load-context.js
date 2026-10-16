@@ -124,7 +124,7 @@ function loadGameContext(opts = {}) {
   createSimulationRng, createSimulationClone, simulateHunt, huntEfficiency, buildHuntOfflineReport, recommendHuntNext, recommendHuntRoute,
   Analytics, ANALYTICS_STORAGE_KEY, ANALYTICS_QUEUE_MAX, ANALYTICS_EVENT_NAMES, ANALYTICS_SESSION_GAP_MS,
   CAPTURE_DUPLICATE_POLICIES, DEFAULT_CAPTURE_DUPLICATE_POLICY, DUPLICATE_CAPTURE_RATE, DUPLICATE_SPECIES_CAP,
-  MAX_POKEMON_LEVEL, MAX_SKILL_LEVEL, TOWER_MAX_FLOOR, GEM_BAG_MAX, BERRY_STAT_CAP, natureStatPercent, applyNatureToStat, natureLabel, getNature, NATURE_MOD
+  MAX_POKEMON_LEVEL, MAX_SKILL_LEVEL, TOWER_MAX_FLOOR, GEM_BAG_MAX, BERRY_STAT_CAP, natureStatPercent, applyNatureToStat, natureLabel, getNature, NATURE_MOD, BALL_TYPES, BALL_STACK_MAX, getBallType, ballPrice, ballInventoryAdd, ballInventoryConsume, sanitizeBallInventory
 })`;
     const ctx = vm.runInContext(code, vm.createContext(sandbox), { filename: 'game' });
     ctx.storage = storage;

@@ -16,6 +16,7 @@ const SHOP_ITEMS = {
         icon: '🧪',
         reason: 'potion_purchase',
         event: 'potion_bought',
+        track: 'potion_bought',
         description: (g) => `Recupera ${Math.round(g.getPotionHealPercent() * 100)}% do HP do Pokémon em campo.`,
         price: (g) => g.getPotionPrice(),
         stock: (g) => g.getPotions(),
@@ -24,7 +25,106 @@ const SHOP_ITEMS = {
     },
 };
 
+// ---------- F9.4 · Poké Bolas: funções puras (sem estado do jogo) ----------
+function getBallType(id) {
+    return typeof id === 'string' ? (BALL_TYPES.find(b => b.id === id) || null) : null;
+}
+
+// Preço de uma bola no nível de preço dado (a Master Bola não tem preço de loja: null)
+function ballPrice(ball, pricingLevel) {
+    if (!ball || !ball.buyable) return null;
+    return Math.max(ball.basePrice, Math.ceil(ball.winsPerBall * baseGoldPerWin(pricingLevel)));
+}
+
+// Adiciona respeitando o limite por item. Devolve { ok, added, count, balls } (balls = objeto NOVO; o recebido não é alterado) ou { ok:false, code }
+function ballInventoryAdd(balls, id, qty) {
+    if (!getBallType(id)) return { ok: false, code: 'unknown_ball' };
+    if (!Number.isInteger(qty) || qty < 1) return { ok: false, code: 'invalid_quantity' };
+    const cur = _ballCount(balls, id), added = Math.min(qty, Math.max(0, BALL_STACK_MAX - cur));
+    const out = { ...(_isObj(balls) ? balls : {}) };
+    out[id] = cur + added;
+    return { ok: true, added, count: cur + added, balls: out };
+}
+
+// Consome qty (tudo ou nada: nunca deixa a quantidade abaixo de 0). Devolve { ok, consumed, count, balls } ou { ok:false, code }
+function ballInventoryConsume(balls, id, qty = 1) {
+    if (!getBallType(id)) return { ok: false, code: 'unknown_ball' };
+    if (!Number.isInteger(qty) || qty < 1) return { ok: false, code: 'invalid_quantity' };
+    const cur = _ballCount(balls, id);
+    if (cur < qty) return { ok: false, code: 'insufficient_balls', have: cur };
+    const out = { ...(_isObj(balls) ? balls : {}) };
+    out[id] = cur - qty;
+    return { ok: true, consumed: qty, count: cur - qty, balls: out };
+}
+
+function _ballCount(balls, id) {
+    const v = _isObj(balls) && Object.prototype.hasOwnProperty.call(balls, id) ? balls[id] : 0;
+    return Number.isInteger(v) && v > 0 ? Math.min(v, BALL_STACK_MAX) : 0;
+}
+
+// Limpeza do save: só ids do catálogo; quantidade inteira em 1..limite (maior que o limite vira o limite; inválida, negativa ou fracionária vira 0 = omitida)
+function sanitizeBallInventory(raw) {
+    const out = {};
+    if (!_isObj(raw)) return out;
+    for (const b of BALL_TYPES) {
+        if (!Object.prototype.hasOwnProperty.call(raw, b.id)) continue;
+        const v = raw[b.id];
+        if (typeof v === 'number' && Number.isInteger(v) && v > 0) out[b.id] = Math.min(v, BALL_STACK_MAX);
+    }
+    return out;
+}
+
+// As bolas compráveis entram no registro da loja (a Master Bola não)
+for (const ball of BALL_TYPES) {
+    if (!ball.buyable) continue;
+    SHOP_ITEMS[ball.id] = {
+        id: ball.id,
+        name: ball.name,
+        icon: ball.icon,
+        reason: 'ball_purchase',
+        event: 'ball_bought',
+        packs: [1, 10],
+        description: () => `${ball.name}: fica no inventário. Ainda não influencia a captura (a mecânica chega em breve).`,
+        price: (g) => ballPrice(ball, g.getPricingLevel()),
+        stock: (g) => g.getBallCount(ball.id),
+        capacity: () => BALL_STACK_MAX,
+        give: (g, qty) => { g.addBalls(ball.id, qty); },
+    };
+}
+
 const ShopMethods = {
+    // ---------- F9.4 · inventário de bolas (gameState.inventory.balls, criado só na primeira bola) ----------
+    getBallCount(id) {
+        const inv = this.gameState && this.gameState.inventory;
+        return _ballCount(inv && inv.balls, id);
+    },
+
+    getBalls() {
+        const out = {};
+        for (const b of BALL_TYPES) { const n = this.getBallCount(b.id); if (n > 0) out[b.id] = n; }
+        return out;
+    },
+
+    addBalls(id, qty) {
+        const inv = this.ensureInventory();
+        if (!inv) return { ok: false, code: 'no_state' };
+        const r = ballInventoryAdd(inv.balls, id, qty);
+        if (r.ok) inv.balls = r.balls;
+        return r;
+    },
+
+    consumeBall(id, qty = 1) {
+        const inv = this.ensureInventory();
+        if (!inv) return { ok: false, code: 'no_state' };
+        const r = ballInventoryConsume(inv.balls, id, qty);
+        if (!r.ok) return r;
+        if (r.count === 0) delete r.balls[id];
+        inv.balls = r.balls;
+        if (Object.keys(inv.balls).length === 0) delete inv.balls;
+        return r;
+    },
+
+
     // 进度等级：拥有过的最高等级，只增不减（存进 economy.progressLevel）
     getProgressLevel() {
         const eco = this.ensureEconomy();
@@ -73,7 +173,7 @@ const ShopMethods = {
             return {
                 id: it.id, name: it.name, icon: it.icon, description: it.description(this),
                 price, stock, capacity, room: Math.max(0, capacity - stock),
-                packs: cfg.potion.packs.slice(),
+                packs: (it.packs || cfg.potion.packs).slice(),
                 canBuyOne: this.canAfford(price) && stock < capacity,
             };
         });
@@ -82,6 +182,8 @@ const ShopMethods = {
     // 购买。qty 超出库存空位时按空位买（买满为止）；买不起整笔则什么都不买。
     // 返回 { ok, qty, unitPrice, total, stock } 或 { ok:false, code }
     buyShopItem(itemId, qty) {
+        const ballType = getBallType(itemId);
+        if (ballType && !ballType.buyable) return { ok: false, code: 'not_buyable' };             // F9.4: Master Bola
         const item = Object.prototype.hasOwnProperty.call(SHOP_ITEMS, itemId) ? SHOP_ITEMS[itemId] : null;
         if (!item) return { ok: false, code: 'unknown_item' };
         if (!this.gameState) return { ok: false, code: 'no_state' };
@@ -96,7 +198,7 @@ const ShopMethods = {
         if (!spent.ok) return { ok: false, code: spent.code, need: total, have: this.getMoney() };
         item.give(this, n);
         this._emit(item.event, { item: item.id, qty: n, unitPrice: unit, total, stock: item.stock(this) });
-        this._track('potion_bought', { qty: n, price: unit });
+        if (item.track) this._track(item.track, { qty: n, price: unit });
         this.save();
         return { ok: true, qty: n, unitPrice: unit, total, stock: item.stock(this), clamped: n < qty };
     },

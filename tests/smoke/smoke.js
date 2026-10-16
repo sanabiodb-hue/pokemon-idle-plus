@@ -222,6 +222,15 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
             await page.locator('#hunt-shop [data-qty="5"]').click();
             check(`Caça ${vp.name}: comprar 5 poções desconta moedas e soma ao estoque`, await page.evaluate((b) => game.getPotions() === b.p + 5 && game.gameState.economy.byReason.potion_purchase.spent >= 5 * b.price, potBefore));
             check(`Caça ${vp.name}: loja sem rolagem horizontal`, await noOverflow());
+            // F9.4: Poké Bolas na mesma loja (sem Master Bola); a compra muda quantidade e saldo; sem saldo aparece o aviso
+            const shopTxt = await page.evaluate(() => document.getElementById('hunt-shop').innerText);
+            check(`Caça ${vp.name}: loja lista Poké, Great e Ultra Bola (sem Master Bola) com preço e quantidade possuída`, /Poké Bola/.test(shopTxt) && /Great Bola/.test(shopTxt) && /Ultra Bola/.test(shopTxt) && !/Master Bola/.test(shopTxt) && /Estoque: 0\/99/.test(shopTxt), shopTxt.slice(0, 300));
+            const ballBefore = await page.evaluate(() => ({ m: game.getMoney(), price: game.getShopItems().find(i => i.id === 'pokeball').price }));
+            await page.locator('#hunt-shop [data-item="pokeball"][data-qty="10"]').click();
+            check(`Caça ${vp.name}: comprar 10 Poké Bolas soma ao inventário, debita o saldo e mostra a quantidade`, await page.evaluate((b) => game.getBallCount('pokeball') === 10 && game.getMoney() === b.m - 10 * b.price && /Estoque: 10\/99/.test(document.getElementById('hunt-shop').innerText), ballBefore));
+            await page.evaluate(() => { game.spendMoney(game.getMoney(), 'upgrade_purchase'); gameUI.huntView.renderSection(); });
+            check(`Caça ${vp.name}: sem saldo a loja mostra "Saldo insuficiente" e desabilita a compra de bolas`, await page.evaluate(() => /Saldo insuficiente: faltam/.test(document.getElementById('hunt-shop').innerText) && document.querySelector('#hunt-shop [data-item="greatball"][data-qty="1"]').disabled));
+            await page.evaluate(() => game.earnMoney(5000, 'reward'));
             await page.locator('[data-hunt-section="upgrades"]').click();
             await page.waitForSelector('#hunt-upgrades [data-eco-action="buy-upgrade"]');
             check(`Caça ${vp.name}: upgrades mostram custo e efeito ("Gastar $X para ir de A para B") e bloqueios`, await page.evaluate(() => /Gastar \$\d+ para ir de/.test(document.getElementById('hunt-upgrades').innerText) && /Requer/.test(document.getElementById('hunt-upgrades').innerText)));

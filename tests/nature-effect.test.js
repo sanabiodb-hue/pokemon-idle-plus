@@ -285,8 +285,9 @@ test('F9.3 G: natureza inválida no save é sanitizada para neutra e o jogo calc
     const raw = a.ctx.SaveCodec.decodePayload(a.storage.getItem(key));
     const uid = Object.keys(raw.ownedPokemon)[0];
     raw.ownedPokemon[uid].nature = 'not_a_nature';
-    a.storage.setItem(key, a.ctx.SaveCodec.encodePayload ? a.ctx.SaveCodec.encodePayload(raw) : JSON.stringify(raw));
+    a.storage.setItem(key, a.ctx.SaveCodec.encodePayload(JSON.stringify(raw)));
     const b = newGame({ seed: 4, load: true, storage: a.storage });
+    assert.equal(b.game.loadReport.source, 'main', 'leu o save principal (não um backup)');
     assert.equal(b.game._partyInstance(0).nature, 'hardy');
     assert.doesNotThrow(() => b.game.calculateBattleStats(0));
 });

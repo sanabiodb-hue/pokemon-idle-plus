@@ -10,7 +10,7 @@ const ECONOMY_CONFIG = {
     // 每次钱的变动都必须带一个来源（reason）；未登记的来源会被拒绝
     reasons: {
         earn: ['battle', 'sale', 'reward', 'refund'],
-        spend: ['gem_purchase', 'berry_seed', 'talent_reset', 'potion_purchase', 'upgrade_purchase'],
+        spend: ['gem_purchase', 'berry_seed', 'talent_reset', 'potion_purchase', 'upgrade_purchase', 'ball_purchase'],
     },
 
     // 药水（第一个商店物品）。价格随进度缩放：price = max(basePrice, ceil(winsPerPotion × 一场胜利的基础金币(进度等级)))

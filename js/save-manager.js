@@ -300,7 +300,12 @@ function sanitizeSave(raw, now = Date.now()) {
     const guide = typeof sanitizeGuideState === 'function' ? sanitizeGuideState(raw.guide) : null;
     if (guide) out.guide = guide;
     // ---- 背包（消耗品）：没有这个字段 = 旧存档，读档后由 ensureInventory 补发初始药水 ----
-    if (_isObj(raw.inventory)) out.inventory = { potions: _int(raw.inventory.potions, 0, MAX_POTIONS, 0) };
+    if (_isObj(raw.inventory)) {
+        out.inventory = { potions: _int(raw.inventory.potions, 0, MAX_POTIONS, 0) };
+        // F9.4: bolas (campo aditivo; só aparece com pelo menos uma bola, então saves sem bolas ficam idênticos aos de antes)
+        const balls = typeof sanitizeBallInventory === 'function' ? sanitizeBallInventory(raw.inventory.balls) : {};
+        if (Object.keys(balls).length > 0) out.inventory.balls = balls;
+    }
     // ---- 经济累计数字（可选字段；没有 = 从未有过经济活动）----
     if (_isObj(raw.economy)) out.economy = sanitizeEconomyState(raw.economy);
     if (_isObj(raw.upgrades)) { const up = sanitizeUpgradesState(raw.upgrades); if (Object.keys(up).length) out.upgrades = up; }

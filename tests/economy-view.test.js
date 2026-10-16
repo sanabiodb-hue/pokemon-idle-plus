@@ -47,10 +47,10 @@ test('loja: preço, efeito, estoque; comprar 1/5/10 pelo núcleo; sem dinheiro d
     assert.match(t, /Recupera 50% do HP/);
     assert.match(t, /Preço: \$40 cada/);
     assert.match(t, /Estoque: 10 ?\/30/);
-    assert.match(dom.html('hunt-shop'), /data-qty="5" disabled/, 'sem dinheiro: desabilitado');
+    assert.match(dom.html('hunt-shop'), /data-item="potion" data-qty="5" disabled/, 'sem dinheiro: desabilitado');
     game.earnMoney(1000, 'reward');
     view.renderSection();
-    assert.doesNotMatch(dom.html('hunt-shop'), /data-qty="10" disabled/);
+    assert.doesNotMatch(dom.html('hunt-shop'), /data-item="potion" data-qty="10" disabled/);      // F9.4: a loja agora também lista bolas; a asserção é sobre a poção
     view.eco.handleAction('buy-item', { item: 'potion', qty: '5' });
     assert.equal(game.getPotions(), 15);
     assert.equal(game.getMoney(), 800);

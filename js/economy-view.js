@@ -70,12 +70,13 @@ class EconomyView {
                 <div class="hunt-shop-head"><span class="hunt-shop-icon">${it.icon}</span><div><strong>${escapeHtml(it.name)}</strong><div class="hunt-hint">${escapeHtml(it.description)}</div></div></div>
                 <div class="hunt-shop-meta"><span>Preço: <strong>${ecoMoney(it.price)}</strong> cada</span><span>Estoque: <strong>${ptNumber(it.stock)}/${ptNumber(it.capacity)}</strong></span></div>
                 <div class="hunt-buttons">${packs}</div>
+                ${it.room <= 0 ? '<div class="hunt-hint" data-shop-note>Estoque cheio.</div>' : !g.canAfford(it.price) ? `<div class="hunt-hint" data-shop-note>Saldo insuficiente: faltam ${ecoMoney(it.price - g.getMoney())}.</div>` : ''}
             </div>`;
         }).join('');
         el.innerHTML = `
             <h3>🛒 Loja</h3>
             ${items}
-            <div class="hunt-hint">O preço sobe junto com o seu progresso (maior nível já alcançado: ${ptNumber(g.getProgressLevel())}). O estoque cresce com o upgrade Capacidade de Poções.</div>`;
+            <div class="hunt-hint">O preço sobe junto com o seu progresso (maior nível já alcançado: ${ptNumber(g.getProgressLevel())}). O estoque de poções cresce com o upgrade Capacidade de Poções; as bolas guardam até ${ptNumber(BALL_STACK_MAX)} de cada tipo e ainda não influenciam a captura.</div>`;
     }
 
     // ---------- Upgrades ----------
