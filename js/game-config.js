@@ -477,6 +477,12 @@ const BASE_CRIT_RATE = 0.05;            // 基础会心率（在线/离线统一
 const BASE_CRIT_MULTIPLIER = 1.5;       // 基础会心倍率
 const BASE_SHINY_RATE = 1 / 4096;       // 基础闪光概率
 
+// F9.3: natureza com efeito nos atributos. +NATURE_MOD no atributo "plus" e −NATURE_MOD no "minus" da natureza (nunca no HP; neutras não mudam), aplicado
+// ao atributo já calculado de IVs e nível (como nos jogos), antes de equipe/Pokédex/gemas/talentos e antes de somar attack e defense.
+// Só percentuais inteiros (0,10 = 10%). NATURE_EFFECT_ENABLED = false restaura exatamente os atributos de antes da fase.
+const NATURE_MOD = 0.10;
+let NATURE_EFFECT_ENABLED = true;       // (let: só os testes reatribuem em tempo de execução)
+
 // F9.1: cadeia de shiny na caçada. Vitórias seguidas contra a MESMA espécie na mesma sessão de caça multiplicam a taxa de shiny dessa espécie
 // (compondo com os multiplicadores existentes): mult = min(MAX_MULT, 1 + STEP × vitórias). Teto fixo: nunca passa de ×3 (40 vitórias com o passo atual).
 const SHINY_CHAIN_STEP = 0.05;        // +5% da taxa base por vitória seguida

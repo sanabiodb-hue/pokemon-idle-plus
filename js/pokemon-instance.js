@@ -62,6 +62,31 @@ function isValidNature(id) {
     return typeof id === 'string' && POKEMON_NATURES.some(n => n.id === id);
 }
 
+// F9.3: multiplicador inteiro (em % da base 100) da natureza sobre um atributo individual ('atk' | 'def' | 'spAtk' | 'spDef' | 'speed').
+// 100 = sem efeito: efeito desligado, natureza neutra, inválida ou ausente, ou atributo que a natureza não toca (HP nunca é tocado).
+function natureStatPercent(natureId, statKey) {
+    if (!NATURE_EFFECT_ENABLED || !isValidNature(natureId)) return 100;
+    const n = getNature(natureId), pct = Math.round(NATURE_MOD * 100);
+    if (n.plus && n.plus === statKey) return 100 + pct;
+    if (n.minus && n.minus === statKey) return 100 - pct;
+    return 100;
+}
+
+// Aplica a natureza a um valor inteiro já calculado (aritmética inteira: sem erro de ponto flutuante; arredonda para baixo como os jogos)
+function applyNatureToStat(value, natureId, statKey) {
+    const pct = natureStatPercent(natureId, statKey);
+    return pct === 100 ? value : Math.floor(value * pct / 100);
+}
+
+const NATURE_STAT_SHORT = { atk: 'Atq', def: 'Def', spAtk: 'Atq.Esp', spDef: 'Def.Esp', speed: 'Vel' };
+
+// Rótulo curto para a interface: "Firme ▲Atq ▼Atq.Esp"; neutra (ou efeito desligado) = só o nome
+function natureLabel(natureId) {
+    const n = getNature(natureId);
+    if (!NATURE_EFFECT_ENABLED || !isValidNature(natureId) || !n.plus || !n.minus) return n.name;
+    return `${n.name} ▲${NATURE_STAT_SHORT[n.plus]} ▼${NATURE_STAT_SHORT[n.minus]}`;
+}
+
 function getNature(id) {
     return POKEMON_NATURES.find(n => n.id === id) || POKEMON_NATURES[0];
 }

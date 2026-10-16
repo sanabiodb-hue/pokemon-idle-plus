@@ -127,7 +127,7 @@ test('属性来源（getStatSources）与战斗属性按出战位置的个体计
     game.setActivePokemon(0);
     const sA = game.calculateBattleStats(0);
     assert.ok(sA.attack > sB.attack);
-    const own = game.calculateStats({ id: 25, level: 50, ivs: a.ivs, isShiny: false });
+    const own = game.calculateStats({ id: 25, level: 50, ivs: a.ivs, isShiny: false, nature: a.nature });   // F9.3: os atributos próprios incluem a natureza da instância
     assert.ok(sA.attack >= own.attack && sA.hp >= own.hp, '含队友/图鉴加成，不会低于自身属性');
     void b;
 });

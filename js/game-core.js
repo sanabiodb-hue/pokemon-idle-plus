@@ -1262,6 +1262,8 @@ class GameCore {
             ivs: { ...storedData.ivs },
             // 指定个体：用它自己的闪光；否则沿用物种级的闪光图鉴记录（旧行为）
             isShiny: instance ? instance.shiny : !!this.gameState.shinyDex[pokemonId],
+            // F9.3: a natureza é do indivíduo; sem indivíduo, a do principal da espécie (a mesma que _getSpeciesStats usa); sem nenhum, neutra
+            nature: (instance || this.roster.primaryOf(pokemonId) || {}).nature,
         };
 
         // 计算当前属性
@@ -1335,12 +1337,14 @@ class GameCore {
             speed: Math.floor(Math.min(BERRY_STAT_CAP, baseRaw.speed + (berryBonuses.speed || 0)) * shinyBonus),
         };
 
+        // F9.3: a natureza age sobre o atributo já calculado de IVs e nível (o shiny e as frutas já entraram na base acima); HP nunca; sem natureza = neutro
+        const nat = pokemon.nature;
         const hp = Math.floor((2 * base.hp + ivs.hp) * level / 100) + level + 10;
-        const atk = Math.floor((2 * base.atk + ivs.atk) * level / 100) + 5;
-        const def = Math.floor((2 * base.def + ivs.def) * level / 100) + 5;
-        const spAtk = Math.floor((2 * base.spAtk + ivs.spAtk) * level / 100) + 5;
-        const spDef = Math.floor((2 * base.spDef + ivs.spDef) * level / 100) + 5;
-        const speed = Math.floor((2 * base.speed + ivs.speed) * level / 100) + 5;
+        const atk = applyNatureToStat(Math.floor((2 * base.atk + ivs.atk) * level / 100) + 5, nat, 'atk');
+        const def = applyNatureToStat(Math.floor((2 * base.def + ivs.def) * level / 100) + 5, nat, 'def');
+        const spAtk = applyNatureToStat(Math.floor((2 * base.spAtk + ivs.spAtk) * level / 100) + 5, nat, 'spAtk');
+        const spDef = applyNatureToStat(Math.floor((2 * base.spDef + ivs.spDef) * level / 100) + 5, nat, 'spDef');
+        const speed = applyNatureToStat(Math.floor((2 * base.speed + ivs.speed) * level / 100) + 5, nat, 'speed');
 
         return { hp, atk, def, spAtk, spDef, speed };
     }
@@ -1467,6 +1471,7 @@ class GameCore {
             level: inst.level,
             ivs: inst.ivs,
             isShiny: inst.shiny,
+            nature: inst.nature,                                  // F9.3
         });
         this._instanceStats.set(inst.uid, stats);
         return stats;
@@ -1591,6 +1596,8 @@ class GameCore {
         if (!pokemon) return null;
 
         const baseStats = this.calculateStats(pokemon);
+        // F9.3: o mesmo Pokémon sem natureza, para separar o efeito dela (selfNeutral + nature === self, exatamente)
+        const neutralStats = this.calculateStats({ ...pokemon, nature: null });
         // 队友加成
         const teamBonus = { hp: 0, attack: 0, defense: 0, speed: 0 };
         for (let i = 0; i < this.gameState.team.length; i++) {
@@ -1622,6 +1629,8 @@ class GameCore {
         }
 
         const selfStat = { hp: baseStats.hp, attack: baseStats.attack, defense: baseStats.defense, speed: baseStats.speed };
+        const selfNeutral = { hp: neutralStats.hp, attack: neutralStats.attack, defense: neutralStats.defense, speed: neutralStats.speed };
+        const natureStat = { hp: selfStat.hp - selfNeutral.hp, attack: selfStat.attack - selfNeutral.attack, defense: selfStat.defense - selfNeutral.defense, speed: selfStat.speed - selfNeutral.speed };   // com sinal; já incluída em `self`
         const teamStat = { hp: Math.floor(teamBonus.hp), attack: Math.floor(teamBonus.attack), defense: Math.floor(teamBonus.defense), speed: Math.floor(teamBonus.speed) };
         const pokedexStat = { hp: Math.floor(pokedexBonus.hp), attack: Math.floor(pokedexBonus.attack), defense: Math.floor(pokedexBonus.defense), speed: Math.floor(pokedexBonus.speed) };
 
@@ -1648,7 +1657,9 @@ class GameCore {
             pokemonName: POKEMON_DATA[pokemonId]?.name || `#${pokemonId}`,
             level: pokemon.level,
             battleStats,
-            self: selfStat,
+            self: selfStat,                 // inclui a natureza (como todas as barras da interface esperam)
+            selfNeutral,                    // F9.3: o mesmo valor sem natureza
+            nature: natureStat,             // F9.3: efeito da natureza com sinal (self = selfNeutral + nature)
             team: teamStat,
             pokedex: pokedexStat,
             gem: gemStat,
@@ -3104,6 +3115,7 @@ class GameCore {
             ivPercent: Math.round(total / (IV_KEYS.length * 31) * 100),
             nature: inst.nature,
             natureName: getNature(inst.nature).name,
+            natureLabel: natureLabel(inst.nature),          // F9.3: nome + ▲/▼ dos atributos
             gender: inst.gender,
             ability: inst.ability,
             shiny: inst.shiny,

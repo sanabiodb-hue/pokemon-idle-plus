@@ -440,6 +440,26 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
             await context.close();
         }
 
+        // ---------- B3f. F9.3 natureza com efeito: ▲/▼ na equipe, no PC e no detalhamento dos atributos (celular e desktop) ----------
+        for (const vp of [{ name: 'celular 360x640', width: 360, height: 640 }, { name: 'desktop 1280x800', width: 1280, height: 800 }]) {
+            const { page, context } = await newPage(() => localStorage.setItem('pokemon_idle_tutorial_done', '1'), { viewport: { width: vp.width, height: vp.height } });
+            await page.goto(base);
+            await page.waitForFunction(() => typeof game !== 'undefined' && game.currentBattle, null, { timeout: 10000 });
+            const noOverflow = () => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1);
+            const before = await page.evaluate(() => { const s = game.calculateBattleStats(0); return { attack: s.attack, speed: s.speed, text: (document.querySelector('.slot-traits') || {}).innerText || '' }; });
+            check(`Natureza ${vp.name}: o líder inicial (neutro) aparece só com o nome, sem ▲/▼`, !/[▲▼]/.test(before.text) && /Esforçada/.test(before.text), before.text);
+            await page.evaluate(() => { const gs = game.gameState, inst = gs.ownedPokemon[gs.party[0]]; inst.level = 100; inst.nature = 'adamant'; game._touchInstance(inst); gameUI.renderTeam(); });
+            const after = await page.evaluate(() => ({ s: game.calculateBattleStats(0), text: document.querySelector('.slot-traits').innerText }));
+            check(`Natureza ${vp.name}: equipe mostra "Firme ▲Atq ▼Atq.Esp" e os atributos usam a natureza`, /Firme ▲Atq ▼Atq\.Esp/.test(after.text), after.text);
+            const raw = await page.evaluate(() => { const gs = game.gameState, inst = gs.ownedPokemon[gs.party[0]]; inst.nature = 'hardy'; game._touchInstance(inst); const n = game.calculateBattleStats(0); inst.nature = 'adamant'; game._touchInstance(inst); const a = game.calculateBattleStats(0); return { neutral: [n.rawAtk, n.rawSpAtk], adamant: [a.rawAtk, a.rawSpAtk] }; });
+            check(`Natureza ${vp.name}: +10% em Atq e −10% em Atq.Esp (floor) sobre o neutro, no navegador`, raw.adamant[0] === Math.floor(raw.neutral[0] * 110 / 100) && raw.adamant[1] === Math.floor(raw.neutral[1] * 90 / 100), JSON.stringify(raw));
+            check(`Natureza ${vp.name}: o detalhamento dos atributos mostra o efeito da natureza (Alegre: +Vel sempre muda o atributo, quaisquer que sejam os IVs)`, await page.evaluate(() => { const gs = game.gameState, inst = gs.ownedPokemon[gs.party[0]]; inst.nature = 'jolly'; game._touchInstance(inst); const html = gameUI._renderBattleStatSources(); inst.nature = 'adamant'; game._touchInstance(inst); return /Natureza: ▲ \+\d+ \(já em Próprio\)/.test(html); }));
+            await page.locator('#tab-nav [data-tab="tab-pc"]').click();
+            await page.evaluate(() => gameUI.pcView && gameUI.pcView.render && gameUI.pcView.render());
+            check(`Natureza ${vp.name}: sem rolagem horizontal com os indicadores`, await noOverflow());
+            await context.close();
+        }
+
         // ---------- B4. F8.1 fila de alvos na Central (mobile e desktop): montar, iniciar, pausar, interromper, continuar, limpar ----------
         for (const vp of [{ name: 'celular 360x640', width: 360, height: 640 }, { name: 'desktop 1280x800', width: 1280, height: 800 }]) {
             const { page, context } = await newPage(() => localStorage.setItem('pokemon_idle_tutorial_done', '1'), { viewport: { width: vp.width, height: vp.height } });

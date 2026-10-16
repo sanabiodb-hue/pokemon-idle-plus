@@ -113,7 +113,7 @@ class PCView {
 
     // 卡片上的一行摘要：让同物种的两只能一眼分开（序号 + 性别 + 性格 + 个体值%）
     _summaryLine(d) {
-        return `#${escapeHtml(d.uid)} ${genderSymbol(d.gender)} ${escapeHtml(d.natureName)} · IV ${d.ivPercent}%`;
+        return `#${escapeHtml(d.uid)} ${genderSymbol(d.gender)} ${escapeHtml(d.natureLabel || d.natureName)} · IV ${d.ivPercent}%`;
     }
 
     _card(d, extraClass = '') {
@@ -229,7 +229,7 @@ class PCView {
             </div>
             <div class="pc-ivs">${ivRows}<span class="pc-iv total"><b>Total</b> ${d.ivTotal}/186 (${d.ivPercent}%)</span></div>
             <div class="pc-facts">
-                <span>Natureza: ${escapeHtml(d.natureName)}</span>
+                <span>Natureza: ${escapeHtml(d.natureLabel || d.natureName)}</span>
                 <span>Habilidade: ${d.ability ? (ABILITY_LABELS[d.ability] || escapeHtml(d.ability)) : '—'}</span>
                 <span>Gênero: ${d.gender === 'male' ? '♂ Macho' : d.gender === 'female' ? '♀ Fêmea' : 'Sem gênero'}</span>
                 <span>Origem: ${ORIGIN_LABELS[d.origin] || 'Desconhecida'}${route ? ' · ' + escapeHtml(route.name) : ''}</span>

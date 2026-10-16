@@ -857,7 +857,7 @@ class GameUI {
                     <div class="slot-info">
                         <div class="slot-name">${shinyNamePrefix}${escapeHtml(pokemon.name)} ${isActive ? '⚔️' : ''} <small style="color:var(--text-secondary);font-weight:normal">Lv.${pokemon.level}</small>${skillBadgeHtml}</div>
                         <div class="slot-type-nature">${typeBadges}</div>
-                        <div class="slot-traits" title="ID · Gênero · Natureza · IVs">#${escapeHtml(inst.uid)} ${genderSymbol(inst.gender)} ${escapeHtml(getNature(inst.nature).name)} · IV ${Math.round(ivTotal(inst.ivs) / (IV_KEYS.length * 31) * 100)}%</div>
+                        <div class="slot-traits" title="ID · Gênero · Natureza · IVs">#${escapeHtml(inst.uid)} ${genderSymbol(inst.gender)} ${escapeHtml(natureLabel(inst.nature))} · IV ${Math.round(ivTotal(inst.ivs) / (IV_KEYS.length * 31) * 100)}%</div>
                     </div>
                     <div class="team-slot-actions">
                         ${partySize > 1 ? `<button ${index === 0 ? 'disabled' : ''} onclick="gameUI.moveTeamMember(${index}, -1)" title="Subir">▲</button><button ${index === partySize - 1 ? 'disabled' : ''} onclick="gameUI.moveTeamMember(${index}, 1)" title="Descer">▼</button>` : ''}
@@ -2171,6 +2171,8 @@ class GameUI {
                     ${sourceIcons[s.key]} ${sourceNames[s.key]}: ${s.value.toLocaleString('pt-BR')} (${pct}%)
                 </span>`;
             }
+            const natDelta = data.nature ? data.nature[stat] : 0;       // F9.3: efeito da natureza (já incluído em "Próprio")
+            if (natDelta !== 0) html += `<span class="stat-source-detail-item">🧬 Natureza: ${natDelta > 0 ? '▲ +' : '▼ −'}${Math.abs(natDelta).toLocaleString('pt-BR')} (já em Próprio)</span>`;
 
             html += `</div></div>`;
         }
