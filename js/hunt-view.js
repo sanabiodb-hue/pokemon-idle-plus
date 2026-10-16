@@ -338,7 +338,8 @@ class HuntView {
                 ${stat('Dinheiro ganho', ptNumber(stats.money))}
                 ${stat('Eficiência', active || s ? `${ptNumber(eff.xpPerHour)} EXP/h` : '—')}
             </div>
-            <div class="hunt-potions">🧪 Poções disponíveis: <strong data-hunt-potions>${ptNumber(g.getPotions())}</strong></div>`;
+            <div class="hunt-potions">🧪 Poções disponíveis: <strong data-hunt-potions>${ptNumber(g.getPotions())}</strong></div>
+            ${BALL_CAPTURE_ENABLED ? `<div class="hunt-warn" data-hunt-noballs role="alert" ${g.getTotalBalls() > 0 ? 'hidden' : ''}>⚠️ Sem Poké Bolas: nenhuma captura é tentada. Compre bolas na Loja.</div>` : ''}`;
     }
 
     // ---------- 最近发生的重要事情（只放玩家关心的，不是技术日志）----------
@@ -349,6 +350,8 @@ class HuntView {
             case 'pokemon_captured':
                 if (!(e.firstCatch || e.newIndividual)) return null;
                 return `${e.shiny ? '✨' : '🎒'} Capturou ${name(e.id)}${e.shiny ? ' Shiny' : ''}${e.grade ? ` (nota ${e.grade})` : ''}`;
+            case 'capture_failed': return `💨 ${name(e.id)} escapou da ${(getBallType(e.ball) || {}).name || 'bola'} (${Math.round(e.chance * 100)}%)`;
+            case 'balls_depleted': return `⚠️ Sem bolas: ${name(e.id)} não foi capturado`;
             case 'level_up': {
                 const inst = g.roster.get(e.uid);
                 return inst && g.roster.party.contains(e.uid) ? `⬆️ ${name(inst.speciesId)} chegou ao nível ${e.level}` : null;

@@ -418,6 +418,12 @@ class GameUI {
                 this.addBattleLog(`⚠️ PC cheio! Shiny perdido: ${data.name}`, 'shiny');
                 this.showToast('⚠️ PC cheio! Não foi possível guardar o Pokémon Shiny');
                 break;
+            case 'captureFailed':
+                this.addBattleLog(`💨 ${data.name} escapou da ${data.ballName} (${Math.round(data.chance * 100)}%)`, data.shiny ? 'shiny' : 'normal');
+                break;
+            case 'ballsDepleted':
+                this.addBattleLog(`⚠️ Sem Poké Bolas: ${data.name} não foi capturado`, 'normal');
+                break;
             case 'shinyEvolved':
                 this.addBattleLog(`✨ A forma Shiny de ${data.oldName} passou para ${data.newName}!`, 'shiny');
                 this.showToast(`✨ ${data.newName} ganhou a forma Shiny!`);

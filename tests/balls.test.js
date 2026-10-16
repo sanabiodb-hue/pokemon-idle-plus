@@ -38,7 +38,7 @@ test('F9.4 A: catálogo — 4 bolas, ids únicos, preços positivos, multiplicad
     const master = B.find(b => b.id === 'masterball');
     assert.equal(master.buyable, false);
     assert.equal(ctx.ballPrice(master, 5), null, 'Master Bola não tem preço de loja');
-    assert.equal(JSON.stringify(B.filter(b => b.buyable).map(b => b.basePrice)), JSON.stringify([20, 60, 120]), 'pisos sugeridos');
+    assert.equal(JSON.stringify(B.filter(b => b.buyable).map(b => b.basePrice)), JSON.stringify([1, 3, 6]), 'pisos recalibrados na F9.5 (~10% do ouro por vitória)');
     assert.deepEqual(plain(B.map(b => b.catchMultiplier)), [1, 1.5, 2, 255]);
     assert.equal(ctx.BALL_STACK_MAX, 99);
     for (const [n, id] of [['Poké Bola', 'pokeball'], ['Great Bola', 'greatball'], ['Ultra Bola', 'ultraball'], ['Master Bola', 'masterball']]) assert.equal(B.find(b => b.id === id).name, n);
@@ -61,12 +61,12 @@ test('F9.4 B: preço = max(piso, ⌈vitórias × ouro por vitória⌉) — piso 
     const { ctx } = newGame();
     const [pk, gr, ul] = ctx.BALL_TYPES;
     for (const lvl of [1, 5, 25, 50, 100, 400, 1000, 5000, 9999]) {
-        assert.equal(ctx.ballPrice(pk, lvl), Math.max(20, Math.ceil(1 * goldPerWin(lvl))), `Poké Lv${lvl}`);
-        assert.equal(ctx.ballPrice(gr, lvl), Math.max(60, Math.ceil(3 * goldPerWin(lvl))), `Great Lv${lvl}`);
-        assert.equal(ctx.ballPrice(ul, lvl), Math.max(120, Math.ceil(6 * goldPerWin(lvl))), `Ultra Lv${lvl}`);
+        assert.equal(ctx.ballPrice(pk, lvl), Math.max(1, Math.ceil(0.1 * goldPerWin(lvl))), `Poké Lv${lvl}`);
+        assert.equal(ctx.ballPrice(gr, lvl), Math.max(3, Math.ceil(0.3 * goldPerWin(lvl))), `Great Lv${lvl}`);
+        assert.equal(ctx.ballPrice(ul, lvl), Math.max(6, Math.ceil(0.6 * goldPerWin(lvl))), `Ultra Lv${lvl}`);
     }
-    assert.deepEqual([ctx.ballPrice(pk, 5), ctx.ballPrice(gr, 5), ctx.ballPrice(ul, 5)], [20, 60, 120], 'começo: preços sugeridos');
-    assert.ok(ctx.ballPrice(pk, 5000) > 20 && ctx.ballPrice(ul, 5000) > 120, 'tarde: acompanha o progresso (nunca vira de graça)');
+    assert.deepEqual([ctx.ballPrice(pk, 5), ctx.ballPrice(gr, 5), ctx.ballPrice(ul, 5)], [1, 3, 6], 'começo: preços recalibrados');
+    assert.ok(ctx.ballPrice(pk, 5000) > 1 && ctx.ballPrice(ul, 5000) > 6, 'tarde: acompanha o progresso (nunca vira de graça)');
     assert.equal(ctx.ballPrice(null, 5), null);
 });
 
@@ -122,7 +122,7 @@ test('F9.4 C: compra com sucesso — debita exatamente preço × qtd, entrega, r
 
 test('F9.4 C: toda recusa é atômica — o estado fica IDÊNTICO (dinheiro, inventário, livro-caixa, eventos)', () => {
     const { game, ev } = boot();
-    game.earnMoney(500, 'reward');
+    game.earnMoney(30, 'reward');
     game.addBalls('pokeball', 99);
     game.getProgressLevel();       // aquece o cache derivado economy.progressLevel (máximo já alcançado; é escrito na 1ª consulta de preço, com ou sem compra)
     const cases = [
@@ -283,7 +283,7 @@ test('F9.4 F: a loja mostra as 3 bolas (sem Master), preço, quantidade possuíd
     assert.match(t(), /Estoque: 0 ?\/99/);
     assert.match(t(), /Saldo insuficiente: faltam/);
     assert.match(dom.html('hunt-shop'), /data-item="pokeball" data-qty="1" disabled/, 'sem saldo: desabilitado');
-    assert.match(t(), /ainda não influenciam a captura/i);
+    assert.match(t(), /Cada tentativa de captura gasta uma bola/i);
     game.earnMoney(1000, 'reward');
     view.renderSection();
     assert.doesNotMatch(dom.html('hunt-shop'), /data-item="pokeball" data-qty="1" disabled/);

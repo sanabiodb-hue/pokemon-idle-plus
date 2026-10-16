@@ -3,7 +3,7 @@
 // do RNG: o resumo (hash) calculado no código de antes da fase tem de ser igual ao de agora. `newGame` vem do helper da árvore que se quer medir.
 const crypto = require('node:crypto');
 
-function scenario(newGame, { seed, balls = null } = {}) {
+function scenario(newGame, { seed, balls = null, setup = null } = {}) {
     const g = newGame({ seed });
     const { game, ctx } = g;
     game.clock = new ctx.ManualClock(10_000_000);
@@ -25,7 +25,9 @@ function scenario(newGame, { seed, balls = null } = {}) {
     game.bus.on('capture_attempted', (e) => log.captures.push(['attempt', e.id, e.decision, e.reason, e.grade]));
     game.bus.on('pokemon_captured', (e) => log.captures.push(['captured', e.id, e.newIndividual, e.firstCatch]));
     game.bus.on('capture_skipped', (e) => log.captures.push(['skipped', e.id, e.reason]));
-    return { game, ctx, log };
+    const t = { game, ctx, log };
+    if (setup) setup(t);                                            // F9.5: ganchos de medição (não alteram o digest)
+    return t;
 }
 
 function digest(t) {

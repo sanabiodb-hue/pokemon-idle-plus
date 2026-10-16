@@ -225,9 +225,12 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
             // F9.4: Poké Bolas na mesma loja (sem Master Bola); a compra muda quantidade e saldo; sem saldo aparece o aviso
             const shopTxt = await page.evaluate(() => document.getElementById('hunt-shop').innerText);
             check(`Caça ${vp.name}: loja lista Poké, Great e Ultra Bola (sem Master Bola) com preço e quantidade possuída`, /Poké Bola/.test(shopTxt) && /Great Bola/.test(shopTxt) && /Ultra Bola/.test(shopTxt) && !/Master Bola/.test(shopTxt) && /Estoque: 0\/99/.test(shopTxt), shopTxt.slice(0, 300));
-            const ballBefore = await page.evaluate(() => ({ m: game.getMoney(), price: game.getShopItems().find(i => i.id === 'pokeball').price }));
+            // a batalha ao vivo gasta bolas e rende ouro durante o teste: para ela, fixa o pacote inicial de 30 (o que um jogo novo tem) e só então compra
+            await page.evaluate(() => { game.stopBattle(); game.gameState.inventory.balls = { pokeball: 30 }; gameUI.huntView.renderSection(); });
+            const ballBefore = await page.evaluate(() => ({ m: game.getMoney(), n: game.getBallCount('pokeball'), spent: (game.gameState.economy.byReason.ball_purchase || { spent: 0 }).spent, price: game.getShopItems().find(i => i.id === 'pokeball').price }));
             await page.locator('#hunt-shop [data-item="pokeball"][data-qty="10"]').click();
-            check(`Caça ${vp.name}: comprar 10 Poké Bolas soma ao inventário, debita o saldo e mostra a quantidade`, await page.evaluate((b) => game.getBallCount('pokeball') === 10 && game.getMoney() === b.m - 10 * b.price && /Estoque: 10\/99/.test(document.getElementById('hunt-shop').innerText), ballBefore));
+            const ballAfter = await page.evaluate(() => ({ m: game.getMoney(), n: game.getBallCount('pokeball'), shown: /Estoque: 40\/99/.test(document.getElementById('hunt-shop').innerText), spent: game.gameState.economy.byReason.ball_purchase.spent }));
+            check(`Caça ${vp.name}: comprar 10 Poké Bolas leva as 30 do pacote a exatamente 40, debita 10 × preço (gasto e saldo) e mostra "Estoque: 40/99"`, ballBefore.n === 30 && ballAfter.n === 40 && ballAfter.shown === true && ballAfter.spent - ballBefore.spent === 10 * ballBefore.price && ballAfter.m === ballBefore.m - 10 * ballBefore.price, JSON.stringify({ ballBefore, ballAfter }));
             await page.evaluate(() => { game.spendMoney(game.getMoney(), 'upgrade_purchase'); gameUI.huntView.renderSection(); });
             check(`Caça ${vp.name}: sem saldo a loja mostra "Saldo insuficiente" e desabilita a compra de bolas`, await page.evaluate(() => /Saldo insuficiente: faltam/.test(document.getElementById('hunt-shop').innerText) && document.querySelector('#hunt-shop [data-item="greatball"][data-qty="1"]').disabled));
             await page.evaluate(() => game.earnMoney(5000, 'reward'));
@@ -424,7 +427,9 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
             await page.waitForFunction(() => gameUI.worldView.drawCount > 0 && gameUI.worldView._fol && gameUI.worldView._fol.cur && gameUI.worldView._fol.cur.ready, null, { timeout: 10000 });
             await page.evaluate(() => { window.__raf = 0; const raf = window.requestAnimationFrame.bind(window); window.requestAnimationFrame = (fn) => { window.__raf++; return raf(fn); }; window.__tm = 0; const st = window.setTimeout.bind(window); window.setTimeout = (...a) => { window.__tm++; return st(...a); }; });
             check(`Seguidor ${vp.name}: o sprite do líder (Pikachu #25) é carregado numa entrada própria`, await page.evaluate(() => { const f = gameUI.worldView._fol.cur; return f.id === 25 && f.shiny === false && f.img.getAttribute('src') === 'sprites/pokemon/25.png' && f.img.naturalWidth > 0; }));
-            check(`Seguidor ${vp.name}: o líder aparece pintado no canvas junto do treinador (pixels amarelos na região do seguidor)`, await page.evaluate(() => {
+            // F9.5: o redesenho pedido pelo onload do sprite roda num rAF DEPOIS de `ready`; ler os pixels logo em seguida podia pegar o quadro anterior (sem o seguidor).
+            // Agora o mesmo teste de pixels é repetido até 4 s: continua exigindo o amarelo do líder no canvas, só espera o quadro existir.
+            const followerPainted = () => {
                 const wv = gameUI.worldView, map = wv.currentScene().map, pl = wv._player(map), m = wv.lastMetrics, cam = wv.lastCamera, cv = document.getElementById('world-canvas'), z = m.zoom;
                 const fp = wv._followerPoint(map, pl), p = worldToScreen(cam, m, fp.x, fp.y);
                 const x0 = Math.max(0, Math.round(p.x - 14 * z)), y0 = Math.max(0, Math.round(p.y - 26 * z)), w = Math.min(cv.width - x0, 28 * z), h = Math.min(cv.height - y0, 28 * z);
@@ -432,7 +437,8 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
                 const px = cv.getContext('2d').getImageData(x0, y0, w, h).data; let yellow = 0;
                 for (let i = 0; i < px.length; i += 4) if (px[i] > 200 && px[i + 1] > 170 && px[i + 2] < 90) yellow++;
                 return yellow > 6 * z;
-            }));
+            };
+            check(`Seguidor ${vp.name}: o líder aparece pintado no canvas junto do treinador (pixels amarelos na região do seguidor)`, await page.waitForFunction(followerPainted, null, { timeout: 4000 }).then(() => true, () => false));
             const idle = await page.evaluate(async () => { const a = window.__raf, t = window.__tm; await new Promise(r => setTimeout(r, 800)); return { raf: window.__raf - a, tm: window.__tm - t - 1 }; });
             check(`Seguidor ${vp.name}: treinador parado → nenhum quadro nem timer novo (ocioso)`, idle.raf === 0 && idle.tm === 0, JSON.stringify(idle));
             // caminhada da caçada: o seguidor fica atrás do treinador (entre 8 e 34 px de distância, nunca em cima)
@@ -466,6 +472,33 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
             await page.locator('#tab-nav [data-tab="tab-pc"]').click();
             await page.evaluate(() => gameUI.pcView && gameUI.pcView.render && gameUI.pcView.render());
             check(`Natureza ${vp.name}: sem rolagem horizontal com os indicadores`, await noOverflow());
+            await context.close();
+        }
+
+        // ---------- B3g. F9.5 Poké Bolas: contador na barra de recursos, aviso sem bolas e resultado da tentativa no registro (celular e desktop) ----------
+        for (const vp of [{ name: 'celular 360x640', width: 360, height: 640 }, { name: 'desktop 1280x800', width: 1280, height: 800 }]) {
+            const { page, context } = await newPage(() => localStorage.setItem('pokemon_idle_tutorial_done', '1'), { viewport: { width: vp.width, height: vp.height } });
+            await page.goto(base);
+            await page.waitForFunction(() => typeof game !== 'undefined' && game.currentBattle, null, { timeout: 10000 });
+            await page.evaluate(() => game.stopBattle());                // a batalha ao vivo gastaria bolas durante o teste; o jogo novo começa com as 30 do pacote
+            await page.locator('#tab-nav [data-tab="tab-hunt"]').click();
+            await page.waitForSelector('#hunt-resources [data-eco-balls]');
+            const txt = (sel) => page.evaluate((s) => { const e = document.querySelector(s); return e ? e.innerText.trim() : null; }, sel);
+            const fit = () => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1 && document.getElementById('hunt-resources').scrollWidth <= document.getElementById('hunt-resources').clientWidth + 1);
+            check(`Bolas ${vp.name}: o contador mostra as 30 Poké Bolas do pacote inicial`, (await txt('[data-eco-balls]')) === '30', String(await txt('[data-eco-balls]')));
+            check(`Bolas ${vp.name}: com bolas o aviso de caçada sem bolas está oculto`, await page.evaluate(() => { const w = document.querySelector('[data-hunt-noballs]'); return !w || w.hidden || getComputedStyle(w).display === 'none'; }));
+            check(`Bolas ${vp.name}: a barra de recursos cabe na tela (sem rolagem horizontal)`, await fit());
+            await page.evaluate(() => { while (game.getTotalBalls() > 0) game.consumeBall(game.getBalls().pokeball > 0 ? 'pokeball' : Object.keys(game.getBalls())[0], 1); });
+            await page.waitForFunction(() => document.querySelector('[data-eco-balls]').innerText.trim() === '0', null, { timeout: 5000 });
+            check(`Bolas ${vp.name}: sem bolas o contador vai a 0 e fica marcado como vazio`, await page.evaluate(() => document.querySelector('[data-eco-balls-wrap]').classList.contains('empty')));
+            check(`Bolas ${vp.name}: aviso claro "Sem Poké Bolas" visível na Central de Caça`, await page.evaluate(() => { const w = document.querySelector('[data-hunt-noballs]'); return !!w && !w.hidden && /Sem Poké Bolas/.test(w.innerText) && w.getBoundingClientRect().width > 0; }));
+            check(`Bolas ${vp.name}: com o aviso visível continua sem rolagem horizontal`, await fit());
+            await page.evaluate(() => { game._emit('capture_failed', { id: 16, ball: 'pokeball', chance: 0.95, left: 0, shiny: false }); game._emit('battle_completed', { result: 'victory', enemyId: 16, xp: 1, gold: 1, route: game.gameState.currentRoute }); });
+            await page.waitForFunction(() => /escapou da Poké Bola \(95%\)/.test((document.getElementById('hunt-activity') || {}).innerText || ''), null, { timeout: 5000 });
+            check(`Bolas ${vp.name}: a tentativa que falhou aparece no registro de atividade`, true);
+            await page.evaluate(() => game.addBalls('pokeball', 5));
+            await page.waitForFunction(() => document.querySelector('[data-hunt-noballs]').hidden && document.querySelector('[data-eco-balls]').innerText.trim() === '5', null, { timeout: 5000 });
+            check(`Bolas ${vp.name}: comprando bolas o aviso some e o contador volta`, (await txt('[data-eco-balls]')) === '5' && await page.evaluate(() => document.querySelector('[data-hunt-noballs]').hidden));
             await context.close();
         }
 
@@ -671,8 +704,9 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
             await page.evaluate(() => {
                 game.stopBattle();
                 const mk = (v) => { const w = game.createWildPokemon(16, 5, 0); w.isShiny = false; w.ivs = { hp: v, atk: v, def: v, spAtk: v, spDef: v, speed: v }; return w; };
-                game.processDefeat(mk(5));
-                game.processDefeat(mk(25));
+                // F9.5: a captura tem chance (5% de escapar com a Poké Bola); o sorteio é fixado em 0 só aqui para o teste de PC ser determinístico
+                const rng0 = game.rng; game.rng = () => 0;
+                try { game.processDefeat(mk(5)); game.processDefeat(mk(25)); } finally { game.rng = rng0; }
                 game.startBattle();
             });
             await page.click('[data-tab="tab-pc"]');

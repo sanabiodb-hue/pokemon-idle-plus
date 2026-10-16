@@ -96,7 +96,11 @@ test('parada no driver rápido: limite de batalhas exato; limite de tempo; tempo
 
 test('shinyFound no driver rápido: para no primeiro shiny e ele foi capturado', () => {
     const { game, ctx } = createSimGame({ seed: 26, shinyRate: 0.05, policy: { ...noHeal, stopConditions: { shinyFound: true } } });
-    const r = ctx.simulateHunt(game, 8 * HOUR);
+    // F9.5: com bolas o shiny também pode escapar; este teste verifica o gatilho de parada com captura garantida (flag desligada, restaurada no fim)
+    const vm = require('node:vm');
+    vm.runInContext('BALL_CAPTURE_ENABLED = false', ctx.sandbox || ctx);
+    let r;
+    try { r = ctx.simulateHunt(game, 8 * HOUR); } finally { vm.runInContext('BALL_CAPTURE_ENABLED = true', ctx.sandbox || ctx); }
     assert.equal(r.stopReason, 'shiny_found');
     assert.equal(r.shinies, 1);
     assert.equal(r.stopMessage, 'Caça encerrada: Shiny encontrado.');

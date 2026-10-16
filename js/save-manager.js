@@ -305,6 +305,7 @@ function sanitizeSave(raw, now = Date.now()) {
         // F9.4: bolas (campo aditivo; só aparece com pelo menos uma bola, então saves sem bolas ficam idênticos aos de antes)
         const balls = typeof sanitizeBallInventory === 'function' ? sanitizeBallInventory(raw.inventory.balls) : {};
         if (Object.keys(balls).length > 0) out.inventory.balls = balls;
+        if (raw.inventory.ballsGranted === true) out.inventory.ballsGranted = true;       // F9.5: marca do pacote inicial (só o booleano verdadeiro vale)
     }
     // ---- 经济累计数字（可选字段；没有 = 从未有过经济活动）----
     if (_isObj(raw.economy)) out.economy = sanitizeEconomyState(raw.economy);

@@ -74,6 +74,29 @@ function sanitizeBallInventory(raw) {
     return out;
 }
 
+// ---------- F9.5 · captura com chance (funções puras) ----------
+// Taxa da espécie (0..1) derivada do BST do dado (o dado não tem capture_rate): 1 até CAPTURE_RATE_BST_FULL, cai linearmente até 0 em BST_SPAN
+function speciesCatchRate(speciesData) {
+    const b = speciesData && speciesData.baseStats;
+    if (!b) return 0;
+    const bst = (b.hp || 0) + (b.atk || 0) + (b.def || 0) + (b.spAtk || 0) + (b.spDef || 0) + (b.speed || 0);
+    return Math.min(1, Math.max(0, 1 - (bst - CAPTURE_RATE_BST_FULL) / CAPTURE_RATE_BST_SPAN));
+}
+
+// Chance de captura com a bola: Master = 1; as demais = clamp(taxa × catchMultiplier, MIN, MAX)
+function captureChance(rate, ball) {
+    if (!ball) return 0;
+    if (ball.id === 'masterball') return 1;
+    return Math.min(CAPTURE_CHANCE_MAX, Math.max(CAPTURE_CHANCE_MIN, rate * ball.catchMultiplier));
+}
+
+// Escolha automática de bola: a mais barata disponível; shiny usa a melhor disponível; a Master nunca (autoUse=false). Devolve o tipo ou null
+function chooseBall(balls, shiny) {
+    const usable = BALL_TYPES.filter(b => b.autoUse && _ballCount(balls, b.id) > 0);
+    if (usable.length === 0) return null;
+    return shiny ? usable[usable.length - 1] : usable[0];
+}
+
 // As bolas compráveis entram no registro da loja (a Master Bola não)
 for (const ball of BALL_TYPES) {
     if (!ball.buyable) continue;
@@ -84,7 +107,7 @@ for (const ball of BALL_TYPES) {
         reason: 'ball_purchase',
         event: 'ball_bought',
         packs: [1, 10],
-        description: () => `${ball.name}: fica no inventário. Ainda não influencia a captura (a mecânica chega em breve).`,
+        description: () => `${ball.name}: fica no inventário. Cada tentativa de captura gasta uma bola.`,
         price: (g) => ballPrice(ball, g.getPricingLevel()),
         stock: (g) => g.getBallCount(ball.id),
         capacity: () => BALL_STACK_MAX,
@@ -94,8 +117,13 @@ for (const ball of BALL_TYPES) {
 
 const ShopMethods = {
     // ---------- F9.4 · inventário de bolas (gameState.inventory.balls, criado só na primeira bola) ----------
+    getTotalBalls() {
+        const inv = this.gameState ? this.ensureInventory() : null;
+        return BALL_TYPES.filter(b => b.autoUse).reduce((n, b) => n + _ballCount(inv && inv.balls, b.id), 0);
+    },
+
     getBallCount(id) {
-        const inv = this.gameState && this.gameState.inventory;
+        const inv = this.gameState ? this.ensureInventory() : null;
         return _ballCount(inv && inv.balls, id);
     },
 

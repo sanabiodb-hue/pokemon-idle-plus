@@ -42,7 +42,8 @@ class EconomyView {
         if (!el) return;
         const g = this.game;
         el.innerHTML = `<span class="hunt-res">💰 <strong data-eco-money>${ecoMoney(g.getMoney())}</strong></span>
-            <span class="hunt-res">🧪 <strong data-eco-potions>${ptNumber(g.getPotions())}</strong>/${ptNumber(g.getPotionCapacity())}</span>`;
+            <span class="hunt-res">🧪 <strong data-eco-potions>${ptNumber(g.getPotions())}</strong>/${ptNumber(g.getPotionCapacity())}</span>
+            ${BALL_CAPTURE_ENABLED ? `<span class="hunt-res${g.getTotalBalls() > 0 ? '' : ' empty'}" data-eco-balls-wrap>⚪ <strong data-eco-balls>${ptNumber(g.getTotalBalls())}</strong></span>` : ''}`;
     }
 
     // atualização barata (chamada a cada segundo)
@@ -52,6 +53,14 @@ class EconomyView {
         if (m) m.textContent = ecoMoney(g.getMoney());
         const p = this.root.querySelector('[data-eco-potions]');
         if (p) p.textContent = ptNumber(g.getPotions());
+        if (BALL_CAPTURE_ENABLED) {
+            const total = g.getTotalBalls();
+            const b = this.root.querySelector('[data-eco-balls]');
+            if (b) b.textContent = ptNumber(total);
+            const w = this.root.querySelector('[data-eco-balls-wrap]');
+            if (w) w.classList.toggle('empty', total <= 0);
+            this.root.querySelectorAll('[data-hunt-noballs]').forEach(n => { n.hidden = total > 0; });     // aviso de caçada sem bolas
+        }
     }
 
     // ---------- Loja ----------
@@ -76,7 +85,7 @@ class EconomyView {
         el.innerHTML = `
             <h3>🛒 Loja</h3>
             ${items}
-            <div class="hunt-hint">O preço sobe junto com o seu progresso (maior nível já alcançado: ${ptNumber(g.getProgressLevel())}). O estoque de poções cresce com o upgrade Capacidade de Poções; as bolas guardam até ${ptNumber(BALL_STACK_MAX)} de cada tipo e ainda não influenciam a captura.</div>`;
+            <div class="hunt-hint">O preço sobe junto com o seu progresso (maior nível já alcançado: ${ptNumber(g.getProgressLevel())}). O estoque de poções cresce com o upgrade Capacidade de Poções; as bolas guardam até ${ptNumber(BALL_STACK_MAX)} de cada tipo. Cada tentativa de captura gasta uma bola; sem bolas, nenhuma captura é tentada.</div>`;
     }
 
     // ---------- Upgrades ----------

@@ -2107,6 +2107,14 @@ class GameCore {
         const gs = this.gameState;
         if (!gs) return null;
         if (!_isObj(gs.inventory)) gs.inventory = { potions: INITIAL_POTIONS };
+        // F9.5: pacote inicial de bolas, UMA vez por save (a marca fica no inventário; com o inventário zerado depois, não volta). Sem a flag: nada muda.
+        if (BALL_CAPTURE_ENABLED && gs.inventory.ballsGranted !== true) {
+            gs.inventory.ballsGranted = true;
+            for (const id of Object.keys(BALL_STARTER_PACK)) {
+                const r = ballInventoryAdd(gs.inventory.balls, id, BALL_STARTER_PACK[id]);
+                if (r.ok) gs.inventory.balls = r.balls;
+            }
+        }
         return gs.inventory;
     }
 
@@ -2623,12 +2631,38 @@ class GameCore {
             this._emit('capture_skipped', { id: wildPokemon.id, reason: decision.reason, grade: q ? q.grade : null });
             return null;
         }
+        // F9.5: com bolas, a captura gasta uma bola e pode falhar (um único sorteio por tentativa; sem bola não há tentativa nem sorteio)
+        const ball = BALL_CAPTURE_ENABLED ? this._ballCaptureAttempt(wildPokemon) : null;
+        if (BALL_CAPTURE_ENABLED && !(ball && ball.ok)) return null;
         const outcome = this._applyCapture(wildPokemon);
         this._emit('pokemon_captured', {
             id: wildPokemon.id, uid: outcome.uid, firstCatch: outcome.firstCatch, newIndividual: !!outcome.uid,
             shiny: !!(outcome.shiny), grade: q ? q.grade : null, quality: q ? q.percentage : null, reason: decision.reason,
+            ...(ball ? { ball: ball.ball.id } : {}),
         });
         return outcome;
+    }
+
+    // F9.5 · UMA tentativa de captura com bola. Escolhe a bola (função pura), consome 1 e sorteia UMA vez (também com a Master, que tem chance 1).
+    // Devolve { ok:true, ball, chance } (capturou) ou { ok:false, reason:'no_balls'|'escaped' }. Sem bola: nenhum consumo e nenhum sorteio.
+    _ballCaptureAttempt(wild) {
+        const ball = chooseBall(this.getBalls(), !!wild.isShiny);
+        if (!ball) {
+            if (!this._ballsDepletedNotified) {                         // no máximo um aviso por episódio (volta a avisar depois de haver bola de novo)
+                this._ballsDepletedNotified = true;
+                this._emit('balls_depleted', { id: wild.id });
+                if (this.onBattleEvent) this.onBattleEvent('ballsDepleted', { id: wild.id, name: POKEMON_DATA[wild.id] ? POKEMON_DATA[wild.id].name : '#' + wild.id });
+            }
+            return { ok: false, reason: 'no_balls' };
+        }
+        this._ballsDepletedNotified = false;
+        this.consumeBall(ball.id, 1);
+        const chance = captureChance(speciesCatchRate(POKEMON_DATA[wild.id]), ball);
+        if (this.rng() < chance) return { ok: true, ball, chance };
+        const left = this.getBallCount(ball.id);
+        this._emit('capture_failed', { id: wild.id, ball: ball.id, chance, left, shiny: !!wild.isShiny });
+        if (this.onBattleEvent) this.onBattleEvent('captureFailed', { id: wild.id, name: POKEMON_DATA[wild.id] ? POKEMON_DATA[wild.id].name : '#' + wild.id, ball: ball.id, ballName: ball.name, chance, shiny: !!wild.isShiny });
+        return { ok: false, reason: 'escaped', ball, chance };
     }
 
     // 捕获决策。没有进行中的自动化狩猎时返回 legacy（永远收），不读策略、不消耗随机数

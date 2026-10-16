@@ -21,12 +21,26 @@ const DUPLICATE_SPECIES_CAP = 20;
 // (a mecânica de captura com chance fica para a fase seguinte). Preço = max(basePrice, ceil(winsPerBall × ouro por vitória do nível de preço)):
 // o piso vale no começo e o preço acompanha o progresso, como a poção. A Master Bola não é comprável na loja.
 const BALL_STACK_MAX = 99;
+// F9.5: preços recalibrados com o ritmo medido (~1 bola gasta por vitória; 250 a 1300 vitórias/h; ouro por vitória de 2,8 no começo a 164 no fim):
+// a Poké Bola custa ~10% do ouro de uma vitória (piso de 1), a Great 3x e a Ultra 6x — manter a caçada automática gasta uma fração do ganho.
+// `autoUse`: a escolha automática de bola pode usar esta bola (a Master nunca é escolhida sozinha).
 const BALL_TYPES = [
-    { id: 'pokeball',   name: 'Poké Bola',   icon: '⚪', basePrice: 20,  winsPerBall: 1, catchMultiplier: 1,   buyable: true },
-    { id: 'greatball',  name: 'Great Bola',  icon: '🔵', basePrice: 60,  winsPerBall: 3, catchMultiplier: 1.5, buyable: true },
-    { id: 'ultraball',  name: 'Ultra Bola',  icon: '🟡', basePrice: 120, winsPerBall: 6, catchMultiplier: 2,   buyable: true },
-    { id: 'masterball', name: 'Master Bola', icon: '🟣', basePrice: 0,   winsPerBall: 0, catchMultiplier: 255, buyable: false },
+    { id: 'pokeball',   name: 'Poké Bola',   icon: '⚪', basePrice: 1, winsPerBall: 0.1, catchMultiplier: 1,   buyable: true,  autoUse: true },
+    { id: 'greatball',  name: 'Great Bola',  icon: '🔵', basePrice: 3, winsPerBall: 0.3, catchMultiplier: 1.5, buyable: true,  autoUse: true },
+    { id: 'ultraball',  name: 'Ultra Bola',  icon: '🟡', basePrice: 6, winsPerBall: 0.6, catchMultiplier: 2,   buyable: true,  autoUse: true },
+    { id: 'masterball', name: 'Master Bola', icon: '🟣', basePrice: 0, winsPerBall: 0,   catchMultiplier: 255, buyable: false, autoUse: false },
 ];
+
+// F9.5: captura com chance e consumo de bola. Cada tentativa (só quando o fluxo atual já decidiria capturar) gasta 1 bola e faz UM sorteio no RNG do jogo.
+// chance = clamp(taxa da espécie × catchMultiplier da bola, MIN, MAX); a Master Bola tem chance 1. O dado das espécies NÃO tem taxa de captura, então a taxa
+// é derivada do BST (soma dos atributos base) por uma regra determinística: 1 até BST_FULL e cai linearmente até 0 ao longo de BST_SPAN.
+// BALL_CAPTURE_ENABLED = false restaura exatamente a captura, o inventário e a sequência do RNG de antes da fase.
+let BALL_CAPTURE_ENABLED = true;        // (let: só os testes reatribuem em tempo de execução)
+const CAPTURE_CHANCE_MIN = 0.10;
+const CAPTURE_CHANCE_MAX = 0.95;
+const CAPTURE_RATE_BST_FULL = 300;
+const CAPTURE_RATE_BST_SPAN = 600;
+const BALL_STARTER_PACK = { pokeball: 30 };     // concedido uma única vez por save (inventory.ballsGranted), respeitando BALL_STACK_MAX
 
 const INITIAL_POTIONS = 10;          // 新玩家（以及还没有 inventory 的旧存档）的初始药水数
 const MAX_POTIONS = 99999;           // 存档清洗上限
