@@ -11,7 +11,9 @@ const { runOnline, runFast, digest } = require('./helpers/capture-golden');
 
 const plain = (o) => JSON.parse(JSON.stringify(o));
 const KEY = 'pokemon_idle_save';
-const on = (opts = {}) => newGame({ balls: true, ...opts });                    // captura com bola ligada; reposição ligada (padrão da fase)
+const RES = 40;                                                                  // F9.7: reserva de ouro padrão (era 100)
+// captura com bola ligada; reposição ligada; F9.7: a reposição é um benefício VIP, então estes testes ativam o benefício autoRestock (o bloqueio tem arquivo próprio)
+const on = (opts = {}) => { const g = newGame({ balls: true, ...opts }); g.game.gameState.account = { benefits: ['autoRestock'] }; return g; };
 const offRestock = (g) => { vm.runInContext('BALL_RESTOCK_ENABLED = false', g.ctx.sandbox); return g; };
 const wild = (id, shiny = false) => ({ id, level: 5, isShiny: shiny, ivs: { hp: 1, atk: 1, def: 1, spAtk: 1, spDef: 1, speed: 1 } });
 function setBalls(game, balls) { const inv = game.ensureInventory(); inv.ballsGranted = true; if (Object.keys(balls).length) inv.balls = { ...balls }; else delete inv.balls; }
@@ -73,12 +75,12 @@ test('F9.6 B: respeita a reserva de ouro, compra parcial correta e nunca passa d
     const { game } = on({ seed: 2 });
     const price = unitPrice(game);
     setBalls(game, { pokeball: 0 }); setBalls(game, {});
-    setGold(game, 100 + 10 * price);                                   // ouro acima da reserva paga só 10 bolas
+    setGold(game, RES + 10 * price);                                   // ouro acima da reserva paga só 10 bolas
     assert.equal(game._restockBalls().qty, 10);
-    assert.equal(game.getMoney(), 100); assert.equal(game.getBallCount('pokeball'), 10);
-    setBalls(game, { pokeball: 1 }); setGold(game, 100 + price - 1);   // falta 1 de ouro para uma bola
+    assert.equal(game.getMoney(), RES); assert.equal(game.getBallCount('pokeball'), 10);
+    setBalls(game, { pokeball: 1 }); setGold(game, RES + price - 1);   // falta 1 de ouro para uma bola
     assert.equal(game._restockBalls(), null);
-    assert.equal(game.getBallCount('pokeball'), 1); assert.equal(game.getMoney(), 100 + price - 1);
+    assert.equal(game.getBallCount('pokeball'), 1); assert.equal(game.getMoney(), RES + price - 1);
     setRestock(game, { minStock: 99, targetStock: 99 });
     setBalls(game, { pokeball: 90 }); setGold(game, 1_000_000);
     assert.equal(game._restockBalls().qty, 9); assert.equal(game.getBallCount('pokeball'), 99);
@@ -109,7 +111,7 @@ test('F9.6 B: varredura aleatória — nunca ouro abaixo da reserva nem estoque 
 
 test('F9.6 B: atômica — compra recusada deixa dinheiro, inventário, ledger e estatísticas idênticos', () => {
     const { game } = on({ seed: 2 });
-    setBalls(game, { pokeball: 2 }); setGold(game, 100);              // ouro igual à reserva
+    setBalls(game, { pokeball: 2 }); setGold(game, RES);              // ouro igual à reserva
     game.getProgressLevel();                                           // aquece o cache derivado economy.progressLevel (escrito na 1ª consulta de preço, com ou sem compra)
     const before = snap(game);
     assert.equal(game._restockBalls(), null);
@@ -133,8 +135,8 @@ test('F9.6 C: a reposição não consome sorteio; o resto da tentativa é igual 
         return { n: c.n, ok: !!out, balls: plain(game.getBalls()), catches: game.gameState.stats.totalCatches };
     };
     const price = (() => unitPrice(on({ seed: 4 }).game))();
-    const viaRestock = attempt((g) => { setBalls(g, { pokeball: 2 }); setGold(g, 100 + 28 * price); });
-    const alreadyHad = attempt((g) => { setBalls(g, { pokeball: 30 }); setGold(g, 100); });
+    const viaRestock = attempt((g) => { setBalls(g, { pokeball: 2 }); setGold(g, RES + 28 * price); });
+    const alreadyHad = attempt((g) => { setBalls(g, { pokeball: 30 }); setGold(g, RES); });
     assert.deepEqual(viaRestock, alreadyHad, 'mesmo número de sorteios e mesmo resultado');
     const { game } = on({ seed: 4 }); setBalls(game, { pokeball: 1 }); setGold(game, 5000);
     const c = { n: 0 }; game.rng = () => { c.n++; return 0.5; };
@@ -288,15 +290,15 @@ test('F9.6 G: um evento por reposição; a falha avisa uma vez por episódio e o
     const price = unitPrice(game);
     const ok = [], bad = [];
     game.bus.on('balls_restocked', (e) => ok.push(e)); game.bus.on('balls_restock_failed', (e) => bad.push(e));
-    setBalls(game, {}); setGold(game, 100);                          // sem ouro acima da reserva
+    setBalls(game, {}); setGold(game, RES);                          // sem ouro acima da reserva
     for (let i = 0; i < 30; i++) game._restockBalls();
     assert.equal(bad.length, 1, 'uma falha por episódio'); assert.equal(bad[0].reason, 'no_gold');
     assert.deepEqual(plain(game.getRestockStatus()), { failed: 'no_gold' });
-    setGold(game, 100 + 40 * price);
+    setGold(game, RES + 40 * price);
     game._restockBalls();
     assert.equal(ok.length, 1, 'um evento por reposição'); assert.equal(ok[0].qty, 30); assert.equal(ok[0].total, 30 * price);
     assert.deepEqual(plain(game.getRestockStatus()), { failed: null }, 'aviso limpo');
-    setBalls(game, {}); setGold(game, 100);
+    setBalls(game, {}); setGold(game, RES);
     for (let i = 0; i < 10; i++) game._restockBalls();
     assert.equal(bad.length, 2, 'novo episódio, novo (único) aviso');
     setRestock(game, { minStock: 1, targetStock: 1 }); setBalls(game, { pokeball: 99 });
@@ -307,7 +309,7 @@ test('F9.6 G: um evento por reposição; a falha avisa uma vez por episódio e o
 test('F9.6 H: padrões e validação da configuração (inválidos voltam ao padrão; mínimo ≤ alvo ≤ 99; reserva ≥ 0; inteiros)', () => {
     const { ctx } = on();
     const d = plain(ctx.defaultAutomationPolicy());
-    assert.deepEqual(d.ballPolicy.restock, { enabled: true, minStock: 5, targetStock: 30, goldReserve: 100 });
+    assert.deepEqual(d.ballPolicy.restock, { enabled: true, minStock: 5, targetStock: 30, goldReserve: RES });
     assert.equal(d.capture.skipOwnedSpecies, false);
     const san = (patch) => plain(ctx.sanitizeAutomationPolicy({ ballPolicy: { type: 'none', restock: patch } })).ballPolicy.restock;
     assert.deepEqual(san({ minStock: 8, targetStock: 50, goldReserve: 0, enabled: false }), { enabled: false, minStock: 8, targetStock: 50, goldReserve: 0 });
@@ -338,14 +340,14 @@ test('F9.6 H: ida e volta no save; versão do save segue 3; saves sem o campo (v
     a.storage.setItem(KEY, a.ctx.SaveCodec.encodePayload(JSON.stringify(raw)));
     const c = on({ seed: 4, load: true, storage: a.storage });
     assert.equal(c.game.loadReport.ok, true); assert.equal(c.game.loadReport.source, 'main');
-    assert.deepEqual(plain(c.game.getAutomationPolicy().ballPolicy.restock), { enabled: true, minStock: 5, targetStock: 30, goldReserve: 100 });
+    assert.deepEqual(plain(c.game.getAutomationPolicy().ballPolicy.restock), { enabled: true, minStock: 5, targetStock: 30, goldReserve: RES });
     assert.equal(c.game.getAutomationPolicy().capture.skipOwnedSpecies, false);
     // v1, v2 e v3 sem o campo
     const FIX = path.join(__dirname, 'fixtures');
     for (const f of ['legacy-localstorage.txt', 'legacy-v2-localstorage.txt']) {
         const g = on({ storage: createMemoryStorage({ [KEY]: fs.readFileSync(path.join(FIX, f), 'utf8') }), load: true });
         assert.equal(g.game.loadReport.ok, true, f);
-        assert.deepEqual(plain(g.game.getAutomationPolicy().ballPolicy.restock), { enabled: true, minStock: 5, targetStock: 30, goldReserve: 100 }, f);
+        assert.deepEqual(plain(g.game.getAutomationPolicy().ballPolicy.restock), { enabled: true, minStock: 5, targetStock: 30, goldReserve: RES }, f);
         assert.equal(g.game.getAutomationPolicy().capture.skipOwnedSpecies, false, f);
     }
     const v3 = on({ seed: 4 }); v3.game.saveNow();
@@ -353,5 +355,5 @@ test('F9.6 H: ida e volta no save; versão do save segue 3; saves sem o campo (v
     v3.storage.setItem(KEY, v3.ctx.SaveCodec.encodePayload(JSON.stringify(r3)));
     const g3 = on({ seed: 4, load: true, storage: v3.storage });
     assert.equal(g3.game.loadReport.ok, true);
-    assert.deepEqual(plain(g3.game.getAutomationPolicy().ballPolicy.restock), { enabled: true, minStock: 5, targetStock: 30, goldReserve: 100 });
+    assert.deepEqual(plain(g3.game.getAutomationPolicy().ballPolicy.restock), { enabled: true, minStock: 5, targetStock: 30, goldReserve: RES });
 });

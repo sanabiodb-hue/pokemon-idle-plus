@@ -5004,3 +5004,6 @@ body {
 .hunt-res.empty { color: #e57373; }
 .hunt-warn { margin-top: 8px; padding: 8px 10px; border-radius: 8px; background: rgba(229, 115, 115, 0.15); border: 1px solid #e57373; font-size: 13px; line-height: 1.3; }
 .hunt-warn[hidden] { display: none; }
+/* F9.7: aviso neutro de benefício bloqueado */
+.hunt-lock { margin: 6px 0; padding: 8px 10px; border-radius: 8px; background: rgba(255, 255, 255, 0.06); border: 1px dashed #8a8fa3; font-size: 13px; line-height: 1.3; }
+#hunt-settings input:disabled { opacity: 0.5; cursor: not-allowed; }

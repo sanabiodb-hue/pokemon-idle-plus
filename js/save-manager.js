@@ -307,6 +307,11 @@ function sanitizeSave(raw, now = Date.now()) {
         if (Object.keys(balls).length > 0) out.inventory.balls = balls;
         if (raw.inventory.ballsGranted === true) out.inventory.ballsGranted = true;       // F9.5: marca do pacote inicial (só o booleano verdadeiro vale)
     }
+    // ---- F9.7: benefícios (campo aditivo opcional; sem ids válidos o campo não é gravado, então saves sem benefício ficam idênticos aos de antes) ----
+    if (_isObj(raw.account) && typeof sanitizeBenefits === 'function') {
+        const benefits = sanitizeBenefits(raw.account);
+        if (benefits.length > 0) out.account = { benefits };
+    }
     // ---- 经济累计数字（可选字段；没有 = 从未有过经济活动）----
     if (_isObj(raw.economy)) out.economy = sanitizeEconomyState(raw.economy);
     if (_isObj(raw.upgrades)) { const up = sanitizeUpgradesState(raw.upgrades); if (Object.keys(up).length) out.upgrades = up; }

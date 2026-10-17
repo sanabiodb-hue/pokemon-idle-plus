@@ -345,7 +345,7 @@ class HuntView {
                 ${stat('Eficiência', active || s ? `${ptNumber(eff.xpPerHour)} EXP/h` : '—')}
             </div>
             <div class="hunt-potions">🧪 Poções disponíveis: <strong data-hunt-potions>${ptNumber(g.getPotions())}</strong></div>
-            ${BALL_CAPTURE_ENABLED ? `<div class="hunt-warn" data-hunt-noballs role="alert" ${g.getTotalBalls() > 0 ? 'hidden' : ''}>⚠️ Sem Poké Bolas: nenhuma captura é tentada. Compre bolas na Loja.</div>
+            ${BALL_CAPTURE_ENABLED ? `<div class="hunt-warn" data-hunt-noballs role="alert" ${g.getTotalBalls() > 0 ? 'hidden' : ''}>⚠️ Sem Poké Bolas: nenhuma captura é tentada. ${hasBenefit(g.gameState, 'autoRestock') ? 'Compre bolas na Loja.' : 'Compre bolas manualmente na Loja.'}</div>
             <div class="hunt-warn" data-hunt-restockfail role="alert" ${g.getRestockStatus().failed ? '' : 'hidden'}>${huntRestockFailText(g.getRestockStatus().failed, g)}</div>` : ''}`;
     }
 
@@ -498,6 +498,8 @@ class HuntView {
         if (!this.root || !this.game.gameState) return;
         this._settingsDirty = false;
         const p = this.game.getAutomationPolicy();
+        const vip = hasBenefit(this.game.gameState, 'autoRestock');          // F9.7: reposição é benefício VIP
+        const lockAttr = vip ? '' : ' disabled';
         const chk = (path, v) => `data-hunt-policy="${path}" data-kind="bool"${v ? ' checked' : ''}`;
         const num = (path, v, min, max) => `data-hunt-policy="${path}" data-kind="int" type="number" min="${min}" max="${max}" value="${v}" inputmode="numeric"`;
         const targets = p.target.speciesIds.map(id => `<span class="hunt-tag">${escapeHtml(POKEMON_DATA[id] ? POKEMON_DATA[id].name : '#' + id)} <button data-hunt-action="remove-target" data-id="${id}" aria-label="Remover">✕</button></span>`).join('') || '<small>Nenhuma: todas as espécies são tratadas igual.</small>';
@@ -521,11 +523,12 @@ class HuntView {
             <div class="hunt-tags">${targets}</div>
 
             <h3>⚪ Reposição de bolas</h3>
-            <label class="hunt-check"><input type="checkbox" ${chk('ballPolicy.restock.enabled', p.ballPolicy.restock.enabled)}> Repor Poké Bolas automaticamente</label>
-            <div class="hunt-limit"><span>Repor quando restarem menos de</span> <input ${num('ballPolicy.restock.minStock', p.ballPolicy.restock.minStock, 1, BALL_STACK_MAX)}> <span>bolas</span></div>
-            <div class="hunt-limit"><span>Repor até</span> <input ${num('ballPolicy.restock.targetStock', p.ballPolicy.restock.targetStock, 1, BALL_STACK_MAX)}> <span>bolas</span></div>
-            <div class="hunt-limit"><span>Manter de reserva</span> <input ${num('ballPolicy.restock.goldReserve', p.ballPolicy.restock.goldReserve, 0, 1000000000)}> <span>de ouro</span></div>
-            <small data-hunt-restock-state>${p.ballPolicy.restock.enabled ? `Ligada: repõe até ${ptNumber(p.ballPolicy.restock.targetStock)} quando houver menos de ${ptNumber(p.ballPolicy.restock.minStock)}, sem usar os $${ptNumber(p.ballPolicy.restock.goldReserve)} de reserva.` : 'Desligada: as bolas só acabam e a captura para até você comprar na Loja.'}</small>
+            ${vip ? '' : '<div class="hunt-lock" data-hunt-restock-locked role="note">🔒 Benefício VIP: a reposição automática de bolas não está ativa nesta conta. Você pode comprar bolas na Loja.</div>'}
+            <label class="hunt-check"><input type="checkbox" ${chk('ballPolicy.restock.enabled', p.ballPolicy.restock.enabled)}${lockAttr}> Repor Poké Bolas automaticamente</label>
+            <div class="hunt-limit"><span>Repor quando restarem menos de</span> <input ${num('ballPolicy.restock.minStock', p.ballPolicy.restock.minStock, 1, BALL_STACK_MAX)}${lockAttr}> <span>bolas</span></div>
+            <div class="hunt-limit"><span>Repor até</span> <input ${num('ballPolicy.restock.targetStock', p.ballPolicy.restock.targetStock, 1, BALL_STACK_MAX)}${lockAttr}> <span>bolas</span></div>
+            <div class="hunt-limit"><span>Manter de reserva</span> <input ${num('ballPolicy.restock.goldReserve', p.ballPolicy.restock.goldReserve, 0, 1000000000)}${lockAttr}> <span>de ouro</span></div>
+            <small data-hunt-restock-state>${!vip ? 'Bloqueada: a reposição automática é um benefício VIP.' : p.ballPolicy.restock.enabled ? `Ligada: repõe até ${ptNumber(p.ballPolicy.restock.targetStock)} quando houver menos de ${ptNumber(p.ballPolicy.restock.minStock)}, sem usar os $${ptNumber(p.ballPolicy.restock.goldReserve)} de reserva.` : 'Desligada: as bolas só acabam e a captura para até você comprar na Loja.'}</small>
 
             <h3>🧪 Cura</h3>
             <div class="hunt-potions">Poções: <strong data-hunt-potions>${ptNumber(this.game.getPotions())}</strong></div>

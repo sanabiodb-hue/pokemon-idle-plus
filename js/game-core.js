@@ -1195,15 +1195,33 @@ class GameCore {
     // 已拥有该物种时，这只野生宝可梦要不要收为新的个体？
     // 随机数只在“概率捕获”时消耗（策略 all 且非闪光），其余情况是确定性的。
     _shouldCaptureDuplicate(wild) {
-        const policy = this.getCaptureDuplicatePolicy();
-        if (policy === 'off') return false;
-        if (wild.isShiny) return true;
-        if (this.roster.countOfSpecies(wild.id) >= DUPLICATE_SPECIES_CAP) return false;
-        if (policy === 'better') {
-            const total = ivTotal(wild.ivs);
-            return this.roster.ofSpecies(wild.id).every(i => total > ivTotal(i.ivs));
-        }
-        return this.rng() < DUPLICATE_CAPTURE_RATE;
+        const v = this._duplicateVerdict(wild);
+        return v.verdict === 'roll' ? this.rng() < DUPLICATE_CAPTURE_RATE : v.verdict === 'accept';
+    }
+
+    // F9.7: veredito puro (duplicateVerdict) com os dados do jogo; não sorteia nada
+    _duplicateVerdict(wild) {
+        const hasLive = !!this.roster.primaryOf(wild.id);
+        return duplicateVerdict({
+            policy: this.getCaptureDuplicatePolicy(), hasLive, shiny: !!wild.isShiny,
+            count: hasLive ? this.roster.countOfSpecies(wild.id) : 0, cap: DUPLICATE_SPECIES_CAP,
+            wildTotal: ivTotal(wild.ivs), ownedTotals: hasLive ? this.roster.ofSpecies(wild.id).map(i => ivTotal(i.ivs)) : [],
+        });
+    }
+
+    // F9.7 · a captura seria um desperdício de bola? Só quando ela não teria efeito algum: espécie já capturada, nenhum IV melhor que o guardado,
+    // nenhum indivíduo novo possível (política de duplicatas ou PC cheio) e não é shiny (shiny sempre tenta, para valer o aviso de PC cheio).
+    // Decide ANTES do gasto da bola e do sorteio. Devolve o motivo ('duplicate_policy_off' | 'duplicate_species_cap' | 'duplicate_not_better' | 'pc_full') ou null.
+    // Não sorteia: a política padrão (all) continua decidindo no sorteio depois da bola, para a sequência do RNG não mudar.
+    _captureWastedReason(wild) {
+        if (wild.isShiny) return null;
+        const stored = this.gameState.caughtPokemon[wild.id];
+        if (!stored) return null;
+        if (Object.keys(wild.ivs).some(stat => wild.ivs[stat] > stored.ivs[stat])) return null;      // melhora de IV ainda vale a captura
+        const v = this._duplicateVerdict(wild);
+        if (v.verdict === 'reject') return v.reason;
+        if (!this.roster.hasRoom()) return 'pc_full';
+        return null;
     }
 
     // 把野生宝可梦收为一只全新的个体（新 uid；IV/性格/特性/性别/闪光各自独立；Lv1）。
@@ -2631,6 +2649,11 @@ class GameCore {
             this._emit('capture_skipped', { id: wildPokemon.id, reason: decision.reason, grade: q ? q.grade : null });
             return null;
         }
+        // F9.7: captura sem efeito possível (duplicata rejeitada pela política ou PC cheio, sem melhora de IV): não gasta bola nem sorteia
+        if (BALL_CAPTURE_ENABLED) {
+            const wasted = this._captureWastedReason(wildPokemon);
+            if (wasted) { this._emit('capture_skipped', { id: wildPokemon.id, reason: wasted, grade: q ? q.grade : null }); return null; }
+        }
         // F9.5: com bolas, a captura gasta uma bola e pode falhar (um único sorteio por tentativa; sem bola não há tentativa nem sorteio)
         const ball = BALL_CAPTURE_ENABLED ? this._ballCaptureAttempt(wildPokemon) : null;
         if (BALL_CAPTURE_ENABLED && !(ball && ball.ok)) return null;
@@ -2792,10 +2815,8 @@ class GameCore {
             // 先决定要不要把这只收为一只新的独立个体（必须在“个体值取高”之前判断：
             // 策略 better 要拿它跟已有个体原来的个体值比）。
             // 物种只剩图鉴存档（没有活着的个体）时，除非策略为 off，都会收下它作为新的个体。
-            const hasLive = !!this.roster.primaryOf(wildPokemon.id);
-            const wantsNew = hasLive
-                ? this._shouldCaptureDuplicate(wildPokemon)
-                : this.getCaptureDuplicatePolicy() !== 'off';
+            // (F9.7: a mesma decisão pura, _duplicateVerdict, também vale para a espécie que só tem o registro do Pokédex)
+            const wantsNew = this._shouldCaptureDuplicate(wildPokemon);
 
             // 旧规则照旧：比较并更新主个体（或图鉴存档）的个体值（取高的），不更新等级
             let updated = false;

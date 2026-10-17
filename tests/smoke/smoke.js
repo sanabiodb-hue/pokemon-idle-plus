@@ -507,15 +507,15 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
             const { page, context } = await newPage(() => localStorage.setItem('pokemon_idle_tutorial_done', '1'), { viewport: { width: vp.width, height: vp.height } });
             await page.goto(base);
             await page.waitForFunction(() => typeof game !== 'undefined' && game.currentBattle, null, { timeout: 10000 });
-            await page.evaluate(() => game.stopBattle());                // a batalha ao vivo gastaria/ganharia bolas e ouro durante o teste
+            await page.evaluate(() => { game.stopBattle(); game.gameState.account = { benefits: ['autoRestock'] }; });     // F9.7: a reposição é benefício VIP; aqui o benefício está ativo
             await page.locator('#tab-nav [data-tab="tab-hunt"]').click();
             await page.waitForSelector('#hunt-settings [data-hunt-policy="ballPolicy.restock.enabled"]');
             const sel = (path) => `#hunt-settings [data-hunt-policy="${path}"]`;
             const fit = () => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1 && document.getElementById('hunt-settings').scrollWidth <= document.getElementById('hunt-settings').clientWidth + 1);
             const pol = () => page.evaluate(() => { const p = game.getAutomationPolicy(); return { r: p.ballPolicy.restock, skip: p.capture.skipOwnedSpecies }; });
             const d0 = await pol();
-            check(`Reposição ${vp.name}: padrões ligada, mínimo 5, alvo 30, reserva 100 e poupar bolas desligado`, d0.r.enabled === true && d0.r.minStock === 5 && d0.r.targetStock === 30 && d0.r.goldReserve === 100 && d0.skip === false, JSON.stringify(d0));
-            check(`Reposição ${vp.name}: a tela mostra os controles e o estado legível ("Ligada: repõe até 30 quando houver menos de 5, sem usar os $100 de reserva.")`, await page.evaluate(() => /Ligada: repõe até 30 quando houver menos de 5, sem usar os \$100 de reserva\./.test(document.getElementById('hunt-settings').innerText) && !!document.querySelector('#hunt-settings [data-hunt-policy="capture.skipOwnedSpecies"]')));
+            check(`Reposição ${vp.name}: padrões ligada, mínimo 5, alvo 30, reserva 40 e poupar bolas desligado`, d0.r.enabled === true && d0.r.minStock === 5 && d0.r.targetStock === 30 && d0.r.goldReserve === 40 && d0.skip === false, JSON.stringify(d0));
+            check(`Reposição ${vp.name}: a tela mostra os controles e o estado legível ("Ligada: repõe até 30 quando houver menos de 5, sem usar os $40 de reserva.")`, await page.evaluate(() => /Ligada: repõe até 30 quando houver menos de 5, sem usar os \$40 de reserva\./.test(document.getElementById('hunt-settings').innerText) && !!document.querySelector('#hunt-settings [data-hunt-policy="capture.skipOwnedSpecies"]')));
             check(`Reposição ${vp.name}: configurações sem rolagem horizontal`, await fit());
             for (const [path, v] of [['ballPolicy.restock.minStock', '8'], ['ballPolicy.restock.targetStock', '40'], ['ballPolicy.restock.goldReserve', '250']]) {
                 await page.locator(sel(path)).fill(v); await page.locator(sel(path)).dispatchEvent('change');
@@ -549,6 +549,36 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
             await page.waitForFunction(() => document.querySelector('[data-hunt-restockfail]').hidden && document.querySelector('[data-hunt-noballs]').hidden, null, { timeout: 5000 });
             const after = await page.evaluate(() => ({ balls: game.getBallCount('pokeball'), gold: game.getMoney(), price: game.getShopItems().find(i => i.id === 'pokeball').price }));
             check(`Reposição ${vp.name}: com ouro acima da reserva repõe até o alvo 40, gasta só o preço × quantidade e os dois avisos somem`, after.balls === 40 - 1 && after.gold === 290 - (40) * after.price, JSON.stringify(after));
+            await context.close();
+        }
+
+        // ---------- B3i. F9.7 benefício VIP: sem ele os controles da reposição ficam bloqueados; com ele ficam ativos (celular e desktop) ----------
+        for (const vp of [{ name: 'celular 360x640', width: 360, height: 640 }, { name: 'desktop 1280x800', width: 1280, height: 800 }]) {
+            const { page, context } = await newPage(() => localStorage.setItem('pokemon_idle_tutorial_done', '1'), { viewport: { width: vp.width, height: vp.height } });
+            await page.goto(base);
+            await page.waitForFunction(() => typeof game !== 'undefined' && game.currentBattle, null, { timeout: 10000 });
+            await page.evaluate(() => game.stopBattle());
+            await page.locator('#tab-nav [data-tab="tab-hunt"]').click();
+            await page.waitForSelector('#hunt-settings [data-hunt-policy="ballPolicy.restock.enabled"]');
+            const ctl = () => page.evaluate(() => ['enabled', 'minStock', 'targetStock', 'goldReserve'].map(k => { const e = document.querySelector(`#hunt-settings [data-hunt-policy="ballPolicy.restock.${k}"]`); return !!e && e.disabled; }));
+            const fit = () => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1 && document.getElementById('hunt-settings').scrollWidth <= document.getElementById('hunt-settings').clientWidth + 1);
+            check(`VIP ${vp.name}: sem o benefício os 4 controles da reposição estão bloqueados`, JSON.stringify(await ctl()) === '[true,true,true,true]', JSON.stringify(await ctl()));
+            check(`VIP ${vp.name}: a frase neutra aparece ("Benefício VIP: a reposição automática de bolas não está ativa nesta conta.") e o estado diz "Bloqueada"`, await page.evaluate(() => /Benefício VIP: a reposição automática de bolas não está ativa nesta conta\./.test(document.getElementById('hunt-settings').innerText) && /Bloqueada: a reposição automática é um benefício VIP\./.test(document.getElementById('hunt-settings').innerText)));
+            check(`VIP ${vp.name}: "Poupar bolas" segue disponível sem o benefício`, await page.evaluate(() => { const e = document.querySelector('#hunt-settings [data-hunt-policy="capture.skipOwnedSpecies"]'); return !!e && !e.disabled; }));
+            check(`VIP ${vp.name}: bloqueado, sem rolagem horizontal`, await fit());
+            // sem o benefício a reposição não compra nem com ouro de sobra; o aviso de "sem bolas" sugere a compra manual
+            await page.evaluate(() => { const inv = game.ensureInventory(); delete inv.balls; game.gameState.gold = 5000; game.processDefeat(game.createWildPokemon(16, 5, 0)); });
+            await page.waitForFunction(() => { const w = document.querySelector('[data-hunt-noballs]'); return w && !w.hidden; }, null, { timeout: 5000 });
+            check(`VIP ${vp.name}: sem o benefício e sem bolas, ouro intocado e o aviso diz "Compre bolas manualmente na Loja."`, await page.evaluate(() => { const w = document.querySelector('[data-hunt-noballs]'); return game.getMoney() === 5000 && game.getTotalBalls() === 0 && w.innerText.trim() === '⚠️ Sem Poké Bolas: nenhuma captura é tentada. Compre bolas manualmente na Loja.' && document.querySelector('[data-hunt-restockfail]').hidden; }));
+            // com o benefício os controles ficam ativos e a reposição compra
+            await page.evaluate(() => { game.gameState.account = { benefits: ['autoRestock'] }; });
+            await page.locator('#tab-nav [data-tab="tab-battle"]').click();
+            await page.locator('#tab-nav [data-tab="tab-hunt"]').click();
+            await page.waitForFunction(() => { const e = document.querySelector('#hunt-settings [data-hunt-policy="ballPolicy.restock.enabled"]'); return e && !e.disabled; }, null, { timeout: 5000 });
+            check(`VIP ${vp.name}: com o benefício os 4 controles ficam ativos e a frase de bloqueio some`, JSON.stringify(await ctl()) === '[false,false,false,false]' && await page.evaluate(() => !document.querySelector('[data-hunt-restock-locked]') && /Ligada: repõe até 30/.test(document.getElementById('hunt-settings').innerText)));
+            await page.evaluate(() => game.processDefeat(game.createWildPokemon(19, 5, 0)));
+            check(`VIP ${vp.name}: com o benefício a mesma situação repõe até 30 (menos a bola usada) e gasta o preço × quantidade`, await page.evaluate(() => { const price = game.getShopItems().find(i => i.id === 'pokeball').price; return game.getBallCount('pokeball') === 29 && game.getMoney() === 5000 - 30 * price; }));
+            check(`VIP ${vp.name}: ativo, sem rolagem horizontal`, await fit());
             await context.close();
         }
 

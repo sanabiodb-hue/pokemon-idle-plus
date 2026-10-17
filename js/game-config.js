@@ -40,7 +40,7 @@ const CAPTURE_CHANCE_MIN = 0.10;
 const CAPTURE_CHANCE_MAX = 0.95;
 const CAPTURE_RATE_BST_FULL = 300;
 const CAPTURE_RATE_BST_SPAN = 600;
-const BALL_STARTER_PACK = { pokeball: 30 };
+const BALL_STARTER_PACK = { pokeball: 30 };     // concedido uma única vez por save (inventory.ballsGranted), respeitando BALL_STACK_MAX
 
 // F9.6: reposição automática de Poké Bolas. Quando o estoque cai abaixo de MIN_STOCK, compra (numa só operação, sem RNG nem timer) o que leva ao alvo,
 // limitado pelo espaço e pelo ouro ACIMA da reserva. Os valores abaixo são os padrões da configuração do jogador (política de automação, ballPolicy.restock).
@@ -49,7 +49,12 @@ let BALL_RESTOCK_ENABLED = true;        // (let: só os testes reatribuem em tem
 const BALL_RESTOCK_ITEM = 'pokeball';
 const BALL_RESTOCK_MIN_STOCK = 5;
 const BALL_RESTOCK_TARGET_STOCK = 30;
-const BALL_RESTOCK_GOLD_RESERVE = 100;     // concedido uma única vez por save (inventory.ballsGranted), respeitando BALL_STACK_MAX
+const BALL_RESTOCK_GOLD_RESERVE = 40;      // F9.7: era 100
+
+// F9.7: camada de benefícios (VIP). O resto do jogo consulta só hasBenefit(state, id) (js/benefits.js). O marcador mora no save (account.benefits) e é
+// editável pelo jogador: a proteção real exige servidor, que está fora de escopo (sem pagamento, conta, login nem expiração).
+const BENEFIT_IDS = ['autoRestock'];
+let BENEFITS_DEV_OVERRIDE = false;      // true concede todos os benefícios (desenvolvimento e testes; let: só os testes reatribuem em tempo de execução)
 
 const INITIAL_POTIONS = 10;          // 新玩家（以及还没有 inventory 的旧存档）的初始药水数
 const MAX_POTIONS = 99999;           // 存档清洗上限

@@ -8,6 +8,18 @@
 // 规则顺序：闪光优先 → 总开关 → 新物种（图鉴进度）→ 目标物种（跳过品质门槛）→ 品质门槛。
 // 目标物种只是"捕获优先级"：非目标照常战斗、拿经验，仍按品质门槛决定是否收。
 
+// F9.7 · veredito PURO sobre a duplicata (espécie que o jogador já tem), usado pela captura de verdade (_applyCapture) e pela checagem antes de gastar a bola,
+// para as duas regras nunca divergirem. Devolve { verdict: 'accept' | 'reject' | 'roll', reason }; 'roll' = decidir com UM sorteio (só política all, não shiny).
+// c: { policy: 'all'|'better'|'off', hasLive, count, cap, shiny, wildTotal, ownedTotals[] }
+function duplicateVerdict(c) {
+    if (!c.hasLive) return c.policy === 'off' ? { verdict: 'reject', reason: 'duplicate_policy_off' } : { verdict: 'accept', reason: 'archive_only' };
+    if (c.policy === 'off') return { verdict: 'reject', reason: 'duplicate_policy_off' };
+    if (c.shiny) return { verdict: 'accept', reason: 'shiny' };
+    if (c.count >= c.cap) return { verdict: 'reject', reason: 'duplicate_species_cap' };
+    if (c.policy === 'better') return c.ownedTotals.every(t => c.wildTotal > t) ? { verdict: 'accept', reason: 'better' } : { verdict: 'reject', reason: 'duplicate_not_better' };
+    return { verdict: 'roll', reason: 'chance' };
+}
+
 function shouldCapture(context) {
     context = context || {};
     const policy = context.policy ? context.policy : defaultAutomationPolicy();

@@ -140,6 +140,7 @@ const ShopMethods = {
     // Sem RNG e sem timers; compra atômica (spendMoney valida antes de mexer em qualquer coisa); um evento por reposição e um aviso de falha por episódio.
     _restockBalls() {
         if (!BALL_RESTOCK_ENABLED || !this.gameState) return null;
+        if (!hasBenefit(this.gameState, 'autoRestock')) { this._restockFailed = null; return null; }      // F9.7: benefício VIP; sem ele, igual a um jogo com a reposição desligada
         const cfg = this.getAutomationPolicy().ballPolicy.restock;
         if (!cfg || !cfg.enabled) { this._restockFailed = null; return null; }
         const stock = this.getBallCount(BALL_RESTOCK_ITEM);
