@@ -40,7 +40,16 @@ const CAPTURE_CHANCE_MIN = 0.10;
 const CAPTURE_CHANCE_MAX = 0.95;
 const CAPTURE_RATE_BST_FULL = 300;
 const CAPTURE_RATE_BST_SPAN = 600;
-const BALL_STARTER_PACK = { pokeball: 30 };     // concedido uma única vez por save (inventory.ballsGranted), respeitando BALL_STACK_MAX
+const BALL_STARTER_PACK = { pokeball: 30 };
+
+// F9.6: reposição automática de Poké Bolas. Quando o estoque cai abaixo de MIN_STOCK, compra (numa só operação, sem RNG nem timer) o que leva ao alvo,
+// limitado pelo espaço e pelo ouro ACIMA da reserva. Os valores abaixo são os padrões da configuração do jogador (política de automação, ballPolicy.restock).
+// BALL_RESTOCK_ENABLED = false desliga o recurso por inteiro (captura, inventário e RNG idênticos ao baseline da F9.5).
+let BALL_RESTOCK_ENABLED = true;        // (let: só os testes reatribuem em tempo de execução)
+const BALL_RESTOCK_ITEM = 'pokeball';
+const BALL_RESTOCK_MIN_STOCK = 5;
+const BALL_RESTOCK_TARGET_STOCK = 30;
+const BALL_RESTOCK_GOLD_RESERVE = 100;     // concedido uma única vez por save (inventory.ballsGranted), respeitando BALL_STACK_MAX
 
 const INITIAL_POTIONS = 10;          // 新玩家（以及还没有 inventory 的旧存档）的初始药水数
 const MAX_POTIONS = 99999;           // 存档清洗上限

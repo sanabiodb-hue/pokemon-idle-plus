@@ -10,7 +10,8 @@ const { newGame, mulberry32, createMemoryStorage } = require('./helpers/game');
 const { runOnline, runFast } = require('./helpers/capture-golden');
 
 const plain = (o) => JSON.parse(JSON.stringify(o));
-const on = (opts = {}) => newGame({ balls: true, ...opts });
+// F9.6: os testes da F9.5 verificam a mecânica de captura SEM reposição (o estoque acaba de verdade); a reposição tem arquivo próprio (ball-restock.test.js)
+const on = (opts = {}) => { const g = newGame({ balls: true, ...opts }); vm.runInContext('BALL_RESTOCK_ENABLED = false', g.ctx.sandbox); return g; };
 const KEY = 'pokemon_idle_save';
 
 // ---- modelos independentes (não usam as funções do jogo) ----

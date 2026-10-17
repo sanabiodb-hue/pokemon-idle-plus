@@ -3,7 +3,7 @@
 //
 // context: { policy, wild: { id, ivs, shiny }, isNewSpecies }
 // 返回 { capture: boolean, reason, priority, quality }
-//   reason 取值：capture_disabled | always_shiny | new_species | target_species | quality_ok | quality_too_low
+//   reason 取值：capture_disabled | owned_species | always_shiny | new_species | target_species | quality_ok | quality_too_low
 //   priority：'shiny' | 'target' | 'normal'（给报告/界面用）
 // 规则顺序：闪光优先 → 总开关 → 新物种（图鉴进度）→ 目标物种（跳过品质门槛）→ 品质门槛。
 // 目标物种只是"捕获优先级"：非目标照常战斗、拿经验，仍按品质门槛决定是否收。
@@ -18,6 +18,8 @@ function shouldCapture(context) {
 
     if (wild.shiny && cap.alwaysShiny) return result(true, 'always_shiny', 'shiny');
     if (!cap.enabled) return result(false, 'capture_disabled', 'normal');
+    // F9.6: poupar bola — espécie que o jogador já possui não é nem tentada (sem bola, sem sorteio). Shiny sempre segue as regras normais.
+    if (cap.skipOwnedSpecies && !context.isNewSpecies && !wild.shiny) return result(false, 'owned_species', 'normal');
     if (context.isNewSpecies && cap.alwaysNewSpecies) return result(true, 'new_species', 'normal');
     if (policyTargetsSpecies(policy, wild.id)) return result(true, 'target_species', 'target');
     if (quality.percentage >= cap.minQualityPercent) return result(true, 'quality_ok', 'normal');

@@ -97,6 +97,20 @@ function chooseBall(balls, shiny) {
     return shiny ? usable[usable.length - 1] : usable[0];
 }
 
+// ---------- F9.6 · reposição automática (função pura) ----------
+// Plano de reposição: { qty, total } quando deve comprar; { qty: 0, reason } quando não deve ('not_needed' | 'no_gold').
+// stock = bolas do item; price = preço unitário; gold = ouro atual; cfg = { minStock, targetStock, goldReserve }
+function planRestock(stock, price, gold, cfg) {
+    if (!(stock < cfg.minStock)) return { qty: 0, reason: 'not_needed' };
+    const room = BALL_STACK_MAX - stock;                                // > 0: o mínimo é no máximo o limite, então estoque abaixo do mínimo sempre tem espaço
+    const spendable = gold - cfg.goldReserve;
+    const affordable = spendable >= price ? Math.floor(spendable / price) : 0;
+    if (affordable <= 0) return { qty: 0, reason: 'no_gold' };
+    const qty = Math.min(Math.max(0, cfg.targetStock - stock), room, affordable);
+    if (qty <= 0) return { qty: 0, reason: 'not_needed' };
+    return { qty, total: qty * price };
+}
+
 // As bolas compráveis entram no registro da loja (a Master Bola não)
 for (const ball of BALL_TYPES) {
     if (!ball.buyable) continue;
@@ -121,6 +135,36 @@ const ShopMethods = {
         const inv = this.gameState ? this.ensureInventory() : null;
         return BALL_TYPES.filter(b => b.autoUse).reduce((n, b) => n + _ballCount(inv && inv.balls, b.id), 0);
     },
+
+    // F9.6 · reposição automática de Poké Bolas, chamada no início de cada tentativa de captura (online e Fast Driver, a mesma função).
+    // Sem RNG e sem timers; compra atômica (spendMoney valida antes de mexer em qualquer coisa); um evento por reposição e um aviso de falha por episódio.
+    _restockBalls() {
+        if (!BALL_RESTOCK_ENABLED || !this.gameState) return null;
+        const cfg = this.getAutomationPolicy().ballPolicy.restock;
+        if (!cfg || !cfg.enabled) { this._restockFailed = null; return null; }
+        const stock = this.getBallCount(BALL_RESTOCK_ITEM);
+        const ball = getBallType(BALL_RESTOCK_ITEM);
+        if (!ball || !ball.buyable) return null;
+        const unit = ballPrice(ball, this.getPricingLevel());
+        const plan = planRestock(stock, unit, this.getMoney(), cfg);
+        if (plan.reason === 'not_needed') { this._restockFailed = null; return null; }
+        if (plan.qty <= 0) {
+            if (!this._restockFailed) {                                 // no máximo um aviso por episódio (limpo quando a reposição volta a funcionar)
+                this._restockFailed = plan.reason;
+                this._emit('balls_restock_failed', { item: ball.id, reason: plan.reason, stock, gold: this.getMoney(), reserve: cfg.goldReserve });
+            }
+            return null;
+        }
+        const spent = this.spendMoney(plan.total, 'ball_purchase', { item: ball.id, qty: plan.qty, unitPrice: unit, auto: true });
+        if (!spent.ok) return null;                                     // não deve acontecer (o plano já respeita o saldo)
+        this.addBalls(ball.id, plan.qty);
+        if (this.getBallCount(ball.id) >= cfg.minStock) this._restockFailed = null;       // o episódio de falha só termina quando o estoque volta ao mínimo (compra parcial não limpa: evita alternar aviso/limpeza)
+        this._emit('balls_restocked', { item: ball.id, qty: plan.qty, unitPrice: unit, total: plan.total, stock: this.getBallCount(ball.id) });
+        return { qty: plan.qty, total: plan.total };
+    },
+
+    // Estado da reposição para a interface: motivo da falha atual ('no_gold') ou null
+    getRestockStatus() { return { failed: this._restockFailed || null }; },
 
     getBallCount(id) {
         const inv = this.gameState ? this.ensureInventory() : null;

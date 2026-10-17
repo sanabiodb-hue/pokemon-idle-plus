@@ -502,6 +502,56 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
             await context.close();
         }
 
+        // ---------- B3h. F9.6 reposição automática de bolas e poupar bolas: controles, persistência, aviso de reposição parada (celular e desktop) ----------
+        for (const vp of [{ name: 'celular 360x640', width: 360, height: 640 }, { name: 'desktop 1280x800', width: 1280, height: 800 }]) {
+            const { page, context } = await newPage(() => localStorage.setItem('pokemon_idle_tutorial_done', '1'), { viewport: { width: vp.width, height: vp.height } });
+            await page.goto(base);
+            await page.waitForFunction(() => typeof game !== 'undefined' && game.currentBattle, null, { timeout: 10000 });
+            await page.evaluate(() => game.stopBattle());                // a batalha ao vivo gastaria/ganharia bolas e ouro durante o teste
+            await page.locator('#tab-nav [data-tab="tab-hunt"]').click();
+            await page.waitForSelector('#hunt-settings [data-hunt-policy="ballPolicy.restock.enabled"]');
+            const sel = (path) => `#hunt-settings [data-hunt-policy="${path}"]`;
+            const fit = () => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1 && document.getElementById('hunt-settings').scrollWidth <= document.getElementById('hunt-settings').clientWidth + 1);
+            const pol = () => page.evaluate(() => { const p = game.getAutomationPolicy(); return { r: p.ballPolicy.restock, skip: p.capture.skipOwnedSpecies }; });
+            const d0 = await pol();
+            check(`Reposição ${vp.name}: padrões ligada, mínimo 5, alvo 30, reserva 100 e poupar bolas desligado`, d0.r.enabled === true && d0.r.minStock === 5 && d0.r.targetStock === 30 && d0.r.goldReserve === 100 && d0.skip === false, JSON.stringify(d0));
+            check(`Reposição ${vp.name}: a tela mostra os controles e o estado legível ("Ligada: repõe até 30 quando houver menos de 5, sem usar os $100 de reserva.")`, await page.evaluate(() => /Ligada: repõe até 30 quando houver menos de 5, sem usar os \$100 de reserva\./.test(document.getElementById('hunt-settings').innerText) && !!document.querySelector('#hunt-settings [data-hunt-policy="capture.skipOwnedSpecies"]')));
+            check(`Reposição ${vp.name}: configurações sem rolagem horizontal`, await fit());
+            for (const [path, v] of [['ballPolicy.restock.minStock', '8'], ['ballPolicy.restock.targetStock', '40'], ['ballPolicy.restock.goldReserve', '250']]) {
+                await page.locator(sel(path)).fill(v); await page.locator(sel(path)).dispatchEvent('change');
+                await page.waitForSelector(sel(path));
+            }
+            await page.locator(sel('capture.skipOwnedSpecies')).check();
+            const d1 = await pol();
+            check(`Reposição ${vp.name}: editar mínimo 8, alvo 40, reserva 250 e ligar poupar bolas grava na política`, d1.r.minStock === 8 && d1.r.targetStock === 40 && d1.r.goldReserve === 250 && d1.skip === true && d1.r.enabled === true, JSON.stringify(d1));
+            await page.locator(sel('ballPolicy.restock.enabled')).uncheck();
+            check(`Reposição ${vp.name}: desligar mostra "Desligada: ..." e grava enabled=false`, await page.evaluate(() => (game.getAutomationPolicy().ballPolicy.restock.enabled === false) && /Desligada: as bolas só acabam/.test(document.getElementById('hunt-settings').innerText)));
+            await page.locator(sel('ballPolicy.restock.enabled')).check();
+            await page.evaluate(() => game.saveNow());
+            await page.reload();
+            await page.waitForFunction(() => typeof game !== 'undefined' && game.currentBattle, null, { timeout: 10000 });
+            const d2 = await pol();
+            check(`Reposição ${vp.name}: as configurações persistem depois de salvar e recarregar a página`, d2.r.minStock === 8 && d2.r.targetStock === 40 && d2.r.goldReserve === 250 && d2.r.enabled === true && d2.skip === true, JSON.stringify(d2));
+            // reposição parada: sem bolas e sem ouro acima da reserva → aviso de reposição ao lado do "sem bolas"
+            await page.evaluate(() => game.stopBattle());
+            await page.locator('#tab-nav [data-tab="tab-hunt"]').click();
+            await page.waitForSelector('#hunt-status [data-hunt-restockfail]', { state: 'attached' });
+            await page.evaluate(() => {
+                const inv = game.ensureInventory(); delete inv.balls; game.gameState.gold = 10;
+                game.processDefeat(game.createWildPokemon(16, 5, 0));
+            });
+            await page.waitForFunction(() => { const w = document.querySelector('[data-hunt-restockfail]'); return w && !w.hidden; }, null, { timeout: 5000 });
+            check(`Reposição ${vp.name}: sem ouro acima da reserva aparece o aviso "Reposição de bolas parada: sem ouro acima da reserva de $250."`, await page.evaluate(() => { const w = document.querySelector('[data-hunt-restockfail]'); return !!w && !w.hidden && w.innerText.trim() === '⚠️ Reposição de bolas parada: sem ouro acima da reserva de $250.' && w.getBoundingClientRect().width > 0; }));
+            check(`Reposição ${vp.name}: o aviso de "Sem Poké Bolas" aparece ao lado e a tela continua sem rolagem horizontal`, await page.evaluate(() => { const w = document.querySelector('[data-hunt-noballs]'); return !!w && !w.hidden && /Sem Poké Bolas/.test(w.innerText) && document.documentElement.scrollWidth <= window.innerWidth + 1; }));
+            check(`Reposição ${vp.name}: a falha aparece no registro de atividade`, await page.evaluate(() => { game._emit('battle_completed', { result: 'victory', enemyId: 16, xp: 1, gold: 1, route: game.gameState.currentRoute }); return true; }) && await page.waitForFunction(() => /Reposição de bolas parada: sem ouro acima da reserva de \$250/.test((document.getElementById('hunt-activity') || {}).innerText || ''), null, { timeout: 5000 }).then(() => true, () => false));
+            // com ouro de novo a reposição volta, o aviso some e o evento de reposição entra no registro
+            await page.evaluate(() => { game.gameState.gold = 250 + 40; game.processDefeat(game.createWildPokemon(19, 5, 0)); });
+            await page.waitForFunction(() => document.querySelector('[data-hunt-restockfail]').hidden && document.querySelector('[data-hunt-noballs]').hidden, null, { timeout: 5000 });
+            const after = await page.evaluate(() => ({ balls: game.getBallCount('pokeball'), gold: game.getMoney(), price: game.getShopItems().find(i => i.id === 'pokeball').price }));
+            check(`Reposição ${vp.name}: com ouro acima da reserva repõe até o alvo 40, gasta só o preço × quantidade e os dois avisos somem`, after.balls === 40 - 1 && after.gold === 290 - (40) * after.price, JSON.stringify(after));
+            await context.close();
+        }
+
         // ---------- B4. F8.1 fila de alvos na Central (mobile e desktop): montar, iniciar, pausar, interromper, continuar, limpar ----------
         for (const vp of [{ name: 'celular 360x640', width: 360, height: 640 }, { name: 'desktop 1280x800', width: 1280, height: 800 }]) {
             const { page, context } = await newPage(() => localStorage.setItem('pokemon_idle_tutorial_done', '1'), { viewport: { width: vp.width, height: vp.height } });

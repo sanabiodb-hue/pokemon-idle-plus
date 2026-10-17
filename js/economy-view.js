@@ -60,6 +60,8 @@ class EconomyView {
             const w = this.root.querySelector('[data-eco-balls-wrap]');
             if (w) w.classList.toggle('empty', total <= 0);
             this.root.querySelectorAll('[data-hunt-noballs]').forEach(n => { n.hidden = total > 0; });     // aviso de caçada sem bolas
+            const failed = g.getRestockStatus().failed;                                                       // F9.6: aviso de reposição parada
+            this.root.querySelectorAll('[data-hunt-restockfail]').forEach(n => { n.hidden = !failed; if (failed) n.textContent = huntRestockFailText(failed, g); });
         }
     }
 

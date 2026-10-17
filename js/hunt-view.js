@@ -23,6 +23,12 @@ const HUNT_LIVE_EVENTS = [
     'money_earned', 'money_spent', 'potion_bought', 'upgrade_purchased', 'hunt_completed', 'hunt_queue',
 ];
 
+// F9.6: texto do aviso de reposição que falhou
+function huntRestockFailText(reason, g) {
+    const r = g.getAutomationPolicy().ballPolicy.restock;
+    return `⚠️ Reposição de bolas parada: sem ouro acima da reserva de $${ptNumber(r.goldReserve)}.`;
+}
+
 function huntFormatDuration(ms) {
     const total = Math.max(0, Math.floor(ms / 1000));
     const h = Math.floor(total / 3600), m = Math.floor((total % 3600) / 60), s = total % 60;
@@ -339,7 +345,8 @@ class HuntView {
                 ${stat('Eficiência', active || s ? `${ptNumber(eff.xpPerHour)} EXP/h` : '—')}
             </div>
             <div class="hunt-potions">🧪 Poções disponíveis: <strong data-hunt-potions>${ptNumber(g.getPotions())}</strong></div>
-            ${BALL_CAPTURE_ENABLED ? `<div class="hunt-warn" data-hunt-noballs role="alert" ${g.getTotalBalls() > 0 ? 'hidden' : ''}>⚠️ Sem Poké Bolas: nenhuma captura é tentada. Compre bolas na Loja.</div>` : ''}`;
+            ${BALL_CAPTURE_ENABLED ? `<div class="hunt-warn" data-hunt-noballs role="alert" ${g.getTotalBalls() > 0 ? 'hidden' : ''}>⚠️ Sem Poké Bolas: nenhuma captura é tentada. Compre bolas na Loja.</div>
+            <div class="hunt-warn" data-hunt-restockfail role="alert" ${g.getRestockStatus().failed ? '' : 'hidden'}>${huntRestockFailText(g.getRestockStatus().failed, g)}</div>` : ''}`;
     }
 
     // ---------- 最近发生的重要事情（只放玩家关心的，不是技术日志）----------
@@ -351,6 +358,8 @@ class HuntView {
                 if (!(e.firstCatch || e.newIndividual)) return null;
                 return `${e.shiny ? '✨' : '🎒'} Capturou ${name(e.id)}${e.shiny ? ' Shiny' : ''}${e.grade ? ` (nota ${e.grade})` : ''}`;
             case 'capture_failed': return `💨 ${name(e.id)} escapou da ${(getBallType(e.ball) || {}).name || 'bola'} (${Math.round(e.chance * 100)}%)`;
+            case 'balls_restocked': return `🛒 Repôs ${ptNumber(e.qty)} Poké Bolas por $${ptNumber(e.total)} (estoque ${ptNumber(e.stock)})`;
+            case 'balls_restock_failed': return `⚠️ Reposição de bolas parada: sem ouro acima da reserva de $${ptNumber(e.reserve)}`;
             case 'balls_depleted': return `⚠️ Sem bolas: ${name(e.id)} não foi capturado`;
             case 'level_up': {
                 const inst = g.roster.get(e.uid);
@@ -507,8 +516,16 @@ class HuntView {
                 <input type="range" min="0" max="100" step="5" value="${p.capture.minQualityPercent}" data-hunt-policy="capture.minQualityPercent" data-kind="int"></label>
             <label class="hunt-check"><input type="checkbox" ${chk('capture.alwaysShiny', p.capture.alwaysShiny)}> Capturar Shiny sempre</label>
             <label class="hunt-check"><input type="checkbox" ${chk('capture.alwaysNewSpecies', p.capture.alwaysNewSpecies)}> Capturar espécie nova</label>
+            <label class="hunt-check"><input type="checkbox" ${chk('capture.skipOwnedSpecies', p.capture.skipOwnedSpecies)}> Poupar bolas: não tentar espécies que já tenho (Shiny sempre tenta)</label>
             <div class="hunt-sub">Espécies prioritárias</div>
             <div class="hunt-tags">${targets}</div>
+
+            <h3>⚪ Reposição de bolas</h3>
+            <label class="hunt-check"><input type="checkbox" ${chk('ballPolicy.restock.enabled', p.ballPolicy.restock.enabled)}> Repor Poké Bolas automaticamente</label>
+            <div class="hunt-limit"><span>Repor quando restarem menos de</span> <input ${num('ballPolicy.restock.minStock', p.ballPolicy.restock.minStock, 1, BALL_STACK_MAX)}> <span>bolas</span></div>
+            <div class="hunt-limit"><span>Repor até</span> <input ${num('ballPolicy.restock.targetStock', p.ballPolicy.restock.targetStock, 1, BALL_STACK_MAX)}> <span>bolas</span></div>
+            <div class="hunt-limit"><span>Manter de reserva</span> <input ${num('ballPolicy.restock.goldReserve', p.ballPolicy.restock.goldReserve, 0, 1000000000)}> <span>de ouro</span></div>
+            <small data-hunt-restock-state>${p.ballPolicy.restock.enabled ? `Ligada: repõe até ${ptNumber(p.ballPolicy.restock.targetStock)} quando houver menos de ${ptNumber(p.ballPolicy.restock.minStock)}, sem usar os $${ptNumber(p.ballPolicy.restock.goldReserve)} de reserva.` : 'Desligada: as bolas só acabam e a captura para até você comprar na Loja.'}</small>
 
             <h3>🧪 Cura</h3>
             <div class="hunt-potions">Poções: <strong data-hunt-potions>${ptNumber(this.game.getPotions())}</strong></div>

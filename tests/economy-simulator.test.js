@@ -53,7 +53,7 @@ test('instantâneos: acumulados nunca diminuem, saldo nunca negativo, ganho − 
         }
         const l = r.log;
         if (l.firstPurchaseMs !== null && l.secondUpgradeMs !== null) assert.ok(l.secondUpgradeMs >= l.firstPurchaseMs);
-        assert.equal(l.upgradeSpend + l.potionSpend, r.snapshots.at(-1).moneySpent, 'tudo que foi gasto tem origem (poção ou upgrade)');
+        assert.equal(l.upgradeSpend + l.potionSpend + l.ballSpend, r.snapshots.at(-1).moneySpent, 'tudo que foi gasto tem origem (poção, upgrade ou reposição automática de bolas — F9.6)');
     }
 });
 

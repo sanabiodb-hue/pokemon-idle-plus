@@ -124,7 +124,7 @@ function loadGameContext(opts = {}) {
   createSimulationRng, createSimulationClone, simulateHunt, huntEfficiency, buildHuntOfflineReport, recommendHuntNext, recommendHuntRoute,
   Analytics, ANALYTICS_STORAGE_KEY, ANALYTICS_QUEUE_MAX, ANALYTICS_EVENT_NAMES, ANALYTICS_SESSION_GAP_MS,
   CAPTURE_DUPLICATE_POLICIES, DEFAULT_CAPTURE_DUPLICATE_POLICY, DUPLICATE_CAPTURE_RATE, DUPLICATE_SPECIES_CAP,
-  MAX_POKEMON_LEVEL, MAX_SKILL_LEVEL, TOWER_MAX_FLOOR, GEM_BAG_MAX, BERRY_STAT_CAP, natureStatPercent, applyNatureToStat, natureLabel, getNature, NATURE_MOD, BALL_TYPES, BALL_STACK_MAX, getBallType, ballPrice, ballInventoryAdd, ballInventoryConsume, sanitizeBallInventory, speciesCatchRate, captureChance, chooseBall, BALL_STARTER_PACK, CAPTURE_CHANCE_MIN, CAPTURE_CHANCE_MAX, CAPTURE_RATE_BST_FULL, CAPTURE_RATE_BST_SPAN
+  MAX_POKEMON_LEVEL, MAX_SKILL_LEVEL, TOWER_MAX_FLOOR, GEM_BAG_MAX, BERRY_STAT_CAP, natureStatPercent, applyNatureToStat, natureLabel, getNature, NATURE_MOD, BALL_TYPES, BALL_STACK_MAX, getBallType, ballPrice, ballInventoryAdd, ballInventoryConsume, sanitizeBallInventory, speciesCatchRate, captureChance, chooseBall, BALL_STARTER_PACK, CAPTURE_CHANCE_MIN, CAPTURE_CHANCE_MAX, CAPTURE_RATE_BST_FULL, CAPTURE_RATE_BST_SPAN, planRestock, BALL_RESTOCK_MIN_STOCK, BALL_RESTOCK_TARGET_STOCK, BALL_RESTOCK_GOLD_RESERVE, BALL_RESTOCK_ITEM
 })`;
     const ctx = vm.runInContext(code, vm.createContext(sandbox), { filename: 'game' });
     ctx.storage = storage;

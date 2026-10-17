@@ -93,7 +93,7 @@ function runPlayer(profileKey, buildKey, opts = {}) {
     const tickFor = (el) => opts.tickMs || (el < DAY ? 5 * MIN : 15 * MIN);
     const routeEveryFor = (el) => opts.routeEveryMs || (el < DAY ? HOUR : 3 * HOUR);
     const t0 = game.now();
-    const log = { firstPurchaseMs: null, secondUpgradeMs: null, unlockMs: {}, potionsBought: 0, potionSpend: 0, upgradeSpend: 0, upgradesBought: 0, stoppedMs: 0 };
+    const log = { firstPurchaseMs: null, secondUpgradeMs: null, unlockMs: {}, potionsBought: 0, potionSpend: 0, upgradeSpend: 0, ballSpend: 0, upgradesBought: 0, stoppedMs: 0 };
     log.purchaseTimes = [];
     game.bus.on('upgrade_purchased', () => {
         log.upgradesBought++;
@@ -103,7 +103,7 @@ function runPlayer(profileKey, buildKey, opts = {}) {
         if (log.upgradesBought === 2) log.secondUpgradeMs = t;
     });
     game.bus.on('potion_bought', (e) => { log.potionsBought += e.qty; log.potionSpend += e.total; });
-    game.bus.on('money_spent', (e) => { if (e.reason === 'upgrade_purchase') log.upgradeSpend += e.amount; });
+    game.bus.on('money_spent', (e) => { if (e.reason === 'upgrade_purchase') log.upgradeSpend += e.amount; if (e.reason === 'ball_purchase') log.ballSpend += e.amount; });       // F9.6: a reposição automática de bolas é uma nova origem de gasto
 
     let potionsPerTick = 3;
     log.maxWaitMs = 0;                                   // pior espera até conseguir pagar o upgrade disponível mais barato

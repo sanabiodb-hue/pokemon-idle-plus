@@ -2646,6 +2646,7 @@ class GameCore {
     // F9.5 · UMA tentativa de captura com bola. Escolhe a bola (função pura), consome 1 e sorteia UMA vez (também com a Master, que tem chance 1).
     // Devolve { ok:true, ball, chance } (capturou) ou { ok:false, reason:'no_balls'|'escaped' }. Sem bola: nenhum consumo e nenhum sorteio.
     _ballCaptureAttempt(wild) {
+        this._restockBalls();                                           // F9.6: repõe antes de escolher a bola (sem RNG; mesma função online e Fast Driver)
         const ball = chooseBall(this.getBalls(), !!wild.isShiny);
         if (!ball) {
             if (!this._ballsDepletedNotified) {                         // no máximo um aviso por episódio (volta a avisar depois de haver bola de novo)

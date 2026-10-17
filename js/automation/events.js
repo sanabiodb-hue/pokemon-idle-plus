@@ -12,7 +12,7 @@
 const AUTOMATION_EVENT_TYPES = [
     'hunt_started', 'hunt_stopped', 'hunt_paused', 'hunt_resumed', 'hunt_queue',
     'battle_started', 'battle_completed', 'pokemon_defeated',
-    'capture_attempted', 'pokemon_captured', 'capture_skipped', 'capture_failed', 'balls_depleted',
+    'capture_attempted', 'pokemon_captured', 'capture_skipped', 'capture_failed', 'balls_depleted', 'balls_restocked', 'balls_restock_failed',
     'xp_gained', 'level_up', 'evolution', 'heal', 'hp_low',
     'route_changed', 'pokemon_switched',
     'automation_decision', 'automation_error', 'action_rejected', 'policy_changed',

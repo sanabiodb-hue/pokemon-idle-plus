@@ -17,11 +17,11 @@ function defaultAutomationPolicy() {
     return {
         version: AUTOMATION_POLICY_VERSION,
         target: { type: 'any', speciesIds: [] },
-        capture: { enabled: true, minQualityPercent: 0, alwaysShiny: true, alwaysNewSpecies: true },
+        capture: { enabled: true, minQualityPercent: 0, alwaysShiny: true, alwaysNewSpecies: true, skipOwnedSpecies: false },
         heal: { enabled: true, whenHpBelowPercent: 30, onNoPotions: 'stop' },
         route: { mode: 'stay' },
         switchPolicy: { mode: 'bestMatchup' },
-        ballPolicy: { type: 'none' },
+        ballPolicy: { type: 'none', restock: { enabled: true, minStock: BALL_RESTOCK_MIN_STOCK, targetStock: BALL_RESTOCK_TARGET_STOCK, goldReserve: BALL_RESTOCK_GOLD_RESERVE } },
         // 停止条件（0/false = 不启用）。没有药水则停由 heal.onNoPotions 决定；
         // 预留：inventoryFull / pcFull / captureLimit / moneyTarget / xpTarget
         stopConditions: { timeLimitMinutes: 0, battleLimit: 0, shinyFound: false, routeComplete: false },
@@ -85,6 +85,7 @@ function _normalizePolicy(raw) {
     if (cap) {
         if (_has(cap, 'enabled')) { if (typeof cap.enabled === 'boolean') out.capture.enabled = cap.enabled; else err('capture.enabled', 'not_boolean', 'Valor inválido.'); }
         if (_has(cap, 'alwaysNewSpecies')) { if (typeof cap.alwaysNewSpecies === 'boolean') out.capture.alwaysNewSpecies = cap.alwaysNewSpecies; else err('capture.alwaysNewSpecies', 'not_boolean', 'Valor inválido.'); }
+        if (_has(cap, 'skipOwnedSpecies')) { if (typeof cap.skipOwnedSpecies === 'boolean') out.capture.skipOwnedSpecies = cap.skipOwnedSpecies; else err('capture.skipOwnedSpecies', 'not_boolean', 'Valor inválido.'); }
         if (_has(cap, 'alwaysShiny')) { if (typeof cap.alwaysShiny === 'boolean') out.capture.alwaysShiny = cap.alwaysShiny; else err('capture.alwaysShiny', 'not_boolean', 'Valor inválido.'); }
         if (_has(cap, 'minQualityPercent')) {
             const v = _strictNumber(cap.minQualityPercent, 0, 100);
@@ -124,6 +125,28 @@ function _normalizePolicy(raw) {
     if (ball && _has(ball, 'type')) {
         if (AUTOMATION_BALL_POLICIES.includes(ball.type)) out.ballPolicy.type = ball.type;
         else err('ballPolicy.type', 'reserved', 'Essa política de bolas ainda não está disponível.');
+    }
+    // F9.6: reposição automática de Poké Bolas (campos inválidos voltam ao padrão; mínimo ≤ alvo ≤ limite do estoque)
+    if (ball && _has(ball, 'restock')) {
+        const rs = ball.restock;
+        if (!_isObj(rs)) err('ballPolicy.restock', 'not_object', 'A reposição de bolas é inválida.');
+        else {
+            const o = out.ballPolicy.restock;
+            if (_has(rs, 'enabled')) { if (typeof rs.enabled === 'boolean') o.enabled = rs.enabled; else err('ballPolicy.restock.enabled', 'not_boolean', 'Valor inválido.'); }
+            for (const [key, min, max, msg] of [['minStock', 1, BALL_STACK_MAX, 'O estoque mínimo deve ser um inteiro entre 1 e ' + BALL_STACK_MAX + '.'],
+                ['targetStock', 1, BALL_STACK_MAX, 'O estoque alvo deve ser um inteiro entre 1 e ' + BALL_STACK_MAX + '.'],
+                ['goldReserve', 0, 1e9, 'A reserva de ouro deve ser um inteiro entre 0 e 1.000.000.000.']]) {
+                if (!_has(rs, key)) continue;
+                const v = _strictNumber(rs[key], min, max);
+                if (v === null || !Number.isInteger(v)) err('ballPolicy.restock.' + key, 'out_of_range', msg);
+                else o[key] = v;
+            }
+            for (const k of Object.keys(rs)) if (!['enabled', 'minStock', 'targetStock', 'goldReserve'].includes(k)) err('ballPolicy.restock.' + k, 'unknown_field', 'Campo desconhecido na reposição de bolas: ' + k + '.');
+            if (o.minStock > o.targetStock) {
+                err('ballPolicy.restock.minStock', 'min_above_target', 'O estoque mínimo não pode passar do alvo.');
+                o.minStock = BALL_RESTOCK_MIN_STOCK; o.targetStock = BALL_RESTOCK_TARGET_STOCK;
+            }
+        }
     }
 
     const stop = section('stopConditions');
