@@ -61,7 +61,8 @@ function sanitizeHuntQueue(raw, session) {
     const list = Array.isArray(raw.items) ? raw.items : [];
     for (const it of list.slice(0, HUNT_QUEUE_MAX_ITEMS)) {
         const condition = huntQueueItemCondition(it);
-        const ok = _isObj(it) && Number.isInteger(it.speciesId) && it.speciesId >= 1 && it.speciesId <= 9999999 && condition !== null && !seen.has(it.speciesId);
+        const ok = _isObj(it) && Number.isInteger(it.speciesId) && it.speciesId >= 1 && it.speciesId <= 9999999 && condition !== null && !seen.has(it.speciesId)
+            && !(typeof isRestrictedSpecies === 'function' && isRestrictedSpecies(it.speciesId));                  // F9.9: lendário/mítico não entra na fila (save antigo ou editado)
         if (!ok) { dropped = true; continue; }
         seen.add(it.speciesId);
         items.push({ speciesId: it.speciesId, condition });
@@ -146,6 +147,8 @@ class HuntQueue {
     // condition: { type: 'time', value: minutos } | { type: 'battles', value: batalhas } | um número (= minutos, como na F8.1)
     add(speciesId, condition = HUNT_QUEUE_DEFAULT_MINUTES) {
         if (!Number.isInteger(speciesId) || speciesId < 1 || typeof POKEMON_DATA === 'undefined' || !POKEMON_DATA[speciesId]) return this._fail('invalid_species', 'Espécie inválida.');
+        const check = huntTargetCheck(speciesId, this.game.gameState && this.game.gameState.currentRoute);     // F9.9: mesma regra do Centro de Caça
+        if (!check.ok) return this._fail(check.code, check.message);
         const cond = huntQueueNormalizeCondition(condition);
         if (!cond) {
             const battles = _isObj(condition) && condition.type === 'battles';

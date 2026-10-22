@@ -144,14 +144,17 @@ test('F9.6 C: a reposição não consome sorteio; o resto da tentativa é igual 
 });
 
 // =============================================================== D. desligada = baseline da F9.5
-const GOLDEN = {   // calculado na árvore do commit eb17ca5 (F9.5), cenário capture-golden com bolas { pokeball: 12, greatball: 6, ultraball: 3 }
-    online1: '4698e07186d35331f14b2d977855f8b926433f6c', fast1: 'fb9550c7d0eca5765b050c3f21073e40adf28cbc',
-    online2: '83c11d7bb128f12e023bbe6b133db6d52d3c2382', fast2: '7cc36e5665c03b9d5f2e2195c0bafd271fccfd54',
-    online3: '1f2e53c54c175e5dc38af6d6d36ea6ce8d2b8110', fast3: '27eac00b18dd9824763d6ef7d4c4bd323475f7ea',
+// F9.9: resumos REGENERADOS DE PROPÓSITO (o sorteio de 5% da duplicata passou a vir antes da bola; só o caminho de duplicata na política padrão muda: com a política
+// de duplicatas off ou "better" os resumos antigos continuam idênticos — provado em tests/duplicate-first.test.js). Resumos antigos (eb17ca5 == cfff232):
+//   online1 4698e071…  fast1 fb9550c7…  online2 83c11d7b…  fast2 7cc36e56…  online3 1f2e53c5…  fast3 27eac00b…
+const GOLDEN = {   // cenário capture-golden com bolas { pokeball: 12, greatball: 6, ultraball: 3 }, reposição desligada
+    online1: 'c25c99afeb8c9fe544d245a74d4b87a67c3c5248', fast1: 'c1ed15e99fb60b6b73757dbc7cff3518c6e78b85',
+    online2: '29d6f5bb05d316463a7eb1b141d173b9f1f7d7e6', fast2: 'f257c5cf6f713ef6d7b13d1191a06e7b83d9c82b',
+    online3: 'ae8c84b5629edf806929a797e25a7eada705d26d', fast3: '3b63cd6946292ebf4a25d49113b93de31ad2c651',
 };
 const BALLS = { pokeball: 12, greatball: 6, ultraball: 3 };
 
-test('F9.6 D: reposição desligada (flag global OU configuração do jogador) — resumos idênticos ao baseline eb17ca5, online e Fast Driver', () => {
+test('F9.6 D: reposição desligada (flag global OU configuração do jogador) — resumos idênticos ao baseline (regenerado na F9.9), online e Fast Driver', () => {
     for (const seed of [1, 2, 3]) {
         for (const [label, mode] of [['flag global', (t) => vm.runInContext('BALL_RESTOCK_ENABLED = false', t.ctx.sandbox)], ['configuração do jogador', (t) => setRestock(t.game, { enabled: false })]]) {
             const hook = { setup: mode };
@@ -195,7 +198,7 @@ test('F9.6 E: online × Fast Driver com reposição ligada — 3 sementes × 80 
     for (const seed of [1, 2, 3]) for (const [name, run] of [['online', runOnline], ['fast', runFast]]) {
         const rec = [], events = { restocked: 0, failed: 0, restockedQty: 0, restockedTotal: 0 };
         const t = run(on, { seed, balls: { pokeball: 6 }, setup: (tt) => {
-            tt.game.getPricingLevel = () => 1500;                          // rota fraca com nível alto: bola cara (~9) para ganhos de ~3 por vitória → o ouro acaba
+            tt.game.getPricingLevel = () => 1500; tt.game.getBallPricingLevel = () => 1500;      // rota fraca com nível alto: bola cara (~9) para ganhos de ~3 por vitória → o ouro acaba (F9.9: o preço da bola tem a sua própria função de nível)
             setGold(tt.game, 160); setRestock(tt.game, { minStock: 5, targetStock: 12, goldReserve: 100 });
             recorder(rec)(tt);
             tt.game.bus.on('balls_restocked', (e) => { events.restocked++; events.restockedQty += e.qty; events.restockedTotal += e.total; });
@@ -209,7 +212,7 @@ test('F9.6 E: online × Fast Driver com reposição ligada — 3 sementes × 80 
         assert.ok(t.game.getMoney() >= 0);
         const asIs = rec.map(r => ({ out: r.out, n: r.vals.length, used: r.vals.length, gold1: r.gold1, balls1: r.balls1, spent: r.spent }));
         for (const offline of [false, true]) {
-            const replay = replayAll(rec, offline, (g) => { g.getPricingLevel = () => 1500; setRestock(g, { minStock: 5, targetStock: 12, goldReserve: 100 }); });
+            const replay = replayAll(rec, offline, (g) => { g.getPricingLevel = () => 1500; g.getBallPricingLevel = () => 1500; setRestock(g, { minStock: 5, targetStock: 12, goldReserve: 100 }); });
             assert.deepEqual(replay, asIs, `${name}/${seed}: reexecução ${offline ? 'offline' : 'online'} idêntica (resultado, RNG, inventário, ouro, livro-caixa)`);
         }
         assert.ok(rec.every(r => r.gold1 >= 0), 'nunca ouro negativo');

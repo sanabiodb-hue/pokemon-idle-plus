@@ -87,7 +87,7 @@ class EconomyView {
         el.innerHTML = `
             <h3>🛒 Loja</h3>
             ${items}
-            <div class="hunt-hint">O preço sobe junto com o seu progresso (maior nível já alcançado: ${ptNumber(g.getProgressLevel())}). O estoque de poções cresce com o upgrade Capacidade de Poções; as bolas guardam até ${ptNumber(BALL_STACK_MAX)} de cada tipo. Cada tentativa de captura gasta uma bola; sem bolas, nenhuma captura é tentada.</div>`;
+            <div class="hunt-hint">O preço da poção sobe junto com o seu progresso (maior nível já alcançado: ${ptNumber(g.getProgressLevel())}); o preço das bolas segue a rota selecionada (nível de referência: ${ptNumber(g.getBallPricingLevel())}). O estoque de poções cresce com o upgrade Capacidade de Poções; as bolas guardam até ${ptNumber(BALL_STACK_MAX)} de cada tipo. Cada tentativa de captura gasta uma bola; sem bolas, nenhuma captura é tentada.</div>`;
     }
 
     // ---------- Upgrades ----------

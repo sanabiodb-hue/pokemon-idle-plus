@@ -18,10 +18,13 @@ function setBalls(game, balls) { const inv = game.ensureInventory(); inv.ballsGr
 function setRestock(game, patch) { const p = plain(game.getAutomationPolicy()); Object.assign(p.ballPolicy.restock, patch); assert.equal(game.setAutomationPolicy(p).ok, true); }
 function setFlag(ctx, name, v) { vm.runInContext(`${name} = ${v}`, ctx.sandbox); }
 const ballSpent = (game) => ((game.gameState.economy && game.gameState.economy.byReason.ball_purchase) || { spent: 0 }).spent;
-const GOLDEN = {   // cenário capture-golden com bolas { pokeball: 12, greatball: 6, ultraball: 3 }, calculado na árvore eb17ca5 (== 21a6e4d com a reposição desligada)
-    online1: '4698e07186d35331f14b2d977855f8b926433f6c', fast1: 'fb9550c7d0eca5765b050c3f21073e40adf28cbc',
-    online2: '83c11d7bb128f12e023bbe6b133db6d52d3c2382', fast2: '7cc36e5665c03b9d5f2e2195c0bafd271fccfd54',
-    online3: '1f2e53c54c175e5dc38af6d6d36ea6ce8d2b8110', fast3: '27eac00b18dd9824763d6ef7d4c4bd323475f7ea',
+// F9.9: resumos REGENERADOS DE PROPÓSITO (o sorteio de 5% da duplicata passou a vir antes da bola; só o caminho de duplicata na política padrão muda: com a política
+// de duplicatas off ou "better" os resumos antigos continuam idênticos — provado em tests/duplicate-first.test.js). Resumos antigos (eb17ca5 == cfff232):
+//   online1 4698e071…  fast1 fb9550c7…  online2 83c11d7b…  fast2 7cc36e56…  online3 1f2e53c5…  fast3 27eac00b…
+const GOLDEN = {   // cenário capture-golden com bolas { pokeball: 12, greatball: 6, ultraball: 3 }, reposição desligada
+    online1: 'c25c99afeb8c9fe544d245a74d4b87a67c3c5248', fast1: 'c1ed15e99fb60b6b73757dbc7cff3518c6e78b85',
+    online2: '29d6f5bb05d316463a7eb1b141d173b9f1f7d7e6', fast2: 'f257c5cf6f713ef6d7b13d1191a06e7b83d9c82b',
+    online3: 'ae8c84b5629edf806929a797e25a7eada705d26d', fast3: '3b63cd6946292ebf4a25d49113b93de31ad2c651',
 };
 const BALLS = { pokeball: 12, greatball: 6, ultraball: 3 };
 
@@ -184,7 +187,7 @@ test('F9.7 D: duplicata rejeitada (política off, "better" sem ganho, limite de 
     }
 });
 
-test('F9.7 D: mantêm a tentativa: IV melhor (a atualização de IV ainda vale), shiny, espécie nova e a política padrão (o sorteio de 5% continua DEPOIS da bola)', () => {
+test('F9.7 D: mantêm a tentativa: IV melhor (a atualização de IV ainda vale), shiny e espécie nova; a duplicata sem ganho recusada no sorteio de 5% não gasta bola (F9.9: o sorteio vem ANTES da bola)', () => {
     // IV melhor, mesmo com política off e PC cheio: gasta a bola e atualiza os IVs
     const a = huntGame(); ownSpecies(a.game, 16, 10); a.game.gameState.settings = { captureDuplicates: 'off' }; a.game.roster.hasRoom = () => false;
     const r1 = attemptOnce(a.game, wild(16, false, 25));
@@ -196,13 +199,13 @@ test('F9.7 D: mantêm a tentativa: IV melhor (a atualização de IV ainda vale),
     // espécie nova com PC cheio: tenta
     const c = huntGame(); c.game.roster.hasRoom = () => false;
     const r3 = attemptOnce(c.game, wild(19, false, 1)); assert.equal(r3.n >= 1, true); assert.notEqual(r3.balls, r3.b0);
-    // política padrão (all) e PC com espaço: a bola e o sorteio de 5% acontecem como antes (2 sorteios: bola e duplicata)
+    // política padrão (all) e PC com espaço, duplicata sem ganho de IV: F9.9 — o sorteio de 5% vem ANTES da bola. Recusado (0,5): 1 sorteio, sem bola.
     const d = huntGame(); ownSpecies(d.game, 16, 25);
-    const r4 = attemptOnce(d.game, wild(16, false, 1), 0.5);        // 0,5: a bola pega (chance 0,95) e o sorteio de 5% da duplicata recusa
-    assert.equal(r4.n, 2, 'sorteio da bola + sorteio da duplicata'); assert.notEqual(r4.balls, r4.b0);
+    const r4 = attemptOnce(d.game, wild(16, false, 1), 0.5);
+    assert.equal(r4.n, 1, 'só o sorteio da duplicata'); assert.equal(r4.balls, r4.b0, 'sem bola gasta'); assert.equal(r4.out, null);
 });
 
-test('F9.7 D: resumos do capture-golden com PC não cheio e duplicatas permitidas (padrão) idênticos ao baseline — online e Fast Driver, 3 sementes', () => {
+test('F9.7 D: resumos do capture-golden com PC não cheio e duplicatas permitidas (padrão) idênticos ao baseline (regenerado na F9.9) — online e Fast Driver, 3 sementes', () => {
     for (const seed of [1, 2, 3]) {
         assert.equal(digest(runOnline(on, { seed, balls: BALLS })), GOLDEN['online' + seed], `online ${seed}`);
         assert.equal(digest(runFast(on, { seed, balls: BALLS })), GOLDEN['fast' + seed], `fast ${seed}`);

@@ -140,6 +140,7 @@ function sanitizeHuntSession(raw) {
     // (espécie, sequência, último ponto) é obrigatória; `to` (destino da perna) e `progressPx` (distância já percorrida) são opcionais e,
     // se inválidos, são descartados SEM invalidar o ciclo: a perna recomeça do zero com o mesmo destino determinístico.
     if (_isObj(raw.world) && Number.isInteger(raw.world.speciesId) && raw.world.speciesId >= 1 && raw.world.speciesId <= 9999999
+        && !(typeof isRestrictedSpecies === 'function' && isRestrictedSpecies(raw.world.speciesId))                 // F9.9: alvo lendário/mítico vindo de save antigo ou editado é descartado
         && Number.isInteger(raw.world.seq) && raw.world.seq >= 0 && raw.world.seq <= 1e9
         && (raw.world.last === null || (Number.isInteger(raw.world.last) && raw.world.last >= 0 && raw.world.last <= 1000))) {
         out.world = { speciesId: raw.world.speciesId, seq: raw.world.seq, last: raw.world.last };

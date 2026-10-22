@@ -1975,10 +1975,13 @@ body {
     padding: 10px 20px;
     border-radius: 8px;
     font-size: 13px;
+    width: max-content;
+    max-width: calc(100vw - 32px);          /* F9.9: avisos longos (ex.: motivo da recusa de alvo) quebram a linha em vez de sair da tela */
+    text-align: center;
     z-index: 1000;
     animation: toastIn 0.3s ease, toastOut 0.3s ease 1.7s forwards;
     pointer-events: none;
-    white-space: nowrap;
+    white-space: normal;                    /* era nowrap: com largura máxima os textos curtos continuam numa linha só */
 }
 
 @keyframes toastIn {

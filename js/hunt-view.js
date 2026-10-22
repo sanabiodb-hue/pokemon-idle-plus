@@ -588,7 +588,11 @@ class HuntView {
             case 'queue-down': this._report(this.ui.huntQueue.move(Number(data.index), 1)); break;
             case 'target-pick': {
                 const id = Number(data.id);
-                if (Number.isInteger(id) && POKEMON_DATA[id]) { this._targetId = id; this.renderTargetResults(); this.renderTarget(); this.renderQueue(); }
+                if (Number.isInteger(id) && POKEMON_DATA[id]) {
+                    this._targetId = id; this.renderTargetResults(); this.renderTarget(); this.renderQueue();
+                    const chk = huntTargetCheck(id, g.gameState.currentRoute);                  // F9.9: recusa curta e neutra (os controles também ficam desabilitados com o motivo)
+                    if (!chk.ok) this.ui.showToast(`⚠️ ${chk.message}`);
+                }
                 break;
             }
             case 'target-start': {

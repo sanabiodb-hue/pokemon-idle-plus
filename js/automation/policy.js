@@ -65,6 +65,7 @@ function _normalizePolicy(raw) {
                 for (const v of target.speciesIds) {
                     const id = _validPokemonId(v);
                     if (id === null) err('target.speciesIds', 'unknown_species', 'Espécie-alvo desconhecida.');
+                    else if (typeof isRestrictedSpecies === 'function' && isRestrictedSpecies(id)) err('target.speciesIds', 'restricted_species', 'Lendários e míticos só aparecem pelo sorteio natural das rotas.');      // F9.9
                     else if (!ids.includes(id)) ids.push(id);
                 }
                 if (ids.length > AUTOMATION_MAX_TARGET_SPECIES) {

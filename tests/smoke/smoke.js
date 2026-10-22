@@ -286,6 +286,8 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
             const { page, context } = await newPage(() => localStorage.setItem('pokemon_idle_tutorial_done', '1'), { viewport: { width: vp.width, height: vp.height } });
             await page.goto(base);
             await page.waitForFunction(() => typeof game !== 'undefined' && game.currentBattle, null, { timeout: 10000 });
+            // F9.9: o alvo só vale se a espécie estiver na tabela natural da rota selecionada: a Floresta de Viridian (Caterpie, Weedle, Paras, Metapod, Kakuna e Pikachu)
+            await page.evaluate(() => { const r = game.selectHuntRoute('kanto_viridian_forest'); if (!r.ok) throw new Error('rota: ' + JSON.stringify(r)); });
             await page.locator('#tab-nav [data-tab="tab-hunt"]').click();
             await page.waitForSelector('#hunt-target [data-hunt-target-search]');
             const noOverflow = async () => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1 && document.getElementById('hunt-container').scrollWidth <= document.getElementById('hunt-container').clientWidth + 1);
@@ -330,6 +332,8 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
             const { page, context } = await newPage(() => localStorage.setItem('pokemon_idle_tutorial_done', '1'), { viewport: { width: vp.width, height: vp.height }, deviceScaleFactor: vp.dpr });
             await page.goto(base);
             await page.waitForFunction(() => typeof game !== 'undefined' && game.currentBattle, null, { timeout: 10000 });
+            // F9.9: o alvo só vale se a espécie estiver na tabela natural da rota selecionada: a Floresta de Viridian (Caterpie, Weedle, Paras, Metapod, Kakuna e Pikachu)
+            await page.evaluate(() => { const r = game.selectHuntRoute('kanto_viridian_forest'); if (!r.ok) throw new Error('rota: ' + JSON.stringify(r)); });
             await page.click('[data-tab="tab-map"]');
             await page.waitForFunction(() => gameUI.worldView.drawCount > 0, null, { timeout: 10000 });
             await page.evaluate(() => gameUI.worldView.openHuntMap(25));
@@ -354,6 +358,8 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
             const { page, context } = await newPage(() => localStorage.setItem('pokemon_idle_tutorial_done', '1'), { viewport: { width: vp.width, height: vp.height }, deviceScaleFactor: vp.dpr, reducedMotion: vp.reduced ? 'reduce' : 'no-preference' });
             await page.goto(base);
             await page.waitForFunction(() => typeof game !== 'undefined' && game.currentBattle, null, { timeout: 10000 });
+            // F9.9: o alvo só vale se a espécie estiver na tabela natural da rota selecionada: a Floresta de Viridian (Caterpie, Weedle, Paras, Metapod, Kakuna e Pikachu)
+            await page.evaluate(() => { const r = game.selectHuntRoute('kanto_viridian_forest'); if (!r.ok) throw new Error('rota: ' + JSON.stringify(r)); });
             await page.click('[data-tab="tab-map"]');
             await page.waitForFunction(() => gameUI.worldView.drawCount > 0, null, { timeout: 10000 });
             await page.evaluate(() => gameUI.worldView.openHuntMap(25));
@@ -394,6 +400,8 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
             const { page, context } = await newPage(() => localStorage.setItem('pokemon_idle_tutorial_done', '1'), { viewport: { width: vp.width, height: vp.height } });
             await page.goto(base);
             await page.waitForFunction(() => typeof game !== 'undefined' && game.currentBattle, null, { timeout: 10000 });
+            // F9.9: o alvo só vale se a espécie estiver na tabela natural da rota selecionada: a Floresta de Viridian (Caterpie, Weedle, Paras, Metapod, Kakuna e Pikachu)
+            await page.evaluate(() => { const r = game.selectHuntRoute('kanto_viridian_forest'); if (!r.ok) throw new Error('rota: ' + JSON.stringify(r)); });
             await page.locator('#tab-nav [data-tab="tab-hunt"]').click();
             await page.waitForSelector('#hunt-target [data-hunt-target-search]');
             await page.locator('#hunt-target [data-hunt-target-search]').fill('25');
@@ -423,6 +431,8 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
             const { page, context } = await newPage(() => localStorage.setItem('pokemon_idle_tutorial_done', '1'), { viewport: { width: vp.width, height: vp.height }, deviceScaleFactor: vp.dpr });
             await page.goto(base);
             await page.waitForFunction(() => typeof game !== 'undefined' && game.currentBattle, null, { timeout: 10000 });
+            // F9.9: o alvo só vale se a espécie estiver na tabela natural da rota selecionada: a Floresta de Viridian (Caterpie, Weedle, Paras, Metapod, Kakuna e Pikachu)
+            await page.evaluate(() => { const r = game.selectHuntRoute('kanto_viridian_forest'); if (!r.ok) throw new Error('rota: ' + JSON.stringify(r)); });
             await page.click('[data-tab="tab-map"]');
             await page.waitForFunction(() => gameUI.worldView.drawCount > 0 && gameUI.worldView._fol && gameUI.worldView._fol.cur && gameUI.worldView._fol.cur.ready, null, { timeout: 10000 });
             await page.evaluate(() => { window.__raf = 0; const raf = window.requestAnimationFrame.bind(window); window.requestAnimationFrame = (fn) => { window.__raf++; return raf(fn); }; window.__tm = 0; const st = window.setTimeout.bind(window); window.setTimeout = (...a) => { window.__tm++; return st(...a); }; });
@@ -582,11 +592,55 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
             await context.close();
         }
 
+        // ---------- B3j. F9.9 alvo de caça validado (lendário/mítico e espécie fora da rota recusados) e preço da bola pela rota (celular e desktop) ----------
+        for (const vp of [{ name: 'celular 360x640', width: 360, height: 640 }, { name: 'desktop 1280x800', width: 1280, height: 800 }]) {
+            const { page, context } = await newPage(() => localStorage.setItem('pokemon_idle_tutorial_done', '1'), { viewport: { width: vp.width, height: vp.height } });
+            await page.goto(base);
+            await page.waitForFunction(() => typeof game !== 'undefined' && game.currentBattle, null, { timeout: 10000 });
+            await page.evaluate(() => game.stopBattle());
+            await page.locator('#tab-nav [data-tab="tab-hunt"]').click();
+            await page.waitForSelector('#hunt-target [data-hunt-target-search]');
+            const pick = async (id) => { await page.locator('#hunt-target [data-hunt-target-search]').fill(String(id)); await page.locator(`#hunt-target [data-hunt-action="target-pick"][data-id="${id}"]`).click(); };
+            const ctl = () => page.evaluate(() => ({ start: document.querySelector('#hunt-target [data-hunt-action="target-start"]').disabled, map: document.querySelector('#hunt-target [data-hunt-action="target-open-map"]').disabled, queue: document.querySelector('#hunt-queue [data-hunt-action="queue-add"]').disabled, why: ((document.querySelector('#hunt-target [data-hunt-target-why]') || {}).innerText || '').trim() }));
+            const fit = () => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1 && document.getElementById('hunt-container').scrollWidth <= document.getElementById('hunt-container').clientWidth + 1);
+            await pick(150);
+            const c1 = await ctl();
+            check(`Alvo ${vp.name}: lendário (#150) é recusado com o motivo "Lendários e míticos só aparecem pelo sorteio natural das rotas." e iniciar, mapa e fila ficam desabilitados`, c1.start && c1.map && c1.queue && c1.why === 'Lendários e míticos só aparecem pelo sorteio natural das rotas.', JSON.stringify(c1));
+            await pick(151);
+            const c2 = await ctl();
+            check(`Alvo ${vp.name}: mítico (#151) recebe a mesma recusa`, c2.start && c2.map && c2.queue && c2.why === 'Lendários e míticos só aparecem pelo sorteio natural das rotas.', JSON.stringify(c2));
+            await pick(25);
+            const c3 = await ctl();
+            check(`Alvo ${vp.name}: Pikachu na Rota 1 é recusado com "Essa espécie não aparece nesta rota."`, c3.start && c3.map && c3.queue && c3.why === 'Essa espécie não aparece nesta rota.', JSON.stringify(c3));
+            check(`Alvo ${vp.name}: sem rolagem horizontal com a recusa visível`, await fit());
+            // burlar a interface: o motor recusa
+            const bypass = await page.evaluate(() => { const r = gameUI.worldEncounters.begin(150); const q = gameUI.huntQueue.add(150, 5); return { code: r.code, ok: r.ok, session: game.getHuntSession(), cycle: !!gameUI.worldEncounters.cycle, qcode: q.code }; });
+            check(`Alvo ${vp.name}: chamar o motor direto com um lendário é recusado (restricted_species), sem sessão nem ciclo, e a fila também recusa`, bypass.ok === false && bypass.code === 'restricted_species' && bypass.session === null && bypass.cycle === false && bypass.qcode === 'restricted_species', JSON.stringify(bypass));
+            // trocar para a rota que tem o Pikachu: passa a valer
+            await page.evaluate(() => { const r = game.selectHuntRoute('kanto_viridian_forest'); if (!r.ok) throw new Error('rota'); gameUI.huntView.render(); });
+            const c4 = await ctl();
+            check(`Alvo ${vp.name}: na Floresta de Viridian o Pikachu é válido (iniciar, mapa e fila habilitados, sem motivo)`, !c4.start && !c4.map && !c4.queue && c4.why === '', JSON.stringify(c4));
+            // preço das bolas pela rota: mesmo nível de progresso, rotas diferentes
+            await page.evaluate(() => { const lead = game._partyInstance(0); lead.level = 140; game._touchInstance(lead); game.gameState.gold = 100000; });
+            await page.locator('[data-hunt-section="shop"]').click();
+            await page.waitForSelector('#hunt-shop [data-eco-action="buy-item"]');
+            const priceOn = async (routeId) => { await page.evaluate((r) => { game.gameState.currentRoute = r; gameUI.huntView.renderSection(); }, routeId); return page.evaluate(() => ({ shown: [...document.querySelectorAll('#hunt-shop .hunt-shop-item')].map(el => ({ name: el.querySelector('strong').innerText, price: el.querySelector('.hunt-shop-meta strong').innerText })), expectBall: ['pokeball', 'greatball', 'ultraball'].map(id => ballPrice(getBallType(id), game.getBallPricingLevel())), expectPotion: game.getPotionPrice(), level: game.getBallPricingLevel(), progress: game.getPricingLevel() })); };
+            const weak = await priceOn('kanto_route1'), strong = await priceOn('kanto_cerulean_cave');
+            const money = (n) => `$${n}`;
+            check(`Preço ${vp.name}: com o mesmo progresso, a rota fraca (Rota 1) cobra pelo nível da rota — Poké/Great/Ultra a $1/$3/$6`, weak.level === 3 && weak.progress >= 135 && weak.expectBall.join() === '1,3,6' && weak.shown[1].price === money(1) && weak.shown[2].price === money(3) && weak.shown[3].price === money(6), JSON.stringify(weak));
+            check(`Preço ${vp.name}: na Caverna Cerulean (nível 131-135) as bolas custam mais, pelo nível da rota, e a loja mostra exatamente o preço do jogo`, strong.level === 133 && strong.shown.slice(1).map(s => s.price).join() === strong.expectBall.map(money).join() && strong.expectBall[0] > weak.expectBall[0], JSON.stringify(strong));
+            check(`Preço ${vp.name}: a poção não muda com a rota (mesmo preço nas duas rotas, pelo progresso)`, weak.shown[0].price === money(weak.expectPotion) && strong.shown[0].price === money(strong.expectPotion) && weak.expectPotion === strong.expectPotion, JSON.stringify([weak.shown[0], strong.shown[0]]));
+            check(`Preço ${vp.name}: a loja explica "o preço das bolas segue a rota selecionada"`, await page.evaluate(() => /o preço das bolas segue a rota selecionada \(nível de referência: \d+\)/.test(document.getElementById('hunt-shop').innerText)));
+            await context.close();
+        }
+
         // ---------- B4. F8.1 fila de alvos na Central (mobile e desktop): montar, iniciar, pausar, interromper, continuar, limpar ----------
         for (const vp of [{ name: 'celular 360x640', width: 360, height: 640 }, { name: 'desktop 1280x800', width: 1280, height: 800 }]) {
             const { page, context } = await newPage(() => localStorage.setItem('pokemon_idle_tutorial_done', '1'), { viewport: { width: vp.width, height: vp.height } });
             await page.goto(base);
             await page.waitForFunction(() => typeof game !== 'undefined' && game.currentBattle, null, { timeout: 10000 });
+            // F9.9: o alvo só vale se a espécie estiver na tabela natural da rota selecionada: a Floresta de Viridian (Caterpie, Weedle, Paras, Metapod, Kakuna e Pikachu)
+            await page.evaluate(() => { const r = game.selectHuntRoute('kanto_viridian_forest'); if (!r.ok) throw new Error('rota: ' + JSON.stringify(r)); });
             await page.locator('#tab-nav [data-tab="tab-hunt"]').click();
             await page.waitForSelector('#hunt-queue');
             const noOverflow = async () => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1 && document.getElementById('hunt-container').scrollWidth <= document.getElementById('hunt-container').clientWidth + 1);
@@ -598,14 +652,14 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
                 await page.locator('#hunt-queue [data-hunt-action="queue-add"]').click();
             };
             check(`Fila ${vp.name}: começa vazia e sem iniciar`, await page.evaluate(() => /Fila vazia/.test(document.getElementById('hunt-queue').innerText) && document.querySelector('#hunt-queue [data-hunt-action="queue-start"]').disabled));
-            await addTarget(25, 2); await addTarget(16, 3);
-            check(`Fila ${vp.name}: adicionar pela busca monta a fila na ordem, com a duração de cada alvo`, await page.evaluate(() => { const v = gameUI.huntQueue.view(); return v.items.length === 2 && v.items[0].speciesId === 25 && v.items[0].condition.type === 'time' && v.items[0].condition.value === 2 && v.items[1].speciesId === 16 && v.items[1].condition.value === 3 && document.querySelectorAll('#hunt-queue .hunt-queue-item').length === 2; }));
-            await addTarget(1, 7, 'battles');
-            check(`Fila ${vp.name}: alvo por batalhas — o campo muda para quantidade, a fila mostra "7 batalhas" e guarda a condição`, await page.evaluate(() => { const v = gameUI.huntQueue.view(); const it = v.items[2]; return it && it.speciesId === 1 && it.condition.type === 'battles' && it.condition.value === 7 && /7 batalhas/.test(document.getElementById('hunt-queue').innerText) && /Quantidade de batalhas/.test(document.getElementById('hunt-target-pick').innerText); }));
+            await addTarget(25, 2); await addTarget(10, 3);
+            check(`Fila ${vp.name}: adicionar pela busca monta a fila na ordem, com a duração de cada alvo`, await page.evaluate(() => { const v = gameUI.huntQueue.view(); return v.items.length === 2 && v.items[0].speciesId === 25 && v.items[0].condition.type === 'time' && v.items[0].condition.value === 2 && v.items[1].speciesId === 10 && v.items[1].condition.value === 3 && document.querySelectorAll('#hunt-queue .hunt-queue-item').length === 2; }));
+            await addTarget(13, 7, 'battles');
+            check(`Fila ${vp.name}: alvo por batalhas — o campo muda para quantidade, a fila mostra "7 batalhas" e guarda a condição`, await page.evaluate(() => { const v = gameUI.huntQueue.view(); const it = v.items[2]; return it && it.speciesId === 13 && it.condition.type === 'battles' && it.condition.value === 7 && /7 batalhas/.test(document.getElementById('hunt-queue').innerText) && /Quantidade de batalhas/.test(document.getElementById('hunt-target-pick').innerText); }));
             await page.locator('#hunt-queue [data-hunt-action="queue-remove"][data-index="2"]').click();
             await page.locator('#hunt-queue [data-hunt-action="queue-down"][data-index="0"]').click();
             await page.locator('#hunt-queue [data-hunt-action="queue-up"][data-index="1"]').click();
-            check(`Fila ${vp.name}: reordenar pendentes funciona e a tela lê a fila do jogo`, await page.evaluate(() => gameUI.huntQueue.view().items.map(i => i.speciesId).join() === '25,16'));
+            check(`Fila ${vp.name}: reordenar pendentes funciona e a tela lê a fila do jogo`, await page.evaluate(() => gameUI.huntQueue.view().items.map(i => i.speciesId).join() === '25,10'));
             check(`Fila ${vp.name}: botões com pelo menos 44 px e sem rolagem horizontal`, await page.evaluate(() => [...document.querySelectorAll('#hunt-queue .hunt-btn')].every(b => b.getBoundingClientRect().height >= 44 && b.getBoundingClientRect().width >= 44)) && await noOverflow());
             await page.locator('#hunt-queue [data-hunt-action="queue-start"]').click();
             await page.waitForFunction(() => game.isHuntRunning() && gameUI.huntQueue.view().state === 'running', null, { timeout: 5000 });
@@ -1335,6 +1389,8 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
                 search.many <= 11 && /Mostrando 10 de/.test(search.total) && search.generatedAfterTyping === search.cachedBefore && search.area === 'hunt_25' && search.routeSame && search.running === false && search.generated === search.cachedBefore + 1 && search.left === 0, JSON.stringify(search));
             check(`Mundo ${vp.name} [F7.5]: depois de abrir o mapa de caça o renderer segue ativo e sem controles de caminhada`, (await probe()).area === 'hunt_25' && (await probe()).controlsHidden === true, JSON.stringify(await probe()));
             // F7.6/F7.7: caçada no mapa — botão explícito, caminhada lógica (relógio manual), câmera, chegada, batalha oficial e limpeza ao sair do mapa
+            // F9.9: a caçada com alvo só vale na rota que traz a espécie (Floresta de Viridian: Pikachu); trocada aqui, depois das checagens que exigem a rota do jogo intacta
+            await page.evaluate(() => { const r = game.selectHuntRoute('kanto_viridian_forest'); if (!r.ok) throw new Error('rota: ' + JSON.stringify(r)); });
             await page.evaluate(() => { gameUI.worldView.openHuntMap(25); });
             await sleep(300);
             const e0 = await page.evaluate(() => ({ hidden: document.getElementById('world-encounter').hidden, disabled: document.getElementById('world-encounter-btn').disabled, cycle: gameUI.worldEncounters.cycle, hook: game.encounterHook, running: game.isHuntRunning(), session: game.getHuntSession() && game.getHuntSession().state }));

@@ -43,6 +43,7 @@ function huntCenterSnapshot(game, enc) {
         sessionState,
         stoppedByCondition: !!(s && sessionState === 'stopped' && typeof huntStoppedByCondition === 'function' && huntStoppedByCondition(s)),
         offline: !!game._isOfflineSimulating,
+        routeId: game.gameState ? game.gameState.currentRoute : null,                  // F9.9: rota selecionada (valida o alvo)
         tower: !!game._towerMode,
         hasTeam: !!(team && team.length > 0),
         cycle,
@@ -65,6 +66,8 @@ function huntControlMatrix(snap, targetId) {
     const active = snap.sessionState === 'running' || snap.sessionState === 'paused';
     const blocked = snap.offline ? 'Aguarde o cálculo offline terminar.' : snap.tower ? 'Saia da Torre de Desafio primeiro.' : null;
     const hasTarget = Number.isInteger(targetId) && targetId >= 1;
+    // F9.9: alvo recusado (não está na rota selecionada, lendário/mítico, inválido): mesma função que o motor usa como guarda. Com ciclo ativo o alvo é o do ciclo.
+    const targetCheck = hasTarget && !snap.cycle && typeof huntTargetCheck === 'function' ? huntTargetCheck(targetId, snap.routeId) : { ok: true };
 
     const q = snap.queue;
     const queueRunning = !!q && q.state === 'running';                  // com sessão própria ou aguardando o próximo alvo
@@ -72,6 +75,7 @@ function huntControlMatrix(snap, targetId) {
 
     let startTarget;
     if (!hasTarget) startTarget = no('Escolha uma espécie para caçar.');
+    else if (!targetCheck.ok) startTarget = no(targetCheck.message);
     else if (snap.cycle) startTarget = no('Já existe uma caçada ativa em um mapa de caça.');
     else if (queueRunning) startTarget = no('A fila de alvos está em andamento.');
     else if (snap.sessionState === 'paused') startTarget = no('Retome ou pare a caçada pausada antes de iniciar outra.');
@@ -83,12 +87,13 @@ function huntControlMatrix(snap, targetId) {
     const resume = snap.sessionState !== 'paused' ? no('Não há caçada pausada.') : blocked ? no(blocked) : yes;
     const stop = !active ? no('Não há caçada ativa.') : snap.offline ? no('Aguarde o cálculo offline terminar.') : yes;
     // Abrir no Mapa só navega (nunca inicia nem muda a rota). Com um ciclo ativo só abre o mapa DELE: abrir outro cancelaria a caminhada.
-    const openMap = hasTarget || snap.cycle ? yes : no('Escolha uma espécie para ver o mapa.');
+    const openMap = snap.cycle ? yes : !hasTarget ? no('Escolha uma espécie para ver o mapa.') : !targetCheck.ok ? no(targetCheck.message) : yes;
 
     // ---- fila (F8.1): espelha HuntQueue.add/start/clear ----
     let queueAdd;
     if (!q) queueAdd = no('Fila indisponível.');
     else if (!hasTarget) queueAdd = no('Escolha uma espécie para adicionar.');
+    else if (!targetCheck.ok) queueAdd = no(targetCheck.message);
     else if (q.state === 'done') queueAdd = no('A fila terminou. Limpe-a para montar outra.');
     else if (q.items.some(i => i.speciesId === targetId)) queueAdd = no('Essa espécie já está na fila.');
     else if (q.total >= HUNT_QUEUE_MAX_ITEMS) queueAdd = no(`A fila comporta no máximo ${HUNT_QUEUE_MAX_ITEMS} alvos.`);

@@ -218,9 +218,12 @@ function instrument(rec) {
         const orig = game._ballCaptureAttempt.bind(game);
         game._ballCaptureAttempt = (w) => {
             const n0 = log.rng.length, inv0 = plain(game.getBalls());
+            // F9.9: candidata a duplicata "no sorteio" (espécie já capturada, sem IV melhor, não shiny, política padrão): o sorteio de 5% vem ANTES da bola
+            const st = game.gameState.caughtPokemon[w.id];
+            const dice = !!st && !w.isShiny && !Object.keys(w.ivs).some(k => w.ivs[k] > st.ivs[k]);
             const r = orig(w);
             if (r.reason === 'no_balls') { rec.noBalls = (rec.noBalls || 0) + 1; return r; }
-            rec.push({ id: w.id, shiny: !!w.isShiny, calls: log.rng.length - n0, inv0, inv1: plain(game.getBalls()), r, value: log.rng[n0] });
+            rec.push({ id: w.id, shiny: !!w.isShiny, dice, calls: log.rng.length - n0, inv0, inv1: plain(game.getBalls()), r, value: log.rng[n0 + (dice ? 1 : 0)] });
             return r;
         };
         game.bus.on('balls_depleted', (e) => rec.depleted = (rec.depleted || 0) + 1);
@@ -237,9 +240,12 @@ test('F9.5 F: online e Fast Driver — mesmas funções, 1 sorteio por tentativa
         assert.ok(rec.length >= 15, `${name}/${seed}: tentativas suficientes (${rec.length})`);
         let succ = 0, fail = 0;
         for (const a of rec) {
+            if (a.r.reason === 'duplicate_declined') {                         // F9.9: recusada pelo sorteio da duplicata: 1 sorteio, nenhuma bola
+                assert.equal(a.dice, true); assert.equal(a.calls, 1, 'só o sorteio da duplicata'); assert.deepEqual(a.inv1, a.inv0, 'sem bola gasta'); continue;
+            }
             const expected = modelChoose(a.inv0, a.shiny);
             assert.ok(expected, 'só há tentativa quando existe bola');
-            assert.equal(a.calls, 1, `${name}/${seed}: exatamente 1 sorteio por tentativa`);
+            assert.equal(a.calls, a.dice ? 2 : 1, `${name}/${seed}: 1 sorteio da bola${a.dice ? ' + 1 da duplicata (antes da bola)' : ''}`);
             const used = Object.keys(a.inv0).filter(k => (a.inv1[k] || 0) !== a.inv0[k]);
             assert.deepEqual(used, [expected], 'bola escolhida = modelo');
             assert.equal(a.inv0[expected] - (a.inv1[expected] || 0), 1, 'gastou exatamente 1');
@@ -262,7 +268,7 @@ test('F9.5 F: nenhuma lógica paralela — toda tentativa, online ou no Fast Dri
         const t = run(on, { seed: 5, balls: { pokeball: 40 }, setup: ({ game }) => {
             const pd = game.processDefeat.bind(game), at = game._ballCaptureAttempt.bind(game);
             game.processDefeat = (w, ...r) => { defeats++; return pd(w, ...r); };
-            game._ballCaptureAttempt = (w) => { const r = at(w); if (r.reason !== 'no_balls') attempts++; return r; };
+            game._ballCaptureAttempt = (w) => { const r = at(w); if (r.reason !== 'no_balls' && r.reason !== 'duplicate_declined') attempts++; return r; };       // F9.9: a duplicata recusada no sorteio não gasta bola
         } });
         assert.ok(defeats > 0 && attempts > 0 && attempts <= defeats, `${name}: ${attempts} tentativas em ${defeats} vitórias`);
         assert.equal(40 - t.game.getBallCount('pokeball'), attempts, `${name}: bolas gastas = tentativas`);

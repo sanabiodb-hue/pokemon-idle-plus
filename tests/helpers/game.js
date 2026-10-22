@@ -40,6 +40,9 @@ function newGame(opts = {}) {
     // F9.5: os testes anteriores à captura com bola assumem captura garantida e inventário sem pacote inicial; por padrão o helper liga a flag
     // BALL_CAPTURE_ENABLED=false (comportamento idêntico ao baseline). Os testes da F9.5 pedem `balls: true`.
     if (opts.balls !== true) require('node:vm').runInContext('BALL_CAPTURE_ENABLED = false', ctx.sandbox || ctx);
+    // F9.9: os testes anteriores à fase caçam alvos fora da tabela da rota (ex.: Pikachu na rota 1); por padrão o helper desliga as regras de alvo
+    // (HUNT_TARGET_RULES_ENABLED = false, comportamento do baseline). Os testes da F9.9 pedem `targetRules: true`.
+    if (opts.targetRules !== true) require('node:vm').runInContext('HUNT_TARGET_RULES_ENABLED = false', ctx.sandbox || ctx);
     game.rng = mulberry32(opts.seed ?? 1);
     game.guideAutoUpdate = opts.guide === true;   // 引导奖励会给出战宝可梦加经验，默认关闭以免干扰其他测试的精确断言
     if (opts.load) {

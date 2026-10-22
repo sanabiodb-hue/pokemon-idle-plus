@@ -1196,6 +1196,7 @@ class GameCore {
     // 随机数只在“概率捕获”时消耗（策略 all 且非闪光），其余情况是确定性的。
     _shouldCaptureDuplicate(wild) {
         const v = this._duplicateVerdict(wild);
+        if (v.verdict === 'roll' && typeof wild._dupDice === 'boolean') return wild._dupDice;      // F9.9: o sorteio já aconteceu antes da bola (uma vez só)
         return v.verdict === 'roll' ? this.rng() < DUPLICATE_CAPTURE_RATE : v.verdict === 'accept';
     }
 
@@ -2668,7 +2669,25 @@ class GameCore {
 
     // F9.5 · UMA tentativa de captura com bola. Escolhe a bola (função pura), consome 1 e sorteia UMA vez (também com a Master, que tem chance 1).
     // Devolve { ok:true, ball, chance } (capturou) ou { ok:false, reason:'no_balls'|'escaped' }. Sem bola: nenhum consumo e nenhum sorteio.
+    // F9.9 · o sorteio de 5% da duplicata acontece ANTES de qualquer consumo de bola (e da reposição). Só vale para a candidata a duplicata "no sorteio":
+    // espécie já capturada, não shiny, sem IV melhor (a atualização de IV ainda justifica a bola, como antes) e com veredito 'roll' (política all).
+    // Devolve null (não se aplica: a ordem do RNG fica como no baseline), true (passou) ou false (recusada: sem bola, sem reposição). O resultado fica no inimigo
+    // para _shouldCaptureDuplicate usar (um sorteio por candidata, nunca dois).
+    _duplicateDiceFirst(wild) {
+        if (wild.isShiny) return null;
+        const stored = this.gameState.caughtPokemon[wild.id];
+        if (!stored) return null;
+        if (Object.keys(wild.ivs).some(stat => wild.ivs[stat] > stored.ivs[stat])) return null;
+        if (this._duplicateVerdict(wild).verdict !== 'roll') return null;
+        wild._dupDice = this.rng() < DUPLICATE_CAPTURE_RATE;
+        return wild._dupDice;
+    }
+
+    // Duplicatas recusadas pelo sorteio desde que o jogo abriu: um contador agregado (nada de um evento por tentativa); não é salvo
+    getDuplicatesDeclined() { return this._dupDeclined || 0; }
+
     _ballCaptureAttempt(wild) {
+        if (this._duplicateDiceFirst(wild) === false) { this._dupDeclined = (this._dupDeclined || 0) + 1; return { ok: false, reason: 'duplicate_declined' }; }
         this._restockBalls();                                           // F9.6: repõe antes de escolher a bola (sem RNG; mesma função online e Fast Driver)
         const ball = chooseBall(this.getBalls(), !!wild.isShiny);
         if (!ball) {

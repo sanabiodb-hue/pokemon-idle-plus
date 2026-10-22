@@ -152,26 +152,33 @@ test('análise com dados reais e estimados: etiquetas Real/Estimado, melhores, r
     assert.equal(game.gameState.currentRoute, 'kanto_route2');
 });
 
-test('estimar rotas: fatiado, mostra progresso, marca "Estimado" e pode ser cancelado', async () => {
-    const { dom, game, view } = setup();
+test('estimar rotas: fatiado, mostra progresso, marca "Estimado" e pode ser cancelado', () => {
+    const { dom, game, view, ctx } = setup();
+    // F9.9: estabilização — o agendador das fatias (setTimeout de 15 ms do contexto do jogo) é injetado e disparado à mão. Antes o teste esperava 400 ms
+    // REAIS por simulações pesadas e falhava quando a CPU estava ocupada; agora a verificação é a mesma, sem depender do relógio nem da carga.
+    const queue = [];
+    ctx.sandbox.setTimeout = (fn) => { queue.push(fn); return queue.length; };
+    const flush = () => { let guard = 0; while (queue.length && guard++ < 1000) queue.shift()(); };
     game.roster.primaryOf(25).level = 30;
     game.getCandidateRoutes = () => ['kanto_route1', 'kanto_route2'];
     view.showSection('analysis');
     assert.match(dom.text('hunt-analysis'), /Sem dados/);
     view.eco.handleAction('estimate', {});
     assert.match(dom.text('hunt-analysis'), /Estimando/);
-    await new Promise(r => setTimeout(r, 400));
+    assert.equal(queue.length, 1, 'a primeira fatia está agendada, não executada');
+    flush();
     assert.equal(view.eco._estimating, null);
     const html = dom.html('hunt-analysis');
     assert.equal((html.match(/hunt-badge-src est">Estimado/g) || []).length, 2);
-    // cancelar no meio
+    // cancelar no meio: uma fatia roda, a aba é escondida, e nenhuma fatia seguinte calcula nada
     game.roster.primaryOf(25).level = 400;                     // invalida o cache
     view.eco.handleAction('estimate', {});
+    queue.shift()();                                           // 1ª fatia (rota 1)
+    assert.equal(game._routeEstimates.map.size, 1);
     view.onHide();
     assert.equal(view.eco._estimating, null);
-    const doneBefore = Object.keys(game._routeEstimates.map || {}).length;
-    await new Promise(r => setTimeout(r, 200));
-    assert.ok(game._routeEstimates.map.size <= 2 && doneBefore !== undefined);
+    flush();                                                   // as fatias que sobraram viram no-op (token cancelado)
+    assert.equal(game._routeEstimates.map.size, 1, 'depois do cancelamento nenhuma outra rota foi estimada');
 });
 
 test('histórico: últimas caçadas com rota, duração, XP, dinheiro e capturas (limitado a 20)', () => {

@@ -122,7 +122,7 @@ for (const ball of BALL_TYPES) {
         event: 'ball_bought',
         packs: [1, 10],
         description: () => `${ball.name}: fica no inventário. Cada tentativa de captura gasta uma bola.`,
-        price: (g) => ballPrice(ball, g.getPricingLevel()),
+        price: (g) => ballPrice(ball, g.getBallPricingLevel()),
         stock: (g) => g.getBallCount(ball.id),
         capacity: () => BALL_STACK_MAX,
         give: (g, qty) => { g.addBalls(ball.id, qty); },
@@ -146,7 +146,7 @@ const ShopMethods = {
         const stock = this.getBallCount(BALL_RESTOCK_ITEM);
         const ball = getBallType(BALL_RESTOCK_ITEM);
         if (!ball || !ball.buyable) return null;
-        const unit = ballPrice(ball, this.getPricingLevel());
+        const unit = ballPrice(ball, this.getBallPricingLevel());
         const plan = planRestock(stock, unit, this.getMoney(), cfg);
         if (plan.reason === 'not_needed') { this._restockFailed = null; return null; }
         if (plan.qty <= 0) {
@@ -219,6 +219,19 @@ const ShopMethods = {
         }
         this._pricingCapCache = cap;
         return cap;
+    },
+
+    // F9.9 · nível usado no PREÇO DAS BOLAS (compra manual e reposição: a mesma função): o nível médio da rota selecionada, nunca acima do nível de
+    // progresso (então nunca fica mais caro que antes). Vale igual nos modos rota e mundo (o inimigo do mundo também sai do levelRange da rota atual) e
+    // na Torre (a rota selecionada continua a mesma). Sem rota válida: o nível de progresso (comportamento anterior, o mais caro = conservador).
+    // Arbitragem: comprar barato numa rota fraca e caçar numa forte é contido pelo limite de 99 por tipo (BALL_STACK_MAX), pela compra manual e pelo
+    // fato de a reposição comprar sempre ao preço da rota atual. O preço da poção e das melhorias NÃO usa esta função.
+    getBallPricingLevel() {
+        const base = this.getPricingLevel();
+        const route = this.gameState ? this.getRoute(this.gameState.currentRoute) : null;
+        const lr = route && Array.isArray(route.levelRange) ? route.levelRange : null;
+        if (!lr || !Number.isFinite(lr[0]) || !Number.isFinite(lr[1])) return base;
+        return Math.min(Math.max(1, Math.round((lr[0] + lr[1]) / 2)), base);
     },
 
     getPricingLevel() {

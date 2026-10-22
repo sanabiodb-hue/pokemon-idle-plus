@@ -84,6 +84,8 @@ class WorldEncounters {
         if (this.cycle) return fail('already_active', 'Já existe uma caçada ativa neste mapa.');
         if (g._isOfflineSimulating) return fail('offline', 'Aguarde o cálculo offline terminar.');
         if (g._towerMode) return fail('tower_mode', 'Saia da Torre de Desafio para caçar.');
+        const allowed = this._targetCheck(speciesId);                           // F9.9: guarda do motor (não depende da interface)
+        if (!allowed.ok) return fail(allowed.code, allowed.message);
         let map = null;
         try { map = Number.isInteger(speciesId) ? worldHuntMap(speciesId) : null; } catch (e) { map = null; }
         if (!map) return fail('invalid_species', 'Não foi possível abrir o mapa dessa espécie.');
@@ -102,6 +104,9 @@ class WorldEncounters {
         if (!this._startLeg()) { const reason = 'no_path'; this._teardown(); return fail(reason, 'Este mapa não tem um caminho válido até os pontos de encontro.'); }
         return { ok: true, encounter: this.current };
     }
+
+    // F9.9: o alvo vale só se passar em huntTargetCheck para a rota selecionada (espécie existente, na tabela natural da rota, nem lendária nem mítica)
+    _targetCheck(speciesId) { return huntTargetCheck(speciesId, this.game.gameState && this.game.gameState.currentRoute); }
 
     // Compatibilidade com a F7.6: pedir um encontro = começar o ciclo neste mapa
     request(speciesId) { return this.begin(speciesId); }
@@ -305,6 +310,8 @@ class WorldEncounters {
     _makeEnemy(cache) {
         const g = this.game, route = g.getRoute(g.gameState.currentRoute);
         const levelRange = route && Array.isArray(route.levelRange) ? route.levelRange : [5, 5];
+        // F9.9: guarda final (online e Fast Driver passam por aqui): alvo inválido para a rota atual é ignorado e o inimigo sai do sorteio natural da rota
+        if (!this._targetCheck(this.cycle.speciesId).ok) return route ? g.generateWildPokemon(route, cache) : null;
         return g.generateWildPokemon({ pokemon: [{ id: this.cycle.speciesId, weight: 1, levelRange }] }, cache);
     }
 
@@ -499,6 +506,7 @@ class WorldEncounters {
         const g = this.game, s = g.getHuntSession ? g.getHuntSession() : null, w = s && s.world;
         if (!w || !(s.state === 'running' || s.state === 'paused')) return;
         if (!Number.isInteger(w.speciesId) || !_worldHas(POKEMON_DATA, String(w.speciesId))) return;
+        if (!this._targetCheck(w.speciesId).ok) return;                         // F9.9: alvo inválido no save (rota mudou, lendário, editado): sem alvo
         this.cycle = { speciesId: w.speciesId, mapId: `hunt_${w.speciesId}`, sessionId: s.id, seq: w.seq, last: w.last, leg: null, pendingLeg: true, walkedBefore: 0, delayMs: 0 };
         this._attach();
         if (!this._startLeg(w)) this.cycle.pendingLeg = true;       // sem perna reconstruível: a retomada (ou o offline) tenta de novo
