@@ -199,12 +199,17 @@ test('F8.3 desempenho: milhares de quadros com o mesmo sprite não alocam imagen
     r.env.alpha = { x0: 10, y0: 10, x1: 80, y1: 90 };
     const c = enc(25, 'battling');
     r.view._drawEncounter(r.env.ctx, c, r.view.lastCamera, r.view.lastMetrics); await tick();
-    const imgs = spriteImages(r.env), reads = r.env.alphaReads, t0 = process.hrtime.bigint();
+    const imgs = spriteImages(r.env), reads = r.env.alphaReads;
+    // Contagem de operações no lugar de milissegundos (estável sob carga): cada desenho custa o mesmo número de drawImage, sem crescer com as repetições.
+    const d0 = r.env.draws.length;
+    r.view._drawEncounter(r.env.ctx, c, r.view.lastCamera, r.view.lastMetrics);
+    const perDraw = r.env.draws.length - d0;
+    assert.ok(perDraw >= 1 && perDraw <= 4, `um desenho do encontro = poucas chamadas de drawImage (${perDraw})`);
+    const d1 = r.env.draws.length;
     for (let i = 0; i < 20000; i++) r.view._drawEncounter(r.env.ctx, c, r.view.lastCamera, r.view.lastMetrics);
-    const ms = Number(process.hrtime.bigint() - t0) / 1e6;
     assert.equal(spriteImages(r.env), imgs);
     assert.equal(r.env.alphaReads, reads);
-    assert.ok(ms < 1000, `20000 desenhos em ${ms.toFixed(1)}ms`);
+    assert.ok(r.env.draws.length - d1 <= 20000 * perDraw, `custo por desenho não cresce nas 20000 repetições (${r.env.draws.length - d1} chamadas)`);
 });
 
 // ---- integração com o ciclo real (GameCore + ManualClock): caminhada → chegada → batalha → fim, parada e reinício

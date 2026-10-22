@@ -5,8 +5,11 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { newGame, plain } = require('./helpers/game');
+const { installFakeTimers } = require('./helpers/clock');
 
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+// Jogo com timers falsos: setTimeout/setInterval do contexto vão para um relógio manual (clk.advance(ms)), sem esperar de verdade.
+function newTimedGame(opts) { const g = newGame(opts); g.clk = installFakeTimers(g.ctx); return g; }
 const watch = (game) => { const ev = []; game.bus.on('*', (e) => ev.push(e)); return ev; };
 const count = (ev, type, live = true) => ev.filter(e => e.type === type && (!live || !e.offline)).length;
 
@@ -113,13 +116,13 @@ test('F7.0: sem time ou sem rota continua não iniciando (e devolve false)', () 
     assert.equal(game.battleTimer, null);
 });
 
-test('F7.0 legítimo: o encadeamento depois da vitória abre exatamente uma nova batalha', async () => {
-    const { game } = newGame();
+test('F7.0 legítimo: o encadeamento depois da vitória abre exatamente uma nova batalha', () => {
+    const { game, clk } = newTimedGame();
     const ev = watch(game);
     game.gameState.currentEnemy = wildOf(game);
     game.startBattle();
     kill(game);
-    await sleep(1000);                                       // atraso máximo entre batalhas: 800 ms
+    clk.advance(800);                                        // atraso máximo entre batalhas: 800 ms (relógio falso, sem espera real)
     assert.equal(count(ev, 'battle_started'), 2, 'início + encadeada');
     assert.ok(game.battleTimer, 'a nova batalha está rodando');
     assert.equal(game._nextBattleTimeout, null);
@@ -128,15 +131,15 @@ test('F7.0 legítimo: o encadeamento depois da vitória abre exatamente uma nova
     game.stopBattle();
 });
 
-test('F7.0 legítimo: ao terminar a cura a batalha recomeça uma vez', async () => {
-    const { game } = newGame();
+test('F7.0 legítimo: ao terminar a cura a batalha recomeça uma vez', () => {
+    const { game, clk } = newTimedGame();
     const ev = watch(game);
     game.startBattle();
     game.stopBattle();
     const b = game.currentBattle;
     b.playerCurrentHp = Math.max(0, b.playerMaxHp - 1);      // a primeira cura de 1 s já enche a vida
     game.startHealingAfterDefeat();
-    await sleep(1300);
+    clk.advance(1000);                                       // exatamente a primeira cura (intervalo de 1 s, relógio falso)
     assert.equal(game.healTimer, null);
     assert.ok(game.battleTimer, 'voltou a lutar');
     assert.equal(count(ev, 'battle_started'), 2);
@@ -237,7 +240,7 @@ test('F7.0 legítimo: ao fim da simulação offline a batalha reabre uma vez', a
 const savedText = () => newGame({ seed: 5 }).game.exportSave();
 
 test('F7.0: importar um save durante a simulação offline cancela a simulação por completo e a batalha volta', async () => {
-    const { game } = newGame();
+    const { game, clk } = newTimedGame();
     const original = () => {};
     game.startBattle();
     game.onBattleEvent = original;
@@ -257,14 +260,14 @@ test('F7.0: importar um save durante a simulação offline cancela a simulação
     assert.equal(game._isOfflineSimulating, false);
     assert.equal(game._fastSim, null);
     assert.equal(game.currentBattle, battle, 'a batalha em curso não foi tocada');
-    await sleep(60);                                          // e o lote realmente agendado também não
+    clk.advance(60);                                             // e o lote realmente agendado também não
     assert.equal(game._isOfflineSimulating, false);
     assert.equal(game._fastSim, null);
     game.stopBattle();
 });
 
 test('F7.0: o mesmo vale com uma Caça em andamento (relógio simulado devolvido)', async () => {
-    const { game } = newGame();
+    const { game, clk } = newTimedGame();
     game.startBattle();
     assert.equal(game.dispatchAutomationAction({ type: 'START_HUNT' }).ok, true);
     game._processOfflineBattles(3600000);
@@ -273,13 +276,13 @@ test('F7.0: o mesmo vale com uma Caça em andamento (relógio simulado devolvido
     assert.equal(game.clock.constructor.name, 'SystemClock');
     assert.equal(game._offlineHunt, null);
     assert.equal(game.startBattle(), true);
-    await sleep(60);
+    clk.advance(60);
     assert.equal(game.clock.constructor.name, 'SystemClock');
     game.stopBattle();
 });
 
 test('F7.0: excluir o save durante a simulação offline também devolve callbacks e flags', async () => {
-    const { game } = newGame();
+    const { game, clk } = newTimedGame();
     const original = () => {};
     game.startBattle();
     game.onBattleEvent = original;
@@ -289,7 +292,7 @@ test('F7.0: excluir o save durante a simulação offline também devolve callbac
     assert.equal(game._isOfflineSimulating, false);
     assert.equal(game.onBattleEvent, original);
     assert.equal(game._offlineSimState, null);
-    await sleep(60);                                          // o lote pendente encontra o estado vazio e para
+    clk.advance(60);                                         // o lote pendente encontra o estado vazio e para
     assert.equal(game._isOfflineSimulating, false);
 });
 
@@ -304,7 +307,7 @@ test('F7.0: importar sem simulação offline continua igual (nada a cancelar)', 
 
 test('F7.0: o cancelamento devolve TODOS os callbacks e não gera recompensa depois (import e delete)', async () => {
     for (const how of ['import', 'delete']) {
-        const { game } = newGame({ seed: 9 });
+        const { game, clk } = newTimedGame({ seed: 9 });
         const cbs = { battle: () => {}, catch: () => {}, level: () => {} };
         game.startBattle();
         game.onBattleEvent = cbs.battle; game.onCatch = cbs.catch; game.onLevelUp = cbs.level;
@@ -332,7 +335,7 @@ test('F7.0: o cancelamento devolve TODOS os callbacks e não gera recompensa dep
         assert.equal(game._offlineSimState, null, how);
         assert.equal(game._fastSim, null, how);
         assert.equal(game._isOfflineSimulating, false, how);
-        await sleep(120);                                       // além disso, o lote realmente agendado também não age
+        clk.advance(120);                                      // além disso, o lote realmente agendado também não age
         assert.deepEqual(snap(), before, how + ': nenhuma recompensa depois do cancelamento');
         assert.equal(game._isOfflineSimulating, false, how);
         game.stopBattle();

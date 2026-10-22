@@ -6,6 +6,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { newGame, ivs, plain } = require('./helpers/game');
 const { makeFakeDom, fakeEl, makeUi } = require('./helpers/fake-dom');
+const { installFakeTimers } = require('./helpers/clock');
 
 function setup(opts = {}) {
     const g = newGame({ seed: opts.seed ?? 3, storage: opts.storage, load: opts.load });
@@ -294,15 +295,17 @@ test('ciclo de vida: só assina eventos com a aba aberta e solta tudo ao sair (s
     assert.equal(game.bus.hasListeners(), false);
 });
 
-test('atualizações são agrupadas (debounce): vários eventos geram uma renderização', async () => {
-    const { game, view } = setup();
+test('atualizações são agrupadas (debounce): vários eventos geram uma renderização', () => {
+    const { game, view, ctx } = setup();
+    const clk = installFakeTimers(ctx);                // relógio falso: o debounce de 400 ms é avançado à mão, sem espera real
     let renders = 0;
     const orig = view.renderLive.bind(view);
     view.renderLive = () => { renders++; orig(); };
     view.onShow();
     renders = 0;
     for (let i = 0; i < 20; i++) game._emit('battle_completed', { result: 'victory', xp: 1, gold: 1 });
-    await new Promise(r => setTimeout(r, 700));
+    assert.equal(renders, 0, 'nada renderiza antes do fim do debounce');
+    clk.advance(700);
     view.onHide();
     assert.equal(renders, 1);
 });

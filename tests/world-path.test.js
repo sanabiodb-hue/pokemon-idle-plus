@@ -90,9 +90,13 @@ test('F7.7 caminho: casos-limite — mesma célula, origem/destino bloqueados, f
     const rows = Array.from({ length: 96 }, () => '.'.repeat(128).split(''));
     for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) rows[50 + dy][60 + dx] = 'T';
     const big = mk(rows.map(r => r.join('')));
-    const t0 = process.hrtime.bigint();
+    // leituras de linha do mapa no lugar de milissegundos: a busca é limitada pelo tamanho do mapa (cada célula é lida um número pequeno de vezes)
+    let reads = 0;
+    const realRows = big.rows;
+    big.rows = new Proxy(realRows, { get(t, k, rcv) { if (typeof k === 'string' && /^[0-9]+$/.test(k)) reads++; return Reflect.get(t, k, rcv); } });
     assert.equal(W.worldFindPath(big, { x: 0, y: 0 }, { x: 60, y: 50 }), null, 'cercado por quatro lados');
-    assert.ok(Number(process.hrtime.bigint() - t0) / 1e6 < 5000, 'termina (sem loop infinito)');
+    assert.ok(reads > 0 && reads <= 8 * big.width * big.height, `termina (sem loop infinito): ${reads} leituras para ${big.width * big.height} células`);
+    big.rows = realRows;
     const full = W.worldFindPath(big, { x: 0, y: 0 }, { x: 127, y: 95 });
     assert.equal(full.length - 1, 127 + 95);
 });

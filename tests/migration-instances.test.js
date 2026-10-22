@@ -186,15 +186,19 @@ test('迁移对垃圾数据宽容：无效物种/重复队伍/缺字段不会崩
     assert.equal(empty.data.pc.boxes.length, 1);
 });
 
+// Conta leituras (get/ownKeys/has) de um objeto: custo medido em operações, não em milissegundos (estável sob carga)
+function counted(obj, box) {
+    return new Proxy(obj, { get(t, k, r) { box.n++; return Reflect.get(t, k, r); }, ownKeys(t) { box.n++; return Reflect.ownKeys(t); }, has(t, k) { box.n++; return Reflect.has(t, k); } });
+}
+
 test('迁移后的“全部已捕获”大图鉴（1073 种）：PC 箱子数量、总个体数与性能', () => {
     const { ctx } = newGame();
     const caughtPokemon = {};
     for (let id = 1; id <= 1073; id++) caughtPokemon[id] = { level: id, exp: 0, ivs: { hp: 1, atk: 2, def: 3, spAtk: 4, spDef: 5, speed: 6 }, skillLevel: 0 };
-    const t0 = Date.now();
-    const r = ctx.processSaveObject({ team: [25, 1], caughtPokemon, pokedex: {}, schemaVersion: 2, activePokemonIndex: 0 });
-    const ms = Date.now() - t0;
+    const box = { n: 0 };
+    const r = ctx.processSaveObject({ team: [25, 1], caughtPokemon: counted(caughtPokemon, box), pokedex: {}, schemaVersion: 2, activePokemonIndex: 0 });
     assert.equal(r.ok, true, r.error);
     assert.equal(Object.keys(r.state.ownedPokemon).length, 1073);
     assert.equal(r.state.pc.boxes.length, Math.ceil(1071 / 30));
-    assert.ok(ms < 1500, `迁移+清洗 1073 只应当很快，实际 ${ms}ms`);
+    assert.ok(box.n <= 10 * 1073, `迁移+清洗 1073 只：对输入的读取次数应与个体数成线性（实际 ${box.n} 次）`);
 });

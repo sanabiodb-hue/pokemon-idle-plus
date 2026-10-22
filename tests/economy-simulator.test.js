@@ -4,7 +4,8 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
-const { plain } = require('./helpers/game');
+const { plain, countFastSteps } = require('./helpers/game');
+const { getContext } = require('../tools/automation-sim');
 const sim = require('../tools/simulate-economy');
 
 const MIN = 60000, HOUR = 3600000;
@@ -96,9 +97,12 @@ test('"depois de 24 horas, onde está quem começou do zero?": 24 h de um jogado
 });
 
 test('o simulador econômico termina rápido: 4 builds × 4 h de um jogador novo em segundos', () => {
-    const t0 = Date.now();
-    sim.compareBuilds('new', { horizons: SHORT, seed: 12 });
-    assert.ok(Date.now() - t0 < 20000, `${Date.now() - t0} ms`);
+    const spy = countFastSteps(getContext());          // contagem de passos no lugar de milissegundos: estável sob carga
+    let cmp;
+    try { cmp = sim.compareBuilds('new', { horizons: SHORT, seed: 12 }); } finally { spy.restore(); }
+    // 4 builds × 4 h simuladas: o trabalho é limitado pelo tempo simulado (cada passo do Fast Driver gasta pelo menos 0,5 s simulado)
+    const builds = Object.keys(cmp.runs).length;
+    assert.ok(spy.count() > 0 && spy.count() <= builds * 4 * HOUR / 500, `${spy.count()} passos para ${builds} builds × 4 h`);
 });
 
 test('o robô não escreve dinheiro à mão: a única atribuição a gold no simulador é a preparação do perfil', () => {

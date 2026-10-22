@@ -3,7 +3,7 @@
 // velocidade, seleção de pontos e resolução de batalha), gastando o tempo de caminhada analiticamente e o de combate pelas regras atuais.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { newGame, runOffline } = require('./helpers/game');
+const { newGame, runOffline, countFastSteps } = require('./helpers/game');
 const { loadWorld } = require('./helpers/world-env');
 
 const TILE = 16, SPEED = 64, SPECIES = 25, MIN = 60_000;
@@ -122,17 +122,17 @@ test('F7.7 offline: recompensas e contadores uma só vez — experiência e dinh
 });
 
 test('F7.7 offline: períodos longos são processados em lotes, sem renderizar e sem avisar a interface a cada perna', async () => {
-    const { game, enc } = setup({ seed: 21 });
+    const { game, ctx, enc } = setup({ seed: 21 });
     enc.begin(SPECIES);
     let notifications = 0;
     enc.onChange(() => { notifications++; });
-    const t0 = process.hrtime.bigint();
-    const res = await runOffline(game, 8 * 60 * MIN);                          // 8 h
-    const ms = Number(process.hrtime.bigint() - t0) / 1e6;
+    const spy = countFastSteps(ctx);                                           // passos do Fast Driver no lugar de milissegundos: estável sob carga
+    let res;
+    try { res = await runOffline(game, 8 * 60 * MIN); } finally { spy.restore(); }   // 8 h
     assert.ok(res.battles >= 100, `batalhas simuladas: ${res.battles}`);
     assert.ok(notifications <= 3, `observadores avisados ${notifications}x (não a cada perna)`);
     assert.ok(enc._paths.byKey.size <= 100 && enc._paths.byKey.size > 1, `caminhos distintos calculados: ${enc._paths.byKey.size} (memo, nunca um por perna)`);
-    assert.ok(ms < 60_000, 'termina');
+    assert.ok(spy.count() > 0 && spy.count() <= 8 * 60 * MIN / 500, `termina com trabalho limitado: ${spy.count()} passos em 8 h simuladas`);
     assert.equal(game.encounterHook, enc);
     assert.equal(enc._offline, false);
 });

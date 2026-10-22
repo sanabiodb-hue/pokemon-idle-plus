@@ -2,7 +2,7 @@
 // Fase 6 · F6.5: comparação de rotas, estimativas (rápidas, em cópia), recomendação por objetivo
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { newGame, plain } = require('./helpers/game');
+const { newGame, plain, countFastSteps } = require('./helpers/game');
 const { createSimGame } = require('../tools/automation-sim');
 
 const MIN = 60000;
@@ -180,15 +180,18 @@ test('candidatos: rota atual + poucas rotas na faixa de nível, limite configur�
 });
 
 test('comparação completa de 8 candidatas termina em poucos segundos e marca todas como estimadas', () => {
-    const { game } = seeded();
-    const t0 = Date.now();
-    const cmp = game.compareRoutes();
-    assert.ok(Date.now() - t0 < 5000, `${Date.now() - t0} ms`);
+    const { game, ctx } = seeded();
+    const spy = countFastSteps(ctx);                                  // passos do Fast Driver no lugar de milissegundos: estável sob carga
+    let cmp;
+    try { cmp = game.compareRoutes(); } finally { spy.restore(); }
+    const budget = game.getCandidateRoutes().length * game.getEconomyConfig().compare.estimateMs / 500;   // cada passo gasta ao menos 0,5 s simulado
+    assert.ok(spy.count() > 0 && spy.count() <= budget, `${spy.count()} passos (limite ${budget})`);
     assert.ok(cmp.rows.length >= 2);
     assert.ok(cmp.rows.every(r => r.source === 'estimated' && r.rates));
-    const again = Date.now();
-    game.compareRoutes();
-    assert.ok(Date.now() - again < 100, 'segunda vez vem do cache');
+    const sims = game._routeEstimates.map.size;
+    const cmp2 = game.compareRoutes();                              // identidade em vez de milissegundos: do cache, as taxas são os MESMOS objetos (nada foi simulado de novo)
+    assert.equal(game._routeEstimates.map.size, sims, 'segunda vez não cria estimativas novas');
+    assert.ok(cmp2.rows.length === cmp.rows.length && cmp2.rows.every((r, i) => r.rates === cmp.rows[i].rates), 'segunda vez vem do cache (mesmas taxas, por referência)');
     const rec = game.recommendRouteForGoal('xp', cmp);
     assert.ok(rec.none || (rec.routeId && /estimado/.test(rec.text)));
 });

@@ -92,4 +92,13 @@ function runOffline(game, ms) {
 // 跨 vm 上下文的对象原型不同，deepEqual 前先转成本上下文的普通对象
 const plain = (x) => (x === undefined ? undefined : JSON.parse(JSON.stringify(x)));
 
-module.exports = { plain, mulberry32, sequenceRng, perfectIvs, ivs, newGame, dispose, catchRange, setLevel, runOffline, createMemoryStorage };
+// Conta quantos passos do Fast Driver (_fastBattleStep) rodaram no contexto `ctx`. Troca de relógio real por contagem de operações: "termina rápido"
+// vira "o trabalho é limitado pelo tempo simulado" (sem girar em falso). Chamar restore() no fim.
+function countFastSteps(ctx) {
+    const proto = ctx.GameCore.prototype, orig = proto._fastBattleStep;
+    let n = 0;
+    proto._fastBattleStep = function (s) { n++; return orig.call(this, s); };
+    return { count: () => n, restore: () => { proto._fastBattleStep = orig; } };
+}
+
+module.exports = { countFastSteps, plain, mulberry32, sequenceRng, perfectIvs, ivs, newGame, dispose, catchRange, setLevel, runOffline, createMemoryStorage };

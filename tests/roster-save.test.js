@@ -355,20 +355,25 @@ test('校验：状态里没有任何字符串含 HTML 危险字符（含个体�
     for (const str of strings) assert.doesNotMatch(str, /[<>"'`&]/, str);
 });
 
-test('性能：1073 只个体清洗 + 完整性检查在宽松预算内', () => {
+// Conta leituras (get/ownKeys/has) de um objeto: custo medido em operações, não em milissegundos (estável sob carga)
+function counted(obj, box) {
+    return new Proxy(obj, { get(t, k, r) { box.n++; return Reflect.get(t, k, r); }, ownKeys(t) { box.n++; return Reflect.ownKeys(t); }, has(t, k) { box.n++; return Reflect.has(t, k); } });
+}
+
+test('性能：1073 只个体清洗 + 完整性检查在宽松预算内（按读取次数，不按毫秒）', () => {
     const { ctx } = newGame();
     const caught = {};
     for (let id = 1; id <= 1073; id++) caught[id] = { level: 50, exp: 0, ivs: { hp: 5 }, skillLevel: 0 };
     const first = ctx.processSaveObject({ team: [25], caughtPokemon: caught, schemaVersion: 2 });
     assert.equal(first.ok, true);
-    const t0 = Date.now();
-    const again = ctx.processSaveObject(JSON.parse(JSON.stringify(first.state)));
-    const t1 = Date.now();
+    const snap = JSON.parse(JSON.stringify(first.state)), sanitize = { n: 0 }, integrity = { n: 0 };
+    snap.ownedPokemon = counted(snap.ownedPokemon, sanitize);
+    const again = ctx.processSaveObject(snap);
+    again.state.ownedPokemon = counted(again.state.ownedPokemon, integrity);
     const problems = ctx.validateRosterIntegrity(again.state);
-    const t2 = Date.now();
     assert.deepEqual(plain(problems), []);
-    assert.ok(t1 - t0 < 1500, `清洗 ${t1 - t0}ms`);
-    assert.ok(t2 - t1 < 500, `完整性检查 ${t2 - t1}ms`);
+    assert.ok(sanitize.n <= 10 * 1073, `清洗：读取次数应与个体数成线性（实际 ${sanitize.n} 次）`);
+    assert.ok(integrity.n <= 10 * 1073, `完整性检查：读取次数应与个体数成线性（实际 ${integrity.n} 次）`);
 });
 
 test('防御：以 "__proto__" / "constructor" 之类的字符串调用名册 API 不会命中 Object.prototype', () => {

@@ -29,14 +29,18 @@ test('大图鉴（1000+ 只）下，换人/开战的属性计算不再按图鉴�
     assert.equal(created, 0);
 });
 
-test('1000+ 只图鉴下 2000 次 calculateBattleStats 耗时在宽松预算内', () => {
+test('1000+ 只图鉴下 2000 次 calculateBattleStats 命中缓存、不重算（按操作次数，不按毫秒）', () => {
     const { game } = newGame();
     catchRange(game, 1, 1073, ivs(15));
     game.calculateBattleStats(0);
-    const t0 = process.hrtime.bigint();
+    // 用操作次数代替毫秒（高负载/覆盖率下也稳定）：缓存命中时不应重新计算属性，也不应构造宝可梦对象
+    let statCalls = 0, created = 0;
+    const calc = game.calculateStats.bind(game), create = game.createPokemon.bind(game);
+    game.calculateStats = (p) => { statCalls++; return calc(p); };
+    game.createPokemon = (...a) => { created++; return create(...a); };
     for (let i = 0; i < 2000; i++) game.calculateBattleStats(0);
-    const ms = Number(process.hrtime.bigint() - t0) / 1e6;
-    assert.ok(ms < 1500, `缓存命中时应当很快，实际 ${ms.toFixed(0)}ms`);
+    assert.equal(statCalls, 0, `缓存命中时应当不重算属性，实际 ${statCalls} 次`);
+    assert.equal(created, 0, `缓存命中时不应构造宝可梦，实际 ${created} 次`);
 });
 
 test('升级一只图鉴宝可梦后，下一次属性计算只重算该物种', () => {

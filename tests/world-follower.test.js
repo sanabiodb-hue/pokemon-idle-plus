@@ -237,9 +237,21 @@ test('F9.2 E: sem timers próprios e sem quadros em ociosidade; o seguidor só g
 
 test('F9.2 E: o desenho do seguidor é barato (milhares de quadros sem alocar imagens)', async () => {
     const r = await boot();
-    const imgs = r.env.images.length, t0 = process.hrtime.bigint();
+    // Contagem de operações no lugar de milissegundos (estável sob carga/cobertura): leituras de layout e chamadas de desenho por quadro.
+    let rects = 0; const rect = r.env.canvas.getBoundingClientRect;
+    r.env.canvas.getBoundingClientRect = (...a) => { rects++; return rect(...a); };
+    const ops = () => r.env.draws.length + r.env.fills;
+    r.redraw();                                                    // aquecimento (cache de sprite já carregado)
+    const imgs = r.env.images.length;
+    let o0 = ops(), r0 = rects;
+    r.redraw();
+    const perFrame = ops() - o0, rectsPerFrame = rects - r0;
+    const cells = r.world.worldVisibleCells(city(r), r.view.lastCamera, r.view.lastMetrics), tiles = (cells.x1 - cells.x0 + 1) * (cells.y1 - cells.y0 + 1);
+    assert.ok(perFrame > tiles && perFrame <= tiles + 1 + 8, `o quadro desenha os ${tiles} tiles visíveis + fundo + poucos sprites (${perFrame} operações)`);
+    o0 = ops(); r0 = rects;
     for (let i = 0; i < 3000; i++) r.redraw();
-    const ms = Number(process.hrtime.bigint() - t0) / 1e6;
     assert.equal(r.env.images.length, imgs, 'nenhuma imagem nova');
-    assert.ok(ms < 3000, `3000 quadros em ${ms.toFixed(0)} ms`);
+    assert.ok(ops() - o0 <= 3000 * perFrame, `custo por quadro não cresce: sem acúmulo de desenhos (rastro/seguidor) ao longo dos quadros (${ops() - o0} operações em 3000 quadros)`);
+    assert.ok(rects - r0 <= 3000 * rectsPerFrame, `leituras de layout por quadro não crescem (${rects - r0} em 3000 quadros)`);
+    assert.ok(rectsPerFrame <= 1, `no máximo 1 leitura de layout por quadro (${rectsPerFrame})`);
 });
