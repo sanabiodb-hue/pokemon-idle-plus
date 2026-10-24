@@ -33,7 +33,8 @@ function getBallType(id) {
 // Preço de uma bola no nível de preço dado (a Master Bola não tem preço de loja: null)
 function ballPrice(ball, pricingLevel) {
     if (!ball || !ball.buyable) return null;
-    return Math.max(ball.basePrice, Math.ceil(ball.winsPerBall * baseGoldPerWin(pricingLevel)));
+    const mult = BALL_PRICE_CALIBRATION_ENABLED ? BALL_PRICE_MULT : 1;                 // F9.10 · M5
+    return Math.max(ball.basePrice, Math.ceil(ball.winsPerBall * mult * baseGoldPerWin(pricingLevel)));
 }
 
 // Adiciona respeitando o limite por item. Devolve { ok, added, count, balls } (balls = objeto NOVO; o recebido não é alterado) ou { ok:false, code }
@@ -90,11 +91,12 @@ function captureChance(rate, ball) {
     return Math.min(CAPTURE_CHANCE_MAX, Math.max(CAPTURE_CHANCE_MIN, rate * ball.catchMultiplier));
 }
 
-// Escolha automática de bola: a mais barata disponível; shiny usa a melhor disponível; a Master nunca (autoUse=false). Devolve o tipo ou null
-function chooseBall(balls, shiny) {
+// Escolha automática de bola: a mais barata disponível; alvo premium (shiny e, com PREMIUM_BALL_ENABLED, lendário/mítico) usa a melhor disponível;
+// a Master nunca (autoUse=false). Devolve o tipo ou null
+function chooseBall(balls, premium) {
     const usable = BALL_TYPES.filter(b => b.autoUse && _ballCount(balls, b.id) > 0);
     if (usable.length === 0) return null;
-    return shiny ? usable[usable.length - 1] : usable[0];
+    return premium ? usable[usable.length - 1] : usable[0];
 }
 
 // ---------- F9.6 · reposição automática (função pura) ----------
@@ -161,6 +163,34 @@ const ShopMethods = {
         this.addBalls(ball.id, plan.qty);
         if (this.getBallCount(ball.id) >= cfg.minStock) this._restockFailed = null;       // o episódio de falha só termina quando o estoque volta ao mínimo (compra parcial não limpa: evita alternar aviso/limpeza)
         this._emit('balls_restocked', { item: ball.id, qty: plan.qty, unitPrice: unit, total: plan.total, stock: this.getBallCount(ball.id) });
+        return { qty: plan.qty, total: plan.total };
+    },
+
+    // F9.10 · M3 · reserva premium: mantém PREMIUM_BALL_RESERVE unidades de PREMIUM_BALL_ITEM para shiny/lendário/mítico, com as MESMAS regras da reposição da
+    // Poké Bola (benefício autoRestock, política ligada, ouro acima da reserva de ouro da política). Sem RNG e sem timers. Um aviso por episódio de falta de ouro.
+    _restockPremiumBalls() {
+        if (!PREMIUM_BALL_ENABLED || !BALL_RESTOCK_ENABLED || !this.gameState) return null;
+        if (!hasBenefit(this.gameState, 'autoRestock')) { this._premiumRestockFailed = null; return null; }
+        const cfg = this.getAutomationPolicy().ballPolicy.restock;
+        if (!cfg || !cfg.enabled) { this._premiumRestockFailed = null; return null; }
+        const ball = getBallType(PREMIUM_BALL_ITEM);
+        if (!ball || !ball.buyable) return null;
+        const stock = this.getBallCount(ball.id);
+        const unit = ballPrice(ball, this.getBallPricingLevel());
+        const plan = planRestock(stock, unit, this.getMoney(), { minStock: PREMIUM_BALL_RESERVE, targetStock: PREMIUM_BALL_RESERVE, goldReserve: cfg.goldReserve });
+        if (plan.reason === 'not_needed') { this._premiumRestockFailed = null; return null; }
+        if (plan.qty <= 0) {
+            if (!this._premiumRestockFailed) {
+                this._premiumRestockFailed = plan.reason;
+                this._emit('balls_restock_failed', { item: ball.id, reason: plan.reason, stock, gold: this.getMoney(), reserve: cfg.goldReserve, premium: true });
+            }
+            return null;
+        }
+        const spent = this.spendMoney(plan.total, 'ball_purchase', { item: ball.id, qty: plan.qty, unitPrice: unit, auto: true, premium: true });
+        if (!spent.ok) return null;
+        this.addBalls(ball.id, plan.qty);
+        this._premiumRestockFailed = null;
+        this._emit('balls_restocked', { item: ball.id, qty: plan.qty, unitPrice: unit, total: plan.total, stock: this.getBallCount(ball.id), premium: true });
         return { qty: plan.qty, total: plan.total };
     },
 

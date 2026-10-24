@@ -164,6 +164,10 @@ class GameCore {
     // ===================== 在线/离线共用的进度公式 =====================
     // 闪光概率（徽章/天赋/挑战塔加成）
     getShinyRate() {
+        if (SHINY_CALIBRATION_ENABLED) {                                  // F9.10: fontes SOMADAS com teto (ver game-config.js)
+            const sources = 1 + (this.getBadgeEffectValue('shiny_bonus') || 0) + this.getTalentValue('shiny_bonus') / 100 + this.getTowerBonus() / 100;
+            return BASE_SHINY_RATE_CALIBRATED * Math.min(SHINY_SOURCES_MAX_MULT, sources);
+        }
         let rate = BASE_SHINY_RATE;
         const badge = this.getBadgeEffectValue('shiny_bonus');
         if (badge !== null) rate *= (1 + badge);
@@ -2689,7 +2693,8 @@ class GameCore {
     _ballCaptureAttempt(wild) {
         if (this._duplicateDiceFirst(wild) === false) { this._dupDeclined = (this._dupDeclined || 0) + 1; return { ok: false, reason: 'duplicate_declined' }; }
         this._restockBalls();                                           // F9.6: repõe antes de escolher a bola (sem RNG; mesma função online e Fast Driver)
-        const ball = chooseBall(this.getBalls(), !!wild.isShiny);
+        this._restockPremiumBalls();                                    // F9.10 · M3: reserva de bolas premium (sem RNG; no-op com PREMIUM_BALL_ENABLED = false)
+        const ball = chooseBall(this.getBalls(), !!wild.isShiny || (PREMIUM_BALL_ENABLED && isLegendaryOrMythic(wild.id)));
         if (!ball) {
             if (!this._ballsDepletedNotified) {                         // no máximo um aviso por episódio (volta a avisar depois de haver bola de novo)
                 this._ballsDepletedNotified = true;
@@ -2889,6 +2894,7 @@ class GameCore {
         const weightReduceValue = cache ? cache.weightReduce : this.getBadgeEffectValue('completed_weight_reduce');
         const weights = route.pokemon.map(p => {
             let w = p.weight;
+            if (LEGENDARY_WEIGHT_ENABLED && isLegendaryOrMythic(p.id)) w *= legendaryRouteMult(route.id);     // F9.10 · M2: só o peso; continua UM rng() para a espécie
             if (weightReduceValue !== null) {
                 const caught = this.gameState.pokedex[p.id] === 'caught';
                 if (caught) {

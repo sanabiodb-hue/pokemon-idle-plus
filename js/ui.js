@@ -1458,7 +1458,7 @@ class GameUI {
             const q = (document.getElementById('pokedex-search-input') || {}).value || '';
             let msg;
             if (q.trim()) msg = `Nada encontrado para “${q.trim()}”. Tente outro nome ou número.`;
-            else if (this.pokedexFilter === 'shiny') msg = 'Nenhum Pokémon Shiny ainda. Cada encontro tem cerca de 1/4096 de chance. Lute mais e troque de rota!';
+            else if (this.pokedexFilter === 'shiny') msg = `Nenhum Pokémon Shiny ainda. Cada encontro tem cerca de 1/${shinyBaseOdds().toLocaleString('pt-BR')} de chance. Lute mais e troque de rota!`;
             else if (this.pokedexFilter === 'not_shiny') msg = 'Nenhum Pokémon aqui ainda. Vá lutar: os capturados aparecem aqui.';
             else if (this.pokedexFilter === 'caught') msg = this.pokedexRegionFilter === 'all'
                 ? 'Nenhum Pokémon capturado ainda. Derrote Pokémon selvagens para capturá-los!'

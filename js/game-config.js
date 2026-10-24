@@ -42,6 +42,127 @@ const CAPTURE_RATE_BST_FULL = 300;
 const CAPTURE_RATE_BST_SPAN = 600;
 const BALL_STARTER_PACK = { pokeball: 30 };     // concedido uma única vez por save (inventory.ballsGranted), respeitando BALL_STACK_MAX
 
+// F9.10 · M5 · preço das bolas. BALL_PRICE_CALIBRATION_ENABLED = false restaura os preços anteriores (winsPerBall acima, sem multiplicador). Ligada, o preço
+// é max(basePrice, ceil(winsPerBall × BALL_PRICE_MULT × ouro por vitória)); o piso (basePrice) e BALL_STACK_MAX não mudam. A Master Bola continua não comprável.
+let BALL_PRICE_CALIBRATION_ENABLED = true;   // (let: só os testes reatribuem em tempo de execução)
+const BALL_PRICE_MULT = 8;
+
+// F9.10 · M3 · bolas premium. Shiny, lendário e mítico usam a melhor bola NÃO-Master disponível (a Master nunca é escolhida sozinha) e a reposição
+// automática mantém PREMIUM_BALL_RESERVE unidades de PREMIUM_BALL_ITEM, com as mesmas regras de ouro e de benefício da reposição da Poké Bola.
+// PREMIUM_BALL_ENABLED = false restaura a escolha anterior (melhor bola só para shiny) e dispensa a reposição premium. Sem RNG novo.
+let PREMIUM_BALL_ENABLED = true;             // (let: só os testes reatribuem em tempo de execução)
+const PREMIUM_BALL_RESERVE = 5;
+const PREMIUM_BALL_ITEM = 'ultraball';
+
+// F9.10 · M2 · lendários e míticos (por id, ver LEGENDARY_SPECIES_IDS/MYTHICAL_SPECIES_IDS em automation/target.js). Com LEGENDARY_WEIGHT_ENABLED o peso deles
+// na tabela natural de CADA rota é multiplicado por LEGENDARY_ROUTE_MULT[rota], de modo que a chance de lendário por encontro seja p_alvo = ln2 / (E × H) — mediana de
+// H = 10 h até o 1º lendário — qualquer que seja a chance natural p da rota: m = p_alvo (1 − p) / (p (1 − p_alvo)). E é a taxa de encontros/h da rota.
+// A tabela é ESTÁTICA (nada é calculado em tempo de execução) e é GERADA por "node tools/calibrate-f910.js legtable --write" (conferida por teste): nas 10 rotas da
+// rotas com lendário E (encontros/h, média de uma janela de 10 h do Fast Driver com a equipe de teste no nível da rota) é MEDIDO.
+// Rotas fora da tabela (sem lendário, ou SÓ com lendários/míticos: normalizar não muda a tabela inteira) ficam inalteradas. Só o peso muda: o sorteio da espécie
+// continua UM rng() e as espécies comuns mantêm exatamente os pesos relativos entre si. Desligado, as tabelas valem como estão nos dados.
+let LEGENDARY_WEIGHT_ENABLED = true;         // (let: só os testes reatribuem em tempo de execução)
+const LEGENDARY_TARGET_MEDIAN_HOURS = 10;
+// BEGIN GENERATED LEGENDARY_ROUTE_MULT (tools/calibrate-f910.js legtable --write)
+// E: encontros por hora medidos (janela de 10 h); m: multiplicador do peso dos restritos
+const LEGENDARY_ROUTE_E = {
+    kanto_route10: 1300.6,
+    kanto_seafoam_islands: 1286,
+    kanto_victory_road: 1305.9,
+    kanto_cerulean_cave: 1243.3,
+    johto_whirl_islands: 1150.1,
+    johto_tin_tower: 1208.6,
+    johto_mt_silver: 1052,
+    hoenn_mt_pyre: 1024,
+    hoenn_route126: 1259.4,
+    hoenn_route128: 1132.9,
+    hoenn_victory_road: 817.2,
+    hoenn_sealed_chamber: 718.3,
+    hoenn_sky_pillar: 676.1,
+    hoenn_birth_island: 643.7,
+    sinnoh_mt_coronet_south: 906.2,
+    sinnoh_lake_acuity: 753.2,
+    sinnoh_route222: 930,
+    sinnoh_mt_coronet_summit: 684,
+    sinnoh_victory_road: 754.5,
+    sinnoh_sendoff_spring: 653.8,
+    sinnoh_fullmoon_island: 697.3,
+    sinnoh_hall_of_origin: 703.9,
+    unova_route8: 814.7,
+    unova_twist_mountain: 863.4,
+    unova_route9: 954.3,
+    unova_dragonspiral_tower: 816,
+    unova_route10: 976.5,
+    unova_victory_road: 791.3,
+    unova_giant_chasm: 723.8,
+    unova_n_castle: 903.7,
+    unova_liberty_garden: 751.4,
+    kalos_terminus_cave: 695.5,
+    kalos_unknown_dungeon: 806.4,
+    kalos_sea_spirits_den: 792.8,
+    alola_route11: 860.9,
+    galar_route12: 1467.2,
+    galar_route14: 1225.8,
+    galar_route15: 1309.5,
+    paldea_route12: 1702.9,
+    paldea_route13: 2121.9,
+    paldea_route14: 1660.1,
+    mega_route2: 2104.1,
+    mega_route4: 2366.8,
+    mega_route5: 2235.7,
+};
+const LEGENDARY_ROUTE_MULT = {
+    kanto_route10: 0.001759,
+    kanto_seafoam_islands: 0.001779,
+    kanto_victory_road: 0.001752,
+    kanto_cerulean_cave: 0.001803,
+    johto_whirl_islands: 0.001169,
+    johto_tin_tower: 0.0005449,
+    johto_mt_silver: 0.006523,
+    hoenn_mt_pyre: 0.001574,
+    hoenn_route126: 0.00128,
+    hoenn_route128: 0.001917,
+    hoenn_victory_road: 0.002771,
+    hoenn_sealed_chamber: 0.0005597,
+    hoenn_sky_pillar: 0.002435,
+    hoenn_birth_island: 0.003518,
+    sinnoh_mt_coronet_south: 0.00255,
+    sinnoh_lake_acuity: 0.001488,
+    sinnoh_route222: 0.007454,
+    sinnoh_mt_coronet_summit: 0.0007186,
+    sinnoh_victory_road: 0.004594,
+    sinnoh_sendoff_spring: 0.004453,
+    sinnoh_fullmoon_island: 0.0008064,
+    sinnoh_hall_of_origin: 0.002823,
+    unova_route8: 0.003035,
+    unova_twist_mountain: 0.002676,
+    unova_route9: 0.003632,
+    unova_dragonspiral_tower: 0.001784,
+    unova_route10: 0.001124,
+    unova_victory_road: 0.00438,
+    unova_giant_chasm: 0.008428,
+    unova_n_castle: 0.001611,
+    unova_liberty_garden: 0.002645,
+    kalos_terminus_cave: 0.004136,
+    kalos_unknown_dungeon: 0.001118,
+    kalos_sea_spirits_den: 0.001924,
+    alola_route11: 0.00001421,
+    galar_route12: 0.00003465,
+    galar_route14: 0.001244,
+    galar_route15: 0.0004411,
+    paldea_route12: 0.00001628,
+    paldea_route13: 0.00004083,
+    paldea_route14: 0.0001113,
+    mega_route2: 0.0002767,
+    mega_route4: 0.0003598,
+    mega_route5: 0.0001068,
+};
+// END GENERATED LEGENDARY_ROUTE_MULT
+function legendaryRouteMult(routeId) {
+    const m = LEGENDARY_ROUTE_MULT[routeId];
+    return m === undefined ? 1 : m;
+}
+
 // F9.6: reposição automática de Poké Bolas. Quando o estoque cai abaixo de MIN_STOCK, compra (numa só operação, sem RNG nem timer) o que leva ao alvo,
 // limitado pelo espaço e pelo ouro ACIMA da reserva. Os valores abaixo são os padrões da configuração do jogador (política de automação, ballPolicy.restock).
 // BALL_RESTOCK_ENABLED = false desliga o recurso por inteiro (captura, inventário e RNG idênticos ao baseline da F9.5).
@@ -527,6 +648,27 @@ let NATURE_EFFECT_ENABLED = true;       // (let: só os testes reatribuem em tem
 const SHINY_CHAIN_STEP = 0.05;        // +5% da taxa base por vitória seguida
 const SHINY_CHAIN_MAX_MULT = 3;       // teto do multiplicador da cadeia
 const SHINY_CHAIN_MAX_COUNT = 1e9;    // só uma guarda de sanidade do contador salvo (o multiplicador já é limitado pelo teto)
+
+// F9.10 · M1 · calibração do shiny. SHINY_CALIBRATION_ENABLED = false restaura exatamente o comportamento anterior à fase (BASE_SHINY_RATE = 1/4096, fontes
+// multiplicadas sem teto, cadeia com SHINY_CHAIN_STEP/SHINY_CHAIN_MAX_MULT acima). Ligada (padrão do jogo):
+//  - taxa base DERIVADA do alvo: mediana de SHINY_TARGET_MEDIAN_HOURS horas com a cadeia no teto (×SHINY_REFERENCE_CHAIN_MULT), nenhuma outra fonte e
+//    SHINY_REFERENCE_WINS_PER_HOUR encontros por hora. Mediana de uma geométrica: 1 − (1 − p)^n = 1/2 com n = horas × encontros/h e p = base × cadeia,
+//    logo base = (1 − 0,5^(1/n)) / cadeia (≈ 1/37.400; ver tools/calibrate-f910.js shiny para a medição);
+//  - fontes fixas (insígnia de Sinnoh, talento, bônus da Torre) SOMADAS e limitadas a ×SHINY_SOURCES_MAX_MULT (antes eram multiplicadas, sem teto);
+//  - cadeia com teto ×SHINY_CHAIN_MAX_MULT_CALIBRATED, atingido em SHINY_CHAIN_FULL_WINS vitórias seguidas (passo = (teto − 1) / vitórias).
+// Gemas, frutas, melhorias e VIP não entram na taxa. Continua UM sorteio de RNG por encontro; só o limiar muda.
+let SHINY_CALIBRATION_ENABLED = true;   // (let: só os testes reatribuem em tempo de execução)
+const SHINY_TARGET_MEDIAN_HOURS = 72;
+const SHINY_REFERENCE_WINS_PER_HOUR = 180;
+const SHINY_REFERENCE_CHAIN_MULT = 2;
+const SHINY_SOURCES_MAX_MULT = 4;
+const SHINY_CHAIN_MAX_MULT_CALIBRATED = 2;
+const SHINY_CHAIN_FULL_WINS = 40;
+const SHINY_CHAIN_STEP_CALIBRATED = (SHINY_CHAIN_MAX_MULT_CALIBRATED - 1) / SHINY_CHAIN_FULL_WINS;
+const BASE_SHINY_RATE_CALIBRATED = (1 - Math.pow(0.5, 1 / (SHINY_TARGET_MEDIAN_HOURS * SHINY_REFERENCE_WINS_PER_HOUR))) / SHINY_REFERENCE_CHAIN_MULT;
+// Parâmetros ATIVOS da cadeia (passo e teto) e denominador de "1 em N" para os textos de ajuda (calibrado: arredondado à centena, ≈ 37.400)
+function shinyChainParams() { return SHINY_CALIBRATION_ENABLED ? { step: SHINY_CHAIN_STEP_CALIBRATED, max: SHINY_CHAIN_MAX_MULT_CALIBRATED } : { step: SHINY_CHAIN_STEP, max: SHINY_CHAIN_MAX_MULT }; }
+function shinyBaseOdds() { return SHINY_CALIBRATION_ENABLED ? Math.round(1 / BASE_SHINY_RATE_CALIBRATED / 100) * 100 : Math.round(1 / BASE_SHINY_RATE); }
 const DEFEAT_HEAL_PERCENT_PER_SEC = 0.2; // 战败后每秒回复最大生命的比例
 const VICTORY_HEAL_PERCENT = 0.1;       // 胜利后回复最大生命的比例
 const TEAM_EXP_RATE = 0.5;              // 队伍其他成员获得的经验比例

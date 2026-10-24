@@ -84,7 +84,8 @@ function huntSessionRecord(session, amounts) {
 // F9.1 · cadeia de shiny: session.shinyChain = { speciesId, count } (campo opcional e aditivo; sessão sem ele = cadeia zerada).
 // Funções puras; quem as chama é o handler compartilhado de battle_completed (online e Fast Driver) e o sorteio do inimigo.
 function huntShinyChainMultiplier(count) {
-    return Math.min(SHINY_CHAIN_MAX_MULT, 1 + SHINY_CHAIN_STEP * Math.max(0, count));
+    const p = shinyChainParams();                                              // F9.10: passo e teto ativos (calibrados ou os de antes)
+    return Math.min(p.max, 1 + p.step * Math.max(0, count));
 }
 
 // Multiplicador a aplicar ao sorteio de shiny de `speciesId` (1 = sem efeito). Só vale com a sessão RODANDO.
@@ -112,7 +113,7 @@ function huntShinyChainView(session) {
     const c = session && (session.state === 'running' || session.state === 'paused') ? session.shinyChain : null;
     if (!c || !(c.count > 0)) return null;
     const mult = huntShinyChainMultiplier(c.count);
-    return { speciesId: c.speciesId, count: c.count, bonusPct: Math.round((mult - 1) * 100), capped: mult >= SHINY_CHAIN_MAX_MULT };
+    return { speciesId: c.speciesId, count: c.count, bonusPct: Math.round((mult - 1) * 100), capped: mult >= shinyChainParams().max };
 }
 
 // 存档清洗：任何东西进来都得到合法会话或 null。读档时 running 一律降为 paused（不会悄悄自己继续跑）

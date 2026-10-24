@@ -33,6 +33,9 @@ const HUNT_TARGET_MESSAGES = {
 
 function isRestrictedSpecies(speciesId) { return HUNT_TARGET_RULES_ENABLED && _RESTRICTED_SPECIES.has(speciesId); }
 
+// F9.10: lendário ou mítico por id, SEM depender do kill-switch das regras de alvo (usado pelo peso na tabela natural e pela escolha da bola premium).
+function isLegendaryOrMythic(speciesId) { return _RESTRICTED_SPECIES.has(speciesId); }
+
 // Espécies da tabela natural de uma rota (Set) ou null se a rota não existe. Cache por rota (as tabelas não mudam em tempo de execução).
 const _routeSpeciesCache = new Map();
 function routeSpeciesIds(routeId) {

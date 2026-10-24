@@ -43,6 +43,9 @@ function newGame(opts = {}) {
     // F9.9: os testes anteriores à fase caçam alvos fora da tabela da rota (ex.: Pikachu na rota 1); por padrão o helper desliga as regras de alvo
     // (HUNT_TARGET_RULES_ENABLED = false, comportamento do baseline). Os testes da F9.9 pedem `targetRules: true`.
     if (opts.targetRules !== true) require('node:vm').runInContext('HUNT_TARGET_RULES_ENABLED = false', ctx.sandbox || ctx);
+    // F9.10: os testes anteriores à fase assumem as taxas, os pesos e os preços de antes (shiny 1/4096, lendários com o peso dos dados, bolas ×1, melhor bola só
+    // para shiny); por padrão o helper desliga as quatro flags da calibração (comportamento idêntico ao baseline). Os testes da F9.10 pedem `calibration: true`.
+    if (opts.calibration !== true) legacyCalibration(ctx);
     game.rng = mulberry32(opts.seed ?? 1);
     game.guideAutoUpdate = opts.guide === true;   // 引导奖励会给出战宝可梦加经验，默认关闭以免干扰其他测试的精确断言
     if (opts.load) {
@@ -51,6 +54,12 @@ function newGame(opts = {}) {
         game.initNewGame();
     }
     return { ctx, game, storage };
+}
+
+// Desliga a calibração numérica da F9.10 no contexto `ctx` (restaura exatamente o comportamento anterior à fase)
+const CALIBRATION_FLAGS = ['SHINY_CALIBRATION_ENABLED', 'BALL_PRICE_CALIBRATION_ENABLED', 'PREMIUM_BALL_ENABLED', 'LEGENDARY_WEIGHT_ENABLED'];
+function legacyCalibration(ctx) {
+    for (const f of CALIBRATION_FLAGS) require('node:vm').runInContext(f + ' = false', ctx.sandbox || ctx);
 }
 
 function dispose(game) {
@@ -101,4 +110,4 @@ function countFastSteps(ctx) {
     return { count: () => n, restore: () => { proto._fastBattleStep = orig; } };
 }
 
-module.exports = { countFastSteps, plain, mulberry32, sequenceRng, perfectIvs, ivs, newGame, dispose, catchRange, setLevel, runOffline, createMemoryStorage };
+module.exports = { legacyCalibration, CALIBRATION_FLAGS, countFastSteps, plain, mulberry32, sequenceRng, perfectIvs, ivs, newGame, dispose, catchRange, setLevel, runOffline, createMemoryStorage };

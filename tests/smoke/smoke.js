@@ -415,11 +415,11 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
             // vitórias reais pelo evento oficial (o mesmo que o motor emite): a linha aparece e cresce
             await page.evaluate(() => { for (let i = 0; i < 12; i++) game._emit('battle_completed', { result: 'victory', enemyId: 25, xp: 1, gold: 1, route: game.gameState.currentRoute }); });
             await page.waitForFunction(() => document.querySelector('#hunt-target [data-hunt-shiny-chain]'), null, { timeout: 5000 });
-            check(`Cadeia ${vp.name}: "Cadeia: 12 · +60% shiny" aparece depois de 12 vitórias seguidas`, /^Cadeia: 12 · \+60% shiny$/.test(await line()), String(await line()));
+            check(`Cadeia ${vp.name}: "Cadeia: 12 · +30% shiny" aparece depois de 12 vitórias seguidas`, /^Cadeia: 12 · \+30% shiny$/.test(await line()), String(await line()));
             check(`Cadeia ${vp.name}: sem rolagem horizontal com a linha visível`, await fit());
             await page.evaluate(() => { for (let i = 0; i < 40; i++) game._emit('battle_completed', { result: 'victory', enemyId: 25, xp: 1, gold: 1, route: game.gameState.currentRoute }); });
             await page.waitForFunction(() => /máx/.test((document.querySelector('#hunt-target [data-hunt-shiny-chain]') || {}).innerText || ''), null, { timeout: 5000 });
-            check(`Cadeia ${vp.name}: no teto mostra "+200% shiny (máx.)"`, /\+200% shiny \(máx\.\)/.test(await line()), String(await line()));
+            check(`Cadeia ${vp.name}: no teto mostra "+100% shiny (máx.)"`, /\+100% shiny \(máx\.\)/.test(await line()), String(await line()));
             await page.evaluate(() => game._emit('battle_completed', { result: 'defeat', enemyId: 25, xp: 0, gold: 0, route: game.gameState.currentRoute, tower: false }));
             await page.waitForFunction(() => !document.querySelector('#hunt-target [data-hunt-shiny-chain]'), null, { timeout: 5000 });
             check(`Cadeia ${vp.name}: com o líder derrotado a linha some`, (await line()) === null && !(await page.evaluate(() => game.getHuntSession().shinyChain)));
@@ -555,10 +555,11 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
             check(`Reposição ${vp.name}: o aviso de "Sem Poké Bolas" aparece ao lado e a tela continua sem rolagem horizontal`, await page.evaluate(() => { const w = document.querySelector('[data-hunt-noballs]'); return !!w && !w.hidden && /Sem Poké Bolas/.test(w.innerText) && document.documentElement.scrollWidth <= window.innerWidth + 1; }));
             check(`Reposição ${vp.name}: a falha aparece no registro de atividade`, await page.evaluate(() => { game._emit('battle_completed', { result: 'victory', enemyId: 16, xp: 1, gold: 1, route: game.gameState.currentRoute }); return true; }) && await page.waitForFunction(() => /Reposição de bolas parada: sem ouro acima da reserva de \$250/.test((document.getElementById('hunt-activity') || {}).innerText || ''), null, { timeout: 5000 }).then(() => true, () => false));
             // com ouro de novo a reposição volta, o aviso some e o evento de reposição entra no registro
-            await page.evaluate(() => { game.gameState.gold = 250 + 40; game.processDefeat(game.createWildPokemon(19, 5, 0)); });
+            await page.evaluate(() => { game.gameState.gold = 250 + 40 * game.getShopItems().find(i => i.id === 'pokeball').price; game.processDefeat(game.createWildPokemon(19, 5, 0)); });
             await page.waitForFunction(() => document.querySelector('[data-hunt-restockfail]').hidden && document.querySelector('[data-hunt-noballs]').hidden, null, { timeout: 5000 });
             const after = await page.evaluate(() => ({ balls: game.getBallCount('pokeball'), gold: game.getMoney(), price: game.getShopItems().find(i => i.id === 'pokeball').price }));
-            check(`Reposição ${vp.name}: com ouro acima da reserva repõe até o alvo 40, gasta só o preço × quantidade e os dois avisos somem`, after.balls === 40 - 1 && after.gold === 290 - (40) * after.price, JSON.stringify(after));
+            after.gold0 = 250 + 40 * after.price;                        // F9.10: o ouro do cenário acompanha o preço da Poké Bola (40 bolas acima da reserva de $250)
+            check(`Reposição ${vp.name}: com ouro acima da reserva repõe até o alvo 40, gasta só o preço × quantidade e os dois avisos somem`, after.balls === 40 - 1 && after.gold === after.gold0 - (40) * after.price, JSON.stringify(after));
             await context.close();
         }
 
@@ -587,7 +588,7 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
             await page.waitForFunction(() => { const e = document.querySelector('#hunt-settings [data-hunt-policy="ballPolicy.restock.enabled"]'); return e && !e.disabled; }, null, { timeout: 5000 });
             check(`VIP ${vp.name}: com o benefício os 4 controles ficam ativos e a frase de bloqueio some`, JSON.stringify(await ctl()) === '[false,false,false,false]' && await page.evaluate(() => !document.querySelector('[data-hunt-restock-locked]') && /Ligada: repõe até 30/.test(document.getElementById('hunt-settings').innerText)));
             await page.evaluate(() => game.processDefeat(game.createWildPokemon(19, 5, 0)));
-            check(`VIP ${vp.name}: com o benefício a mesma situação repõe até 30 (menos a bola usada) e gasta o preço × quantidade`, await page.evaluate(() => { const price = game.getShopItems().find(i => i.id === 'pokeball').price; return game.getBallCount('pokeball') === 29 && game.getMoney() === 5000 - 30 * price; }));
+            check(`VIP ${vp.name}: com o benefício a mesma situação repõe até 30 (menos a bola usada), mais a reserva premium de 5 Ultra Bolas, e gasta o preço × quantidade`, await page.evaluate(() => { const price = game.getShopItems().find(i => i.id === 'pokeball').price, ultra = game.getShopItems().find(i => i.id === 'ultraball').price; return game.getBallCount('pokeball') === 29 && game.getBallCount('ultraball') === PREMIUM_BALL_RESERVE && game.getMoney() === 5000 - 30 * price - PREMIUM_BALL_RESERVE * ultra; }));
             check(`VIP ${vp.name}: ativo, sem rolagem horizontal`, await fit());
             await context.close();
         }
@@ -627,7 +628,7 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
             const priceOn = async (routeId) => { await page.evaluate((r) => { game.gameState.currentRoute = r; gameUI.huntView.renderSection(); }, routeId); return page.evaluate(() => ({ shown: [...document.querySelectorAll('#hunt-shop .hunt-shop-item')].map(el => ({ name: el.querySelector('strong').innerText, price: el.querySelector('.hunt-shop-meta strong').innerText })), expectBall: ['pokeball', 'greatball', 'ultraball'].map(id => ballPrice(getBallType(id), game.getBallPricingLevel())), expectPotion: game.getPotionPrice(), level: game.getBallPricingLevel(), progress: game.getPricingLevel() })); };
             const weak = await priceOn('kanto_route1'), strong = await priceOn('kanto_cerulean_cave');
             const money = (n) => `$${n}`;
-            check(`Preço ${vp.name}: com o mesmo progresso, a rota fraca (Rota 1) cobra pelo nível da rota — Poké/Great/Ultra a $1/$3/$6`, weak.level === 3 && weak.progress >= 135 && weak.expectBall.join() === '1,3,6' && weak.shown[1].price === money(1) && weak.shown[2].price === money(3) && weak.shown[3].price === money(6), JSON.stringify(weak));
+            check(`Preço ${vp.name}: com o mesmo progresso, a rota fraca (Rota 1) cobra pelo nível da rota — Poké/Great/Ultra a $3/$8/$15`, weak.level === 3 && weak.progress >= 135 && weak.expectBall.join() === '3,8,15' && weak.shown[1].price === money(3) && weak.shown[2].price === money(8) && weak.shown[3].price === money(15), JSON.stringify(weak));
             check(`Preço ${vp.name}: na Caverna Cerulean (nível 131-135) as bolas custam mais, pelo nível da rota, e a loja mostra exatamente o preço do jogo`, strong.level === 133 && strong.shown.slice(1).map(s => s.price).join() === strong.expectBall.map(money).join() && strong.expectBall[0] > weak.expectBall[0], JSON.stringify(strong));
             check(`Preço ${vp.name}: a poção não muda com a rota (mesmo preço nas duas rotas, pelo progresso)`, weak.shown[0].price === money(weak.expectPotion) && strong.shown[0].price === money(strong.expectPotion) && weak.expectPotion === strong.expectPotion, JSON.stringify([weak.shown[0], strong.shown[0]]));
             check(`Preço ${vp.name}: a loja explica "o preço das bolas segue a rota selecionada"`, await page.evaluate(() => /o preço das bolas segue a rota selecionada \(nível de referência: \d+\)/.test(document.getElementById('hunt-shop').innerText)));
@@ -984,7 +985,7 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
             await page.evaluate(() => { const i = document.getElementById('pokedex-search-input'); i.value = ''; i.dispatchEvent(new Event('input')); });
             await page.click('.filter-btn[data-filter="shiny"]');
             await sleep(200);
-            check('图鉴：没有闪光时说明获得方式', /1\/4096/.test(await page.locator('#pokedex-grid').innerText()));
+            check('图鉴：没有闪光时说明获得方式', /1\/37\.400/.test(await page.locator('#pokedex-grid').innerText()));
 
             // 各页签：手机上没有横向滚动
             const overflows = [];

@@ -160,7 +160,7 @@ class GuideView {
     onShiny(name) {
         this.showCard({
             icon: '✨', tone: 'shiny', keep: true, title: `Você achou um ${name} Shiny!`,
-            text: 'Shiny aparecem em cerca de 1 a cada 4096 encontros. Ele já está na Pokédex e tem atributos maiores. Dá para alternar a aparência na Pokédex.',
+            text: `Shiny aparecem em cerca de 1 a cada ${shinyBaseOdds().toLocaleString('pt-BR')} encontros. Ele já está na Pokédex e tem atributos maiores. Dá para alternar a aparência na Pokédex.`,
             ttl: 12000,
         });
     }
