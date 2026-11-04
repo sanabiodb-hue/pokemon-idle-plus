@@ -17,12 +17,19 @@ const EXPLORE_BLOCK_MESSAGES = {
     world_hunt: 'Há uma caçada ativa no Mapa. Encerre-a para explorar.',
 };
 const EXPLORE_TOWN = 'starter_town';
+const EXPLORE_QUALITY_KEY = 'pokemon_idle_explore_quality';      // F10.1: preferência deste aparelho (não vai para o save do jogo)
+const exploreDevice = () => ({ coarse: !!(window.matchMedia && matchMedia('(pointer: coarse)').matches), dpr: window.devicePixelRatio || 1, cores: navigator.hardwareConcurrency || 0, memoryGb: navigator.deviceMemory || 0 });
 
 class ExploreView {
     constructor(ui) {
         this.ui = ui; this.game = ui.game;
         this.open = false; this.keep = {}; this.keys = []; this.joy = { x: 0, y: 0 }; this.path = null; this.running = false;
         this.mode = 'world'; this.busy = false; this.grace = 0; this.audio = null;
+        // F10.1: qualidade gráfica (preferência salva neste aparelho; senão a escolha automática pelo aparelho)
+        let saved = null; try { saved = JSON.parse(localStorage.getItem(EXPLORE_QUALITY_KEY) || 'null'); } catch (e) { saved = null; }
+        this.qualityManual = !!(saved && saved.manual && EXPLORE_QUALITY[saved.id]);
+        this.quality = this.qualityManual ? saved.id : exploreDefaultQuality(exploreDevice());
+        this.gov = new ExploreFrameGovernor(this.quality, window.devicePixelRatio || 1);
         this._inject();
         this._onKeyDown = (e) => this._key(e, true); this._onKeyUp = (e) => this._key(e, false);
         this._onResize = () => this.e3d && this.e3d.resize();
@@ -38,6 +45,8 @@ class ExploreView {
         card.querySelector('#explore-open').addEventListener('click', () => this.start());
     }
     _toast(msg) { if (this.ui && typeof this.ui.showToast === 'function') this.ui.showToast(msg); }
+    // aviso curto dentro da tela cheia do Explorar (o toast do jogo fica atrás dela)
+    _notice(msg) { const n = this.$('.ex-notice'); if (!n) return; n.textContent = msg; n.hidden = false; clearTimeout(this._noticeT); this._noticeT = setTimeout(() => { n.hidden = true; }, 4000); }
 
     // ---------------- abrir / fechar ----------------
     async start() {
@@ -53,7 +62,7 @@ class ExploreView {
         catch (e) { this.root.hidden = true; document.body.classList.remove('exploring'); return this._toast(EXPLORE_BLOCK_MESSAGES.load); }
         const gl = (() => { try { const c = document.createElement('canvas'); return !!(c.getContext('webgl2') || c.getContext('webgl')); } catch (e) { return false; } })();
         if (!gl) { this.root.hidden = true; document.body.classList.remove('exploring'); return this._toast(EXPLORE_BLOCK_MESSAGES.webgl); }
-        try { if (!this.e3d) this.e3d = new Explore3D(this.canvas); }
+        try { if (!this.e3d) this.e3d = new Explore3D(this.canvas, this.quality, window.devicePixelRatio || 1); }
         catch (e) { this.root.hidden = true; document.body.classList.remove('exploring'); return this._toast(EXPLORE_BLOCK_MESSAGES.webgl); }
         const r = this.game.exploreEnter();
         if (!r.ok) { this.root.hidden = true; document.body.classList.remove('exploring'); return this._toast(EXPLORE_BLOCK_MESSAGES[r.code] || r.code); }
@@ -63,8 +72,35 @@ class ExploreView {
         this.e3d.resize();
         this._goTo(EXPLORE_TOWN, null);
         this._dialog(['Bem-vindo ao modo Explorar!', 'Ande com as setas/WASD (ou o joystick). Shift corre. Enter/Espaço interage.', 'Siga pelo caminho ao sul até a rota. No mato alto aparecem Pokémon selvagens!']);
-        this._last = performance.now();
+        this._last = performance.now(); this._lastRender = this._last; this._acc = 0; this._activeUntil = 0;
+        this._auto = { start: this._last, frames: 0, ms: 0 };
+        this._renderQualityButton();
         this._raf = requestAnimationFrame((t) => this._frame(t));
+    }
+    // ---------------- F10.1 · qualidade ----------------
+    _renderQualityButton() { const b = this.$('.ex-quality'); if (b) b.textContent = `⚙ ${EXPLORE_QUALITY[this.quality].label}`; }
+    // Troca o preset. Trocar o antialias exige um canvas novo (o contexto WebGL não muda depois de criado); o mapa é refeito no lugar.
+    setQuality(id, manual) {
+        if (!EXPLORE_QUALITY[id] || this.mode !== 'world') return false;
+        const old = this.e3d && this.e3d.q;
+        this.quality = id; this.qualityManual = !!manual;
+        try { localStorage.setItem(EXPLORE_QUALITY_KEY, JSON.stringify({ id, manual: !!manual })); } catch (e) { /* sem armazenamento: vale só nesta sessão */ }
+        this.gov.setQuality(id, window.devicePixelRatio || 1);
+        if (this.e3d) {
+            if (old && old.antialias !== EXPLORE_QUALITY[id].antialias) {
+                const fresh = document.createElement('canvas'); fresh.className = 'ex-canvas';
+                this.canvas.replaceWith(fresh); this.canvas = fresh;
+                this.canvas.addEventListener('pointerdown', this._onCanvasDown);
+                this.e3d.dispose(); this.e3d = new Explore3D(this.canvas, id, window.devicePixelRatio || 1);
+            } else {
+                this.e3d.q = EXPLORE_QUALITY[id]; this.e3d.qualityId = id; this.e3d._applyShadowMode(); this.e3d.setPixelRatio(this.gov.ratio);
+                if (this.e3d.trainer) { this.e3d.world.remove(this.e3d.trainer); this.e3d.trainer = null; }       // refeito com a regra de sombra do preset
+            }
+            if (this.map) { const st = this.state; this._goTo(this.map.id, null); this.state = st; this.grace = 0; this.e3d.setTrainer(st, 0, false); this.e3d.resetTrail(st.dir); }
+        }
+        this._renderQualityButton();
+        this._auto = { start: performance.now(), frames: 0, ms: 0 };
+        return true;
     }
     close() {
         if (!this.open || this.mode === 'battle') return;
@@ -88,8 +124,10 @@ class ExploreView {
             <div class="ex-hud">
                 <div class="ex-loc"><small>Explorar</small><b class="ex-loc-name">—</b><span class="ex-loc-sub"></span></div>
                 <div class="ex-party"></div>
+                <button type="button" class="ex-quality" title="Qualidade gráfica: Leve, Médio ou Alto">⚙</button>
                 <button type="button" class="ex-close" aria-label="Sair do modo Explorar">✕ Sair</button>
             </div>
+            <div class="ex-notice" role="status" hidden></div>
             <div class="ex-joy" aria-hidden="true"><i></i></div>
             <div class="ex-ab"><button type="button" class="ex-b" aria-label="Correr">B</button><button type="button" class="ex-a" aria-label="Interagir">A</button></div>
             <div class="ex-battle" hidden>
@@ -113,7 +151,9 @@ class ExploreView {
         const end = () => { jid = null; knob.style.transform = ''; this.joy = { x: 0, y: 0 }; };
         joy.addEventListener('pointerup', end); joy.addEventListener('pointercancel', end);
         // toque/clique no chão: anda até lá (busca de caminho do motor)
-        this.canvas.addEventListener('pointerdown', (e) => { if (this.mode === 'world' && !this.dialogLines) this._tapTo(e.clientX, e.clientY); else if (this.dialogLines) this._advanceDialog(); });
+        this._onCanvasDown = (e) => { if (this.mode === 'world' && !this.dialogLines) this._tapTo(e.clientX, e.clientY); else if (this.dialogLines) this._advanceDialog(); };
+        this.canvas.addEventListener('pointerdown', this._onCanvasDown);
+        $('.ex-quality').addEventListener('click', () => { if (this.mode === 'world') this.setQuality(exploreQualityNext(this.quality), true); });
         $('.ex-panel').addEventListener('click', () => { if (this.dialogLines) this._advanceDialog(); });
     }
     _key(e, down) {
@@ -189,7 +229,26 @@ class ExploreView {
         const dt = dtMs / 1000;
         if (this.mode === 'world' && !this.dialogLines && this.map) this._move(dtMs);
         if (this.mode === 'world' && this.state) this.e3d.setTrainer(this.state, dt, this.running);
-        this.e3d.render(dt);
+        // F10.1: algo se mexe (treinador, efeitos, animação de batalha) → teto de FPS do preset; parado → FPS de repouso.
+        // A câmera ainda desliza ~0,6 s depois de parar, então conta como movimento.
+        const moving = !!(this.state && this.state.moving) || this.e3d.isAnimating() || this.busy;
+        if (moving) this._activeUntil = now + 600;
+        const active = now < this._activeUntil;
+        this._acc += dt;
+        if (this.gov.shouldRender(now, active)) {
+            const gap = now - this._lastRender, steady = active && this._wasActive; this._lastRender = now; this._wasActive = active;
+            this.e3d.render(this._acc); this._acc = 0;
+            if (steady) {                 // só quadros seguidos em movimento medem o desempenho (o 1º depois de parado traz o intervalo de repouso)
+                const r = this.gov.sample(gap); if (r !== null) this.e3d.setPixelRatio(r);
+                this._auto.frames++; this._auto.ms += gap;
+                const el = now - this._auto.start;
+                if (el > EXPLORE_AUTO_WINDOW_MS && this._auto.frames > 10) {
+                    const lower = exploreAutoDowngrade(this.quality, 1000 * this._auto.frames / this._auto.ms, EXPLORE_AUTO_WINDOW_MS, this.qualityManual);
+                    if (lower && this.mode === 'world' && !this.dialogLines) { this.setQuality(lower, false); this._notice(`Gráficos ajustados para ${EXPLORE_QUALITY[lower].label} para manter a fluidez. Toque em ⚙ para mudar.`); }
+                    this._auto.start = Infinity;      // uma janela por abertura (ou por troca de preset)
+                }
+            }
+        }
         this._raf = requestAnimationFrame((t) => this._frame(t));
     }
     _dir() {

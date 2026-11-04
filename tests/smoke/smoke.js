@@ -1468,6 +1468,11 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
             check(`Explorar ${vp.name}: a batalha automática fica segura enquanto explora`, guard.exploring && !guard.timer && guard.start === false && guard.why === 'explore', JSON.stringify(guard));
             const fit = await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1);
             check(`Explorar ${vp.name}: sem rolagem horizontal`, fit);
+            // F10.1: preset inicial pelo aparelho, resolução dentro dos limites do preset e FPS menor parado
+            const ql = await page.evaluate(() => { const v = gameUI.exploreView, q = EXPLORE_QUALITY[v.quality], r = v.e3d.renderer.getPixelRatio(); return { id: v.quality, label: document.querySelector('#explore .ex-quality').textContent, r, min: q.pixelRatioMin, max: q.pixelRatioMax, idleFps: q.idleFps }; });
+            check(`Explorar ${vp.name}: qualidade inicial pelo aparelho (${vp.hasTouch ? 'celular: Leve/Médio' : 'PC: Médio/Alto'}) e botão ⚙ com o nome`, (vp.hasTouch ? ['low', 'medium'] : ['medium', 'high']).includes(ql.id) && ql.label.includes({ low: 'Leve', medium: 'Médio', high: 'Alto' }[ql.id]) && ql.r >= ql.min - 1e-9 && ql.r <= ql.max + 1e-9, JSON.stringify(ql));
+            const idleFrames = await page.evaluate(() => new Promise(res => { const v = gameUI.exploreView; v._activeUntil = 0; const f0 = v.e3d.frames; setTimeout(() => res(v.e3d.frames - f0), 2000); }));
+            check(`Explorar ${vp.name}: parado, desenha no máximo o FPS de repouso do preset`, idleFrames <= ql.idleFps * 2 + 2, JSON.stringify({ idleFrames, idleFps: ql.idleFps }));
             if (vp.hasTouch) check(`Explorar ${vp.name}: joystick e botões A/B aparecem no toque`, await page.evaluate(() => getComputedStyle(document.querySelector('#explore .ex-joy')).display !== 'none' && getComputedStyle(document.querySelector('#explore .ex-ab')).display !== 'none'));
             for (let i = 0; i < 4; i++) { await page.keyboard.press('Enter'); await sleep(120); }
             await page.keyboard.down('ArrowDown');
@@ -1495,6 +1500,11 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
             }
             check(`Explorar ${vp.name}: a batalha termina e volta ao mapa`, await page.evaluate(() => gameUI.exploreView.mode === 'world' && !gameUI.exploreView.battle));
             for (let i = 0; i < 6; i++) { if (!(await page.evaluate(() => !!gameUI.exploreView.dialogLines))) break; await page.keyboard.press('Enter'); await sleep(120); }
+            // F10.1: o botão ⚙ passa por Leve → Médio → Alto refazendo o mapa no lugar (mesmo mapa e mesma posição)
+            const before = await page.evaluate(() => ({ id: gameUI.exploreView.quality, map: gameUI.exploreView.map.id, x: gameUI.exploreView.state.x, y: gameUI.exploreView.state.y }));
+            const seen = [];
+            for (let i = 0; i < 3; i++) { await page.click('#explore .ex-quality'); await sleep(400); seen.push(await page.evaluate(() => ({ id: gameUI.exploreView.quality, map: gameUI.exploreView.map.id, x: gameUI.exploreView.state.x, y: gameUI.exploreView.state.y, label: document.querySelector('#explore .ex-quality').textContent, manual: gameUI.exploreView.qualityManual }))); }
+            check(`Explorar ${vp.name}: ⚙ alterna os 3 presets e volta ao inicial sem sair do lugar`, new Set(seen.map(q => q.id)).size === 3 && seen[2].id === before.id && seen.every(q => q.map === before.map && q.x === before.x && q.y === before.y && q.manual), JSON.stringify({ before, seen }));
             await page.click('#explore .ex-close');
             const back = await page.evaluate(() => ({ exploring: game.isExploring(), hidden: document.getElementById('explore').hidden, battle: !!(game.battleTimer || game.healTimer || game._nextBattleTimeout) }));
             check(`Explorar ${vp.name}: sair fecha o modo e a batalha automática volta`, !back.exploring && back.hidden && back.battle, JSON.stringify(back));
