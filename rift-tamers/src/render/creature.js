@@ -2,7 +2,7 @@
 // Frente da criatura = +Z. A animação é controlada por userData.anim (idle, walk, attack, hit, faint).
 import * as THREE from 'three';
 import { makeRng, valueNoise } from '../rng.js';
-import { RARITY_INDEX } from '../genome.js';
+import { RARITY_INDEX, evoStage } from '../genome.js';
 
 const geoCache = new Map();
 function geo(key, make) { let g = geoCache.get(key); if (!g) { g = make(); geoCache.set(key, g); } return g; }
@@ -71,7 +71,10 @@ function addEyes(group, g, head, radius, rng, root) {
 // Monta e devolve um THREE.Group. scale: tamanho base em unidades do mundo.
 export function buildCreature(g, scale = 1) {
     const rng = makeRng('mesh:' + g.seed);
-    const L = g.look, root = new THREE.Group(), body = new THREE.Group();
+    const evo = evoStage(g);
+    const L0 = g.look, L = evo ? { ...L0, horns: Math.min(3, L0.horns + evo), spikes: L0.spikes + evo * 2, crest: L0.crest || evo >= 1, wings: L0.wings || (evo >= 2 && g.body !== 'quad' ? 2 : 0), glow: Math.min(1, L0.glow + evo * 0.15), tail: Math.min(5, L0.tail + evo) } : L0;
+    g = L === L0 ? g : { ...g, look: L };
+    const root = new THREE.Group(), body = new THREE.Group();
     root.add(body);
     root.userData = { g, eyes: [], wings: [], legs: [], tail: [], anim: { state: 'idle', t: rng() * 10, k: 0, base: new THREE.Vector3() }, body };
     const mat = bodyMaterial(g);
@@ -197,7 +200,12 @@ export function buildCreature(g, scale = 1) {
     const blob = new THREE.Mesh(shadowG, new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.28, depthWrite: false }));
     blob.rotation.x = -Math.PI / 2; blob.position.y = 0.02; root.add(blob);
 
-    const sz = L.size * scale * (g.boss ? 1.6 : 1) * (1 + ri * 0.05);
+    // halo de evolução final: anel de luz flutuando atrás da cabeça
+    if (evo >= 2) {
+        const halo = new THREE.Mesh(geo('halo', () => new THREE.TorusGeometry(0.42, 0.035, 8, 48)), new THREE.MeshBasicMaterial({ color: hsl(L.hue2, 1, 0.7), transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending, depthWrite: false }));
+        halo.position.set(head.x, head.y + headR * 0.6, head.z - headR * 1.1); body.add(halo); root.userData.halo = halo;
+    }
+    const sz = L.size * scale * (g.boss ? 1.6 : 1) * (1 + ri * 0.05) * [1, 1.18, 1.36][evo];
     root.scale.setScalar(sz);
     root.userData.size = sz;
     root.userData.mat = mat;
@@ -237,6 +245,7 @@ export function animateCreature(o, dt) {
     u.tail.forEach((s, i) => { s.rotation.y = Math.sin(t * 2.2 - i * 0.6) * 0.35; s.rotation.x = 0.15; });
     for (const e of u.eyes) { const blink = (t % 4.3) < 0.12 ? 0.15 : 1; e.scale.y = e.scale.x * blink; }
     if (u.ring) u.ring.rotation.y += dt * 0.8;
+    if (u.halo) { u.halo.rotation.z += dt * 0.9; u.halo.material.opacity = 0.6 + Math.sin(t * 2.5) * 0.3; }
     if (u.aura) { u.aura.rotation.z += dt * 0.6; u.aura.material.opacity = 0.35 + Math.sin(t * 3) * 0.2; }
     if (u.sparkles) { u.sparkles.rotation.y += dt * 0.7; u.sparkles.material.color.setHSL((t * 0.2) % 1, 1, 0.75); }
     if (u.prismMat) u.prismMat.sheenColor.setHSL((t * 0.15) % 1, 1, 0.6);

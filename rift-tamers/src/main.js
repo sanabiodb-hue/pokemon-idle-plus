@@ -1,8 +1,9 @@
 // Rift Tamers — cola do jogo: loop, batalhas ao vivo em 3D, painéis, modais, save e progresso offline.
-import { Game, newState, SAVE_KEY, ZONES, ZONE_LEN, UPGRADES, PERK_DEFS, upgradeCost, fmt, COLLAPSE_MIN_STAGE, EXPEDITION_UNLOCK, EXPEDITION_FLOORS, MAX_KEYS, KEY_PERIOD_S, BATTLE_OVERHEAD } from './game.js';
+import { Game, newState, SAVE_KEY, ZONES, ZONE_LEN, UPGRADES, PERK_DEFS, upgradeCost, fmt, COLLAPSE_MIN_STAGE, EXPEDITION_UNLOCK, EXPEDITION_FLOORS, MAX_KEYS, KEY_PERIOD_S, BATTLE_OVERHEAD, ACHIEVEMENTS, rewardText } from './game.js';
+import { sfx, unlockAudio, setSound } from './sfx.js';
 import { step, triggerSync, SYNC_MAX, alive } from './battle.js';
 import { TYPE_INFO, TYPES, RELICS, STATUS_INFO, multiEffectiveness } from './data.js';
-import { statsOf, power, movesOf, RARITIES, RARITY_INDEX, ALL_SPECIES, speciesName, displayName, xpToNext, BODY_INFO } from './genome.js';
+import { statsOf, power, movesOf, RARITIES, RARITY_INDEX, ALL_SPECIES, speciesName, displayName, xpToNext, BODY_INFO, evoStage, EVO_LEVELS, formName } from './genome.js';
 import { Stage3D, portrait } from './render/scene.js';
 
 const $ = (s, r = document) => r.querySelector(s);
@@ -37,7 +38,7 @@ const ctxCreatures = new Map();      // genomas fora do save (iniciais, inimigos
 
 // ---------- batalha ao vivo ----------
 let ctx = null;           // { kind: 'stage'|'exp', battle, enemies, stage, endAt }
-let view = 'arena', speed = 1, lastFrame = performance.now(), saveTimer = 0, hudTimer = 0;
+let view = 'arena', speed = 1, lastFrame = performance.now(), saveTimer = 0, hudTimer = 0, achTimer = 2;
 const unitEls = new Map();
 
 function startBattle() {
@@ -86,8 +87,9 @@ function updateUnits() {
         el.querySelector('.st').textContent = Object.keys(u.status).map(k => STATUS_INFO[k]?.name || k).join(' · ');
     }
 }
-function onPopup(text, mesh, kind) {
+function onPopup(text, mesh, kind, e) {
     if (view === 'sanctuary') return;
+    if (e && e.tier === 'ult') sfx('ult'); else if (kind === 'crit' || kind === 'super' || kind === 'hit') sfx(kind, { pitch: 0.8 + Math.random() * 0.4 });
     const a = stage3d.anchor(mesh, 1.6); if (!a.visible) return;
     const el = document.createElement('div');
     el.className = 'pop ' + kind;
@@ -117,14 +119,18 @@ function frame() {
     if (ctx && !ctx.endAt) {
         if (game.perk('autosync') && S().settings.autoSync && ctx.battle.sync >= SYNC_MAX) triggerSync(ctx.battle);
         const ev = step(ctx.battle, dt * speed);
-        if (view !== 'sanctuary') stage3d.playEvents(ev);
+        if (view !== 'sanctuary') {
+            stage3d.playEvents(ev);
+            for (const e of ev) { if (e.t === 'faint') sfx('faint'); else if (e.t === 'sync') sfx('sync'); else if (e.t === 'end') sfx(e.result === 'A' ? 'win' : 'lose'); }
+        }
         if (ctx.battle.result) ctx.endAt = now + (BATTLE_OVERHEAD * 1000) / speed;
-    } else if (ctx && ctx.endAt && now >= ctx.endAt) { finishBattle(); if (!S().expedition || !S().expedition.choices) startBattle(); }
+    } else if (ctx && ctx.endAt && now >= ctx.endAt) { finishBattle(); pendingRebuild = false; if (!S().expedition || !S().expedition.choices) startBattle(); }
     else if (!ctx && S().starterChosen && !modalOpen() && (!S().expedition || !S().expedition.choices)) startBattle();
     stage3d.render();
     updateUnits(); updateSync(); pumpPortraits();
     hudTimer -= dt; if (hudTimer <= 0) { hudTimer = 0.25; updateHud(); }
     saveTimer -= dt; if (saveTimer <= 0) { saveTimer = 10; save(); }
+    achTimer -= dt; if (achTimer <= 0) { achTimer = 2; game.checkAchievements(); }
     requestAnimationFrame(frame);
 }
 
@@ -186,7 +192,9 @@ function log(msg, kind = 'info') {
 }
 game.on((type, d) => {
     if (type === 'log') log(d.msg, d.kind);
-    if (type === 'capture') toastCapture(d.g, d.isNew);
+    if (type === 'capture') { toastCapture(d.g, d.isNew); sfx(d.g.prismatic ? 'prism' : 'capture'); }
+    if (type === 'evolve') { sfx('evolve'); toast(`${imgFor(d.g)}<div><b>EVOLUÇÃO!</b><small>${esc(d.g.name)} → ${nameHtml(d.g)} · forma ${d.stage + 1}</small></div>`, 'prism'); pendingRebuild = true; }
+    if (type === 'achievement') { sfx('achieve'); toast(`<div style="font-size:30px;padding:4px 8px">🏆</div><div><b>${d.name}</b><small>${d.desc} · ${rewardText(d.reward)}</small></div>`); }
     if (type === 'team' || type === 'fusion' || type === 'collapse' || type === 'expeditionEnd') { if (activeTab) renderPanel(); }
     if (type === 'expeditionEnd') openExpeditionEnd(d);
 });
@@ -202,15 +210,16 @@ $('#btn-prev').onclick = () => { if (S().stage > 1) { S().stage--; S().farmUntil
 $('#btn-next').onclick = () => { if (S().stage < S().maxStage) { S().stage++; S().farmUntil = 0; ctx = null; startBattle(); updateHud(); } };
 
 // ---------- abas e painéis ----------
-let activeTab = null;
+let activeTab = null, pendingRebuild = false;
 const liveTabs = new Set(['upgrades', 'collapse', 'expedition']);
 document.querySelectorAll('#tabs button').forEach(b => b.onclick = () => selectTab(b.dataset.tab));
 $('#panel-close').onclick = () => selectTab('arena');
 function selectTab(tab) {
     document.querySelectorAll('#tabs button').forEach(b => b.classList.toggle('on', b.dataset.tab === tab));
     const wasSanct = view === 'sanctuary';
-    if (tab === 'arena') { activeTab = null; $('#panel').hidden = true; document.body.classList.remove('panel-open'); }
-    else { activeTab = tab; $('#panel').hidden = false; document.body.classList.add('panel-open'); renderPanel(); }
+    if (tab === 'arena') { activeTab = null; $('#panel').hidden = true; document.body.classList.remove('panel-open'); stage3d.setPanelOffset(0); }
+    else { activeTab = tab; $('#panel').hidden = false; document.body.classList.add('panel-open'); renderPanel(); stage3d.setPanelOffset(464); }
+    sfx('ui');
     view = tab === 'sanctuary' ? 'sanctuary' : 'arena';
     if (view === 'sanctuary' && !wasSanct) { clearUnits(); stage3d.setIsland('bloom', S().seed + ':sanct'); stage3d.showSanctuary(sanctuaryGenomes()); }
     if (view === 'arena' && wasSanct) { if (ctx) { stage3d.setIsland(ctx.kind === 'exp' ? 'rift' : game.zoneOf(ctx.stage).type, ctx.kind === 'exp' ? S().expedition.seed : S().seed + ':z' + Math.floor((ctx.stage - 1) / ZONE_LEN)); } showBattleMeshes(); }
@@ -284,7 +293,9 @@ const PANELS = {
             const own = S().creatures.find(c => c.species === k);
             if (d && d.caught && own) return `<div class="dex-cell" title="${nm} · ${BODY_INFO[body].name}">${imgFor(own)}<small class="${d.prismatic ? 'prism' : ''}">${nm}</small></div>`;
             return `<div class="dex-cell unk ${d ? 'seen' : ''}" title="${d ? nm + ' (visto)' : '???'}" style="${d ? 'border-color:' + TYPE_INFO[type].color : ''}">${d ? '◌' : '?'}<small>${d ? nm : '???'}</small></div>`;
-        }).join('')}</div>`;
+        }).join('')}</div>
+        <div class="section-title">Conquistas · ${Object.keys(S().achievements).length}/${ACHIEVEMENTS.length}</div>
+        ${ACHIEVEMENTS.map(a => `<div class="row" style="${S().achievements[a.id] ? '' : 'opacity:.55'}"><div><h4>${S().achievements[a.id] ? '🏆 ' : ''}${a.name}</h4><p>${a.desc}</p></div><span class="note">${rewardText(a.reward)}</span></div>`).join('')}`;
     },
     upgrades() {
         const s = S();
@@ -305,6 +316,7 @@ const PANELS = {
         const s = S();
         return `<div class="section-title">Gráficos</div><div class="filters">${['low', 'medium', 'high'].map(q => `<button data-q="${q}" class="${s.settings.quality === q ? 'on' : ''}">${{ low: 'Leve', medium: 'Médio', high: 'Alto' }[q]}</button>`).join('')}</div>
         <p class="note">FPS atual: ${Math.round(stage3d.fps)}</p>
+        <div class="section-title">Som</div><div class="filters"><button data-sound class="${s.settings.sound ? 'on' : ''}">Efeitos sonoros: ${s.settings.sound ? 'ligados' : 'desligados'}</button></div>
         ${game.perk('autosync') ? `<div class="filters"><button data-autosync class="${s.settings.autoSync ? 'on' : ''}">Sincronia automática: ${s.settings.autoSync ? 'ligada' : 'desligada'}</button></div>` : ''}
         <div class="section-title">Save</div>
         <div class="filters"><button data-export>Exportar save</button><button data-import>Importar save</button><button data-reset style="border-color:var(--bad)">Apagar tudo</button></div>
@@ -322,8 +334,8 @@ function bindPanel(root) {
     root.querySelectorAll('[data-slot]').forEach(el => el.onclick = () => { labPick.splice(Number(el.dataset.slot), 1); renderPanel(); });
     root.querySelectorAll('[data-sort]').forEach(el => el.onclick = () => { teamSort = el.dataset.sort; renderPanel(); });
     root.querySelectorAll('[data-sf]').forEach(el => el.onclick = () => { sanctFilter = el.dataset.sf; renderPanel(); });
-    root.querySelectorAll('[data-up]').forEach(el => el.onclick = () => { if (game.buyUpgrade(el.dataset.up)) { renderPanel(); updateHud(); } });
-    root.querySelectorAll('[data-perk]').forEach(el => el.onclick = () => { if (game.buyPerk(el.dataset.perk)) { renderPanel(); updateHud(); } });
+    root.querySelectorAll('[data-up]').forEach(el => el.onclick = () => { if (game.buyUpgrade(el.dataset.up)) { sfx('buy'); renderPanel(); updateHud(); } });
+    root.querySelectorAll('[data-perk]').forEach(el => el.onclick = () => { if (game.buyPerk(el.dataset.perk)) { sfx('buy'); renderPanel(); updateHud(); } });
     root.querySelectorAll('[data-orbs]').forEach(el => el.onclick = () => { if (game.buyOrbs(Number(el.dataset.orbs))) renderPanel(); });
     root.querySelectorAll('[data-policy]').forEach(el => el.onclick = () => { S().capturePolicy = el.dataset.policy; renderPanel(); });
     root.querySelectorAll('[data-q]').forEach(el => el.onclick = () => { S().settings.quality = el.dataset.q; stage3d.setQuality(el.dataset.q); renderPanel(); });
@@ -333,6 +345,7 @@ function bindPanel(root) {
     if (q('[data-exp-start]')) q('[data-exp-start]').onclick = () => { if (game.startExpedition()) { ctx = null; selectTab('arena'); log('Você entrou na Fenda. Boa sorte, domador.', 'prism'); } };
     if (q('[data-exp-quit]')) q('[data-exp-quit]').onclick = () => { game.endExpedition(false); ctx = null; };
     if (q('[data-collapse]')) q('[data-collapse]').onclick = () => confirmModal('Colapsar a Fenda?', `Você ganha ✦ ${game.collapseReward()} Estilhaços e recomeça do estágio ${1 + game.perk('warp') * 10}. Criaturas, Genodex e DNA ficam.`, 'COLAPSAR', () => { game.collapse(); ctx = null; renderPanel(); });
+    if (q('[data-sound]')) q('[data-sound]').onclick = () => { S().settings.sound = !S().settings.sound; setSound(S().settings.sound); renderPanel(); };
     if (q('[data-autosync]')) q('[data-autosync]').onclick = () => { S().settings.autoSync = !S().settings.autoSync; renderPanel(); };
     if (q('[data-export]')) q('[data-export]').onclick = () => { const code = game.exportSave(); openModal(`<h2>Exportar save</h2><p class="note">Copie o código e guarde.</p><textarea style="width:100%;height:140px;background:#0b0820;color:#fff;border-radius:10px;border:1px solid var(--line)" readonly>${code}</textarea><div class="modal-actions"><button data-copy>Copiar</button><button data-close class="primary">Fechar</button></div>`, (card) => { card.querySelector('[data-copy]').onclick = () => navigator.clipboard?.writeText(code); }); };
     if (q('[data-import]')) q('[data-import]').onclick = () => openModal(`<h2>Importar save</h2><textarea id="imp" style="width:100%;height:140px;background:#0b0820;color:#fff;border-radius:10px;border:1px solid var(--line)"></textarea><div class="modal-actions"><button data-close>Cancelar</button><button class="primary" data-do>Importar</button></div>`, (card) => { card.querySelector('[data-do]').onclick = () => { try { game = Game.importSave(card.querySelector('#imp').value); bindGame(); store.set(SAVE_KEY, game.serialize()); location.reload(); } catch { alert('Código inválido.'); } }; });
@@ -357,7 +370,7 @@ function openCreature(id) {
     const next = xpToNext(g.level);
     openModal(`<div class="detail"><img src="${portrait({ ...g, id: g.id + ':big' }, 256)}" alt=""><div>
         <h2>${nameHtml(g)}</h2><div class="types">${g.types.map(typeTag).join('')}</div>
-        <p class="note"><span class="rar" style="color:${rarity(g).color}">${rarity(g).name}</span> · ${BODY_INFO[g.body].name} · Geração ${g.gen}${g.mutated ? ' · Mutante' : ''}<br>Nível ${g.level} · XP ${fmt(g.xp)}/${fmt(next)}</p>
+        <p class="note"><span class="rar" style="color:${rarity(g).color}">${rarity(g).name}</span> · ${BODY_INFO[g.body].name} · Geração ${g.gen}${g.mutated ? ' · Mutante' : ''}<br>Nível ${g.level} · XP ${fmt(g.xp)}/${fmt(next)}<br>Forma ${evoStage(g) + 1}/3 ${[0, 1, 2].map(k => k === evoStage(g) ? '<b>' + formName(g.body, g.types[0], k) + '</b>' : formName(g.body, g.types[0], k)).join(' → ')}${evoStage(g) < 2 ? ` · evolui no Nv ${EVO_LEVELS[evoStage(g)]}` : ''}</p>
         <div class="stats-grid"><div><b>${fmt(st.hp)}</b>Vida</div><div><b>${fmt(st.atk)}</b>Ataque</div><div><b>${fmt(st.def)}</b>Defesa</div><div><b>${fmt(st.spd)}</b>Veloc.</div></div>
         <div class="section-title">Potencial genético</div>
         <div class="bars">${['hp', 'atk', 'def', 'spd'].map(k => `<span>${{ hp: 'Vida', atk: 'Atq', def: 'Def', spd: 'Vel' }[k]}</span><div class="b"><i style="width:${g.pot[k] / 31 * 100}%"></i></div><span>${g.pot[k]}/31</span>`).join('')}</div>
@@ -421,6 +434,7 @@ function fuseAnimation() {
 }
 
 // ---------- início ----------
+addEventListener('pointerdown', () => { unlockAudio(); setSound(S().settings.sound); }, { once: false, passive: true });
 function boot() {
     const s = S();
     const away = (Date.now() - s.lastTick) / 1000;

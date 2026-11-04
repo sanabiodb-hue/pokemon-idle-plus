@@ -27,6 +27,15 @@ export const RARITY_INDEX = Object.fromEntries(RARITIES.map((r, i) => [r.id, i])
 export const PRISMATIC_RATE = 1 / 512;          // mutação "prismática" (o nosso shiny): +25% em tudo e brilho iridescente
 export const MAX_LEVEL = 5000;
 
+// Evolução: a criatura muda de forma (tamanho, chifres, espinhos, asas, halo) e de nome nos níveis 30 e 90.
+export const EVO_LEVELS = [30, 90];
+export const EVO_MULT = [1, 1.12, 1.28];
+export function evoStage(g) { return g.level >= EVO_LEVELS[1] ? 2 : g.level >= EVO_LEVELS[0] ? 1 : 0; }
+export function formName(body, type, stage) {
+    if (!stage) return speciesName(body, type);
+    const r = makeRng('form:' + body + ':' + type + ':' + stage), sx = BODY_INFO[body].suffix;
+    return stage === 1 ? TYPE_PREFIX[type] + r.pick(['a', 'o', 'e', 'i']) + r.pick(sx) : TYPE_PREFIX[type] + r.pick(['ar', 'on', 'ex', 'yr']) + r.pick(sx) + r.pick(['', 'is', 'ion']);
+}
 export function speciesKey(g) { return g.body + ':' + g.types[0]; }
 export function speciesName(body, type) {
     const r = makeRng('sp:' + body + ':' + type);
@@ -87,10 +96,11 @@ export function statsOf(g, mods = {}) {
     const grow = (5 + L) * Math.pow(1.012, L) / 6;
     const s = (k, b) => (b * (1 + g.pot[k] / 62) * rm * grow);
     const atkM = (mods.atk || 1), hpM = (mods.hp || 1), defM = (mods.def || 1), spdM = (mods.spd || 1);
+    const evo = EVO_MULT[evoStage(g)];
     return {
-        hp: Math.round(s('hp', 320 * base.hp) * hpM),
-        atk: Math.round(s('atk', 50 * base.atk) * atkM),
-        def: Math.round(s('def', 50 * base.def) * defM),
+        hp: Math.round(s('hp', 320 * base.hp) * hpM * evo),
+        atk: Math.round(s('atk', 50 * base.atk) * atkM * evo),
+        def: Math.round(s('def', 50 * base.def) * defM * evo),
         spd: Math.round((50 * base.spd * (1 + g.pot.spd / 62) * (g.prismatic ? 1.1 : 1) + Math.min(L, 200) * 0.15) * spdM),
     };
 }
@@ -107,10 +117,11 @@ export function movesOf(g) {
 
 export function xpToNext(level) { return Math.floor(20 * Math.pow(level, 1.55) + 30); }
 export function addXp(g, amount) {
-    let ups = 0;
+    let ups = 0; const evo0 = evoStage(g);
     g.xp += amount;
     while (g.level < MAX_LEVEL && g.xp >= xpToNext(g.level)) { g.xp -= xpToNext(g.level); g.level++; ups++; }
     if (g.level >= MAX_LEVEL) g.xp = 0;
+    if (evoStage(g) > evo0) g.evolved = evoStage(g);       // marca para o jogo anunciar a evolução
     return ups;
 }
 
@@ -139,4 +150,4 @@ export function fuse(a, b, seed) {
     return child;
 }
 
-export function displayName(g) { return g.nick || g.name; }
+export function displayName(g) { return g.nick || formName(g.body, g.types[0], evoStage(g)); }

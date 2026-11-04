@@ -8,6 +8,7 @@ import { buildCreature, animateCreature, disposeCreature } from './creature.js';
 import { buildIsland, makeSky, PALETTES } from './world.js';
 import { TYPE_INFO } from '../data.js';
 import { makeRng } from '../rng.js';
+import { evoStage } from '../genome.js';
 
 export class Stage3D {
     constructor(canvas, opts = {}) {
@@ -48,6 +49,7 @@ export class Stage3D {
         const flipped = this.w && ((this.h > this.w) !== (h > w));
         this.renderer.setSize(w, h, false); this.composer.setSize(w, h);
         this.camera.aspect = w / h; this.camera.fov = w < h ? 58 : 46; this.camera.updateProjectionMatrix();
+        if (this.panelOffset !== undefined) setTimeout(() => this._applyOffset());
         this.w = w; this.h = h;
         if (flipped && this.mode === 'battle' && this.opts.onLayout) this.opts.onLayout();     // girou o aparelho: refaz a formação
     }
@@ -101,6 +103,9 @@ export class Stage3D {
         });
     }
     focusOn(id) { this.focus = id; }
+    // desloca o centro óptico quando um painel lateral cobre parte da tela (PC): a arena fica centrada no espaço livre
+    setPanelOffset(px) { this.panelOffset = px; this._applyOffset(); }
+    _applyOffset() { const o = this.panelOffset || 0; if (o && this.w > 720) this.camera.setViewOffset(this.w, this.h, o / 2, 0, this.w, this.h); else this.camera.clearViewOffset(); this.camera.updateProjectionMatrix(); }
 
     // ---------- efeitos ----------
     _burst(pos, color, count = 26, power = 3, size = 0.12) {
@@ -212,7 +217,7 @@ export class Stage3D {
 let portraitRenderer = null, portraitScene = null, portraitCam = null;
 const portraitCache = new Map();
 export function portrait(g, size = 128) {
-    const key = g.id + ':' + g.prismatic + ':' + size;
+    const key = g.id + ':' + g.prismatic + ':' + evoStage(g) + ':' + size;
     if (portraitCache.has(key)) return portraitCache.get(key);
     if (!portraitRenderer) {
         const c = document.createElement('canvas'); c.width = c.height = size;

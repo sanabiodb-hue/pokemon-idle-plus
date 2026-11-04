@@ -2,7 +2,7 @@
 // prestígio (Colapso da Fenda), progresso offline por simulação real e save. Sem DOM e sem Three.js: testável no Node.
 import { makeRng, hashStr } from './rng.js';
 import { TYPES, TYPE_INFO, RELICS, TIDES } from './data.js';
-import { createGenome, statsOf, power, addXp, fuse, RARITIES, RARITY_INDEX, ALL_SPECIES, speciesKey, BODIES, MAX_LEVEL } from './genome.js';
+import { createGenome, statsOf, power, addXp, fuse, RARITIES, RARITY_INDEX, ALL_SPECIES, speciesKey, BODIES, MAX_LEVEL, evoStage, displayName } from './genome.js';
 import { createBattle, simulate } from './battle.js';
 
 export const SAVE_KEY = 'riftTamers.save.v1';
@@ -43,9 +43,34 @@ export const PERK_DEFS = [
     { id: 'catcher', name: 'Mãos de Domador', desc: '+20% de chance de captura por nível', base: 2, growth: 1.45, max: 10 },
 ];
 
+// Conquistas: recompensas automáticas por marcos (retenção de longo prazo).
+export const ACHIEVEMENTS = [
+    { id: 'win1', name: 'Primeiro sangue', desc: 'Vença uma batalha', test: (s) => s.stats.wins >= 1, reward: { orbs: 10 } },
+    { id: 'zone1', name: 'Bosque vencido', desc: 'Passe do estágio 25', test: (s) => s.maxStageEver > 25, reward: { keys: 1, orbs: 15 } },
+    { id: 'stage50', name: 'Mergulho na Fenda', desc: 'Alcance o estágio 50', test: (s) => s.maxStageEver >= 50, reward: { shards: 2 } },
+    { id: 'stage100', name: 'Centenário', desc: 'Alcance o estágio 100', test: (s) => s.maxStageEver >= 100, reward: { shards: 8 } },
+    { id: 'stage250', name: 'Coração da Fenda', desc: 'Complete as 10 zonas (estágio 250)', test: (s) => s.maxStageEver > 250, reward: { shards: 40 } },
+    { id: 'cap10', name: 'Domador', desc: 'Capture 10 criaturas', test: (s) => s.stats.captures >= 10, reward: { orbs: 25 } },
+    { id: 'cap100', name: 'Mestre domador', desc: 'Capture 100 criaturas', test: (s) => s.stats.captures >= 100, reward: { orbs: 100, dna: 200 } },
+    { id: 'dex15', name: 'Catalogador', desc: '15 espécies no Genodex', test: (s, g) => g.dexCount() >= 15, reward: { shards: 2 } },
+    { id: 'dex30', name: 'Naturalista', desc: '30 espécies no Genodex', test: (s, g) => g.dexCount() >= 30, reward: { shards: 6 } },
+    { id: 'dex60', name: 'Genodex completo', desc: 'Todas as 60 espécies', test: (s, g) => g.dexCount() >= 60, reward: { shards: 30 } },
+    { id: 'prism1', name: 'Luz prismática', desc: 'Obtenha uma criatura prismática', test: (s) => s.stats.prismatics >= 1, reward: { shards: 5 } },
+    { id: 'fuse1', name: 'Geneticista', desc: 'Faça uma fusão', test: (s) => s.stats.fusions >= 1, reward: { dna: 60 } },
+    { id: 'fuse10', name: 'Arquiteto da vida', desc: 'Faça 10 fusões', test: (s) => s.stats.fusions >= 10, reward: { shards: 5 } },
+    { id: 'evo1', name: 'Metamorfose', desc: 'Evolua uma criatura (nível 30)', test: (s) => s.creatures.some(c => evoStage(c) >= 1), reward: { orbs: 20 } },
+    { id: 'evo2', name: 'Forma final', desc: 'Leve uma criatura à forma final (nível 90)', test: (s) => s.creatures.some(c => evoStage(c) >= 2), reward: { shards: 4 } },
+    { id: 'col1', name: 'Recomeço', desc: 'Faça o primeiro Colapso', test: (s) => s.stats.collapses >= 1, reward: { keys: 1 } },
+    { id: 'col5', name: 'Ciclo eterno', desc: 'Faça 5 Colapsos', test: (s) => s.stats.collapses >= 5, reward: { shards: 15 } },
+    { id: 'floor10', name: 'Explorador da Fenda', desc: 'Vença os 10 andares de uma expedição', test: (s) => s.stats.bestFloor >= 10, reward: { shards: 6, keys: 1 } },
+    { id: 'legend', name: 'Lenda viva', desc: 'Tenha uma criatura lendária ou mítica', test: (s) => s.creatures.some(c => RARITY_INDEX[c.rarity] >= 3), reward: { dna: 150 } },
+];
+export const rewardText = (r) => Object.entries(r).map(([k, v]) => ({ orbs: '● ', shards: '✦ ', dna: '⧉ ', keys: '⟁ ' }[k] + v)).join('  ');
+
 export const fmt = (n) => {
     if (!Number.isFinite(n)) return '∞';
     const a = Math.abs(n);
+    if (a < 10 && a !== Math.floor(a)) return (Math.floor(n * 10) / 10).toString();
     if (a < 1000) return String(Math.floor(n));
     const u = ['K', 'M', 'B', 'T', 'Qa', 'Qi', 'Sx', 'Sp', 'Oc', 'No', 'Dc'];
     let i = -1, x = a;
@@ -62,8 +87,8 @@ export function newState(seed = 'rift-' + Date.now()) {
         stage: 1, maxStage: 1, maxStageEver: 1, farmUntil: 0, pushTimer: 0, autoPush: true,
         creatures: [], team: [], upgrades: {}, perks: {}, dex: {}, rng: hashStr(seed),
         stats: { battles: 0, wins: 0, captures: 0, prismatics: 0, fusions: 0, collapses: 0, bestFloor: 0, playSeconds: 0, offlineSeconds: 0 },
-        expedition: null, capturePolicy: 'smart', starterChosen: false, log: [],
-        settings: { quality: 'high', autoSync: true, sound: false },
+        expedition: null, capturePolicy: 'smart', starterChosen: false, log: [], achievements: {},
+        settings: { quality: 'high', autoSync: true, sound: true },
     };
 }
 
@@ -209,7 +234,10 @@ export class Game {
             out.essence = this.essencePerWin(stage); s.essence += out.essence;
             out.xp = this.xpPerWin(stage);
             const team = this.teamGenomes(), share = Math.ceil(out.xp / Math.max(1, team.length));
-            for (const g of team) out.levelUps += addXp(g, share);
+            for (const g of team) {
+                out.levelUps += addXp(g, share);
+                if (g.evolved) { const st = g.evolved; delete g.evolved; out.evolved = (out.evolved || []).concat(g); if (!opts.silent) { this.log(`${g.name} evoluiu para ${displayName(g)}!`, 'prism'); this.emit('evolve', { g, stage: st }); } }
+            }
             if (this.isBoss(stage)) { s.orbs += 3; if (s.keys < MAX_KEYS && stage % 50 === 0) s.keys++; }
             out.captured = this._tryCaptures(enemies, opts.silent);
             if (s.farmUntil > 0) {
@@ -315,6 +343,7 @@ export class Game {
             t = total;
         }
         s.stats.offlineSeconds += total;
+        this.checkAchievements();
         return this._offlineSummary(before, levelsBefore, total, battles, wins);
     }
     _offlineSummary(before, levelsBefore, seconds, battles, wins) {
@@ -324,6 +353,17 @@ export class Game {
             captures: s.stats.captures - before.captures, prismatics: s.stats.prismatics - before.prism,
             levels: this.teamGenomes().reduce((a, g) => a + g.level, 0) - levelsBefore,
         };
+    }
+
+    checkAchievements() {
+        const got = [];
+        for (const a of ACHIEVEMENTS) {
+            if (this.s.achievements[a.id] || !a.test(this.s, this)) continue;
+            this.s.achievements[a.id] = Date.now();
+            for (const [k, v] of Object.entries(a.reward)) this.s[k] = (this.s[k] || 0) + v;
+            got.push(a); this.emit('achievement', a);
+        }
+        return got;
     }
 
     // ---------- melhorias e perks ----------
