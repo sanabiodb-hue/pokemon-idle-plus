@@ -61,7 +61,7 @@ class Explore3D {
     }
     // F10.3: folhas saltando ao pisar no mato alto
     rustle(x, z) { this._burst(new this.T.Vector3(x, 0.25, z), '#3fae55', 10, 1.4); }
-    isAnimating() { return this.fx.length > 0 || this.shakeT > 0; }
+    isAnimating() { return this.fx.length > 0 || this.shakeT > 0 || (!!this.roamers && [...this.roamers.values()].some(g => g.userData.k < 1)); }
     _lights(scene, shadows) {
         const T = this.T, cast = shadows && this.q.shadows !== 'blob', wide = this.q.shadows === 'static' ? 26 : 16;
         const hemi = new T.HemisphereLight(0xdfefff, 0x3a3a2a, this.q.shadows === 'blob' ? 1.45 : 1.25); scene.add(hemi); scene.userData.hemi = hemi; scene.userData.hemiBase = hemi.intensity;
@@ -91,7 +91,7 @@ class Explore3D {
         const T = this.T;
         this._clear(this.world);
         this._lights(this.world, true);
-        this.map = map; this._shadowAt = null; this.npcs = new Map(); this.items = new Map(); this.renderer.shadowMap.needsUpdate = true;
+        this.map = map; this._shadowAt = null; this.npcs = new Map(); this.items = new Map(); this.roamers = new Map(); this.renderer.shadowMap.needsUpdate = true;
         const W = map.width, H = map.height;
         const groundChar = (ch) => EXPLORE_GROUND_COLORS[ch] ? ch : (WORLD_LEGEND[ch] && WORLD_LEGEND[ch].kind === 'object' ? this._groundUnder(map) : '.');
         // chão: uma malha com cor por vértice (cada célula = 2 triângulos próprios, cores nítidas por tile)
@@ -274,6 +274,16 @@ class Explore3D {
         this._walkAnim(g, moving, dt);
     }
     npc(id) { return this.npcs ? this.npcs.get(id) : null; }
+    // F10.6: selvagens visíveis (sprite do jogo com sombra; pulinho ao andar; faíscas nos brilhantes)
+    addRoamer(id, speciesId, shiny, x, y) {
+        const T = this.T, g = new T.Group(), spr = this.pokemonSprite(speciesId, shiny, 1.15);
+        const sh = new T.Mesh(new T.CircleGeometry(0.32, 12), new T.MeshBasicMaterial({ color: 0, transparent: true, opacity: 0.28, depthWrite: false })); sh.rotation.x = -Math.PI / 2; sh.position.y = 0.02;
+        g.add(spr, sh); g.position.set(x + 0.5, 0, y + 0.5); g.userData = { spr, from: g.position.clone(), to: g.position.clone(), k: 1, shiny, sparkT: 0, phase: Math.random() * 6 };
+        this.world.add(g); (this.roamers ||= new Map()).set(id, g); return g;
+    }
+    moveRoamer(id, x, y) { const g = this.roamers && this.roamers.get(id); if (!g) return; g.userData.from = g.position.clone(); g.userData.to = new this.T.Vector3(x + 0.5, 0, y + 0.5); g.userData.k = 0; }
+    removeRoamer(id, poof) { const g = this.roamers && this.roamers.get(id); if (!g) return; if (poof) this._burst(g.position.clone().add(new this.T.Vector3(0, 0.6, 0)), '#ffffff', 16, 1.8); this.world.remove(g); this.roamers.delete(id); }
+    clearRoamers() { for (const id of [...(this.roamers || new Map()).keys()]) this.removeRoamer(id, false); }
     setItems(list) {
         for (const m of (this.items || new Map()).values()) this.world.remove(m);
         this.items = new Map();
@@ -448,6 +458,12 @@ class Explore3D {
         }
         if (this.windU) this.windU.value = this.t;
         for (const a of this.anim || []) { if (a.liquid) a.liquid.emissiveIntensity = (a.lava ? 1.2 : 0.3) + Math.sin(this.t * 2) * 0.15; if (a.glow) a.glow.emissiveIntensity = 1 + Math.sin(this.t * 3) * 0.4; }
+        if (this.roamers) for (const g of this.roamers.values()) {
+            const u = g.userData;
+            if (u.k < 1) { u.k = Math.min(1, u.k + dt * 2.2); g.position.lerpVectors(u.from, u.to, u.k); u.spr.position.y = Math.sin(u.k * Math.PI) * 0.18; }
+            else u.spr.position.y = Math.abs(Math.sin(this.t * 2 + u.phase)) * 0.03;
+            if (u.shiny && (u.sparkT -= dt) <= 0) { u.sparkT = 0.9; this._burst(g.position.clone().add(new this.T.Vector3(0, 0.9, 0)), '#fff7a0', 8, 1.2); }
+        }
         if (this.items) for (const b of this.items.values()) { b.rotation.y += dt * 1.5; b.position.y = 0.2 + Math.sin(this.t * 2.5 + b.userData.phase) * 0.05; }
         if (this.pad) { this.pad.rotation.z += dt * 1.5; this.pad.material.opacity = 0.6 + Math.sin(this.t * 4) * 0.25; }
         const portrait = this.h > this.w;

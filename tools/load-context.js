@@ -128,7 +128,7 @@ function loadGameContext(opts = {}) {
   EXPLORE, ExploreBattle, exploreMoveset, explorePp, exploreSkillLevelFor, exploreEncounterCell, exploreStepEncounter, exploreCaptureChance, exploreShakes, exploreRunChance, getWorldMap, worldCreateState, worldStep, worldMoveBy, WORLD_TILE_SIZE,
   EXPLORE_QUALITY, EXPLORE_QUALITY_ORDER, EXPLORE_CHUNK_SIZE, EXPLORE_AUTO_WINDOW_MS, EXPLORE_AUTO_MIN_FPS, exploreQualityPreset, exploreQualityLower, exploreQualityNext, exploreDefaultQuality, explorePixelRatio, exploreChunks, exploreAutoDowngrade, ExploreFrameGovernor,
   EXPLORE_TRAINER_CLASSES, EXPLORE_SIGHT, EXPLORE_ITEM_TABLE, exploreTrainerSpots, exploreTrainerCount, exploreTrainerSees, exploreCollisionMap, exploreTrainerTeam, exploreTrainerPrize, exploreItemSpots, exploreItemCount, worldCellBlocked, worldHuntMap, WORLD_LEGEND,
-  EXPLORE_DAY_PHASES, exploreDayPhase, EXPLORE_TRACKS, exploreTrackLength, exploreNote, ExploreMusic, sanitizeExploreState, EXPLORE_SAVE_MAX, EXPLORE_MAPS, EXPLORE_BADGES, exploreMapById, exploreFixedTeam, worldFindPath, worldInteractionNear
+  EXPLORE_DAY_PHASES, exploreDayPhase, EXPLORE_TRACKS, exploreTrackLength, exploreNote, ExploreMusic, sanitizeExploreState, EXPLORE_SAVE_MAX, EXPLORE_MAPS, EXPLORE_BADGES, exploreMapById, exploreFixedTeam, worldFindPath, worldInteractionNear, exploreEncounterCells, exploreRoamerCount, exploreRoamerSpawnCell, exploreRoamerStep
 })`;
     const ctx = vm.runInContext(code, vm.createContext(sandbox), { filename: 'game' });
     ctx.storage = storage;

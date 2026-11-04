@@ -234,6 +234,7 @@ class ExploreView {
         this.npcs = exploreTrainerSpots(map, exploreTrainerCount(map)).map(t => ({ ...t, colors: t.klass.colors }));
         this.items = exploreItemSpots(map, exploreItemCount(map)).filter(i => !this.taken.has(i.id));
         this._rebuildCollision(); this.e3d.setNpcs(this.npcs); this.e3d.setItems(this.items); this.cut = null; this._bang(null);
+        this._spawnRoamers();
         this._applyPhase(); if (this.open) { this._areaMusic(); this._savePosition(); }
         this._renderParty();
     }
@@ -248,6 +249,43 @@ class ExploreView {
         return { map, at };
     }
     _savePosition() { if (this.map && this.state && this.mode !== 'battle') this.game.exploreSetPosition({ map: this.map.id, x: this.state.x, y: this.state.y, dir: this.state.dir }); }
+    // ---------------- F10.6 · selvagens visíveis ----------------
+    _spawnRoamers() {
+        this.roamers = []; this._rid = (this._rid || 0); this._roamT = 0; this._respawnAt = [];
+        this.encCells = exploreEncounterCells(this.map);
+        const n = exploreRoamerCount(this.map);
+        for (let i = 0; i < n; i++) this._spawnRoamer();
+    }
+    _spawnRoamer() {
+        if (!this.map || this.map.type === 'city') return;
+        const c = this._cell(), cell = exploreRoamerSpawnCell(this.map, this.encCells, c, this.roamers.map(r => [r.x, r.y]), () => this.game.rng());
+        if (!cell) return;
+        const wild = this.game.exploreWild(this._route()); if (!wild) return;
+        const r = { id: 'r' + (++this._rid), wild, x: cell[0], y: cell[1] };
+        this.roamers.push(r); this.e3d.addRoamer(r.id, wild.id, !!wild.isShiny, r.x, r.y);
+    }
+    // a cada ~0,9 s cada selvagem talvez dê um passo; os que sumiram renascem depois de EXPLORE.roamerRespawnMs
+    _tickRoamers(dt) {
+        if (!this.roamers || this.mode !== 'world') return;
+        this._roamT += dt;
+        if (this._roamT >= 0.9) {
+            this._roamT = 0;
+            const rng = () => this.game.rng();
+            for (const r of this.roamers) { const [nx, ny] = exploreRoamerStep(this.map, r.x, r.y, rng); if (nx !== r.x || ny !== r.y) { r.x = nx; r.y = ny; this.e3d.moveRoamer(r.id, nx, ny); } }
+            this._touchRoamer();
+        }
+        const now = performance.now();
+        while (this._respawnAt.length && this._respawnAt[0] <= now) { this._respawnAt.shift(); this._spawnRoamer(); }
+    }
+    _touchRoamer() {
+        if (!this.roamers || this.mode !== 'world' || this.dialogLines) return false;
+        const c = this._cell(), r = this.roamers.find(x => x.x === c.x && x.y === c.y);
+        if (!r) return false;
+        this.roamers = this.roamers.filter(x => x !== r); this.e3d.removeRoamer(r.id, true);
+        this._respawnAt.push(performance.now() + EXPLORE.roamerRespawnMs);
+        this._encounter(r.wild);
+        return true;
+    }
     _rebuildCollision() { this.cmap = exploreCollisionMap(this.map, (this.npcs || []).map(n => ({ x: n.x, y: n.y }))); }
     _cell() { return { x: Math.floor(this.state.x / WORLD_TILE_SIZE), y: Math.floor(this.state.y / WORLD_TILE_SIZE) }; }
     // item pisado: entrega pelo núcleo (limites do inventário, ouro pelo portão) e avisa
@@ -362,6 +400,7 @@ class ExploreView {
         const dt = dtMs / 1000;
         if (this.mode === 'world' && !this.dialogLines && this.map) this._move(dtMs);
         if (this.mode === 'cutscene') this._cutscene(dt);
+        this._tickRoamers(dt);
         this._phaseCheck += dt; if (this._phaseCheck > 30) { this._phaseCheck = 0; if (this.mode !== 'battle') this._applyPhase(); }
         if ((this.mode === 'world' || this.mode === 'cutscene' || this.mode === 'shop') && this.state) this.e3d.setTrainer(this.state, dt, this.running);
         // F10.1: algo se mexe (treinador, efeitos, animação de batalha) → teto de FPS do preset; parado → FPS de repouso.
@@ -408,9 +447,9 @@ class ExploreView {
         if (this._checkTransitions()) return;
         const stepped = Math.floor(next.distance / WORLD_TILE_SIZE) !== Math.floor(prev.distance / WORLD_TILE_SIZE);
         if (stepped) { const c = this._cell(); if (this.map.rows[c.y] && this.map.rows[c.y][c.x] === 'w') { this.e3d.rustle(next.x / WORLD_TILE_SIZE, next.y / WORLD_TILE_SIZE); this._sfx('rustle'); } }
-        if (stepped || !next.moving) { if (this._pickItem()) return; if (this._spotted()) return; }
+        if (stepped || !next.moving) { if (this._pickItem()) return; if (this._spotted()) return; if (this._touchRoamer()) return; }
         if (this.grace > 0) { this.grace -= (next.distance - prev.distance) / WORLD_TILE_SIZE; return; }
-        const enc = exploreStepEncounter(this.map, prev, next, () => this.game.rng());
+        const enc = exploreStepEncounter(this.map, prev, next, () => this.game.rng(), this.roamers && this.roamers.length ? EXPLORE.roamerRandomMult : 1);
         if (enc) this._encounter();
     }
     _tapTo(clientX, clientY) {
@@ -454,8 +493,8 @@ class ExploreView {
     }
 
     // ---------------- batalha ----------------
-    _encounter() {
-        const route = this._route(), wild = this.game.exploreWild(route);
+    _encounter(seen) {
+        const route = this._route(), wild = seen || this.game.exploreWild(route);
         if (!wild) return;
         const battle = new ExploreBattle(this.game, wild, { keep: this.keep });
         if (!battle.canFight()) { this.grace = 4; this._dialog(['Um Pokémon selvagem apareceu, mas seus Pokémon estão sem forças!', 'Volte ao Centro Pokémon na Cidade Inicial para curá-los.']); return; }

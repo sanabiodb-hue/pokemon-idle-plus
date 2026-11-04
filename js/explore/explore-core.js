@@ -61,12 +61,12 @@ function exploreEncounterCell(map, cx, cy) {
     return null;
 }
 // Sorteio de encontro ao completar um passo (tile). `prev`/`next`: estados do motor (distance em px). rng: () => [0,1).
-function exploreStepEncounter(map, prev, next, rng) {
+function exploreStepEncounter(map, prev, next, rng, rateMult = 1) {
     const steps = Math.floor(next.distance / WORLD_TILE_SIZE) - Math.floor(prev.distance / WORLD_TILE_SIZE);
     if (steps <= 0) return null;
     const kind = exploreEncounterCell(map, Math.floor(next.x / WORLD_TILE_SIZE), Math.floor(next.y / WORLD_TILE_SIZE));
     if (!kind) return null;
-    const rate = kind === 'grass' ? EXPLORE.grassRate : EXPLORE.groundRate;
+    const rate = (kind === 'grass' ? EXPLORE.grassRate : EXPLORE.groundRate) * rateMult;
     for (let i = 0; i < steps; i++) if (rng() < rate) return kind;
     return null;
 }
@@ -360,6 +360,30 @@ function exploreItemSpots(map, count) {
     return out;
 }
 function exploreItemCount(map) { return map && map.type !== 'city' ? Math.max(3, Math.min(6, Math.round(map.width * map.height / 900))) : 0; }
+
+// ---------------- F10.6 · Pokémon selvagens visíveis (como em Let's Go) ----------------
+// Andam só pelas células de encontro (mato alto, ou o chão dos biomas sem grama). Encostar num deles começa a batalha com ele.
+// Com eles no mapa, o sorteio aleatório por passo cai para EXPLORE.roamerRandomMult da chance normal.
+EXPLORE.roamerRandomMult = 0.5;
+EXPLORE.roamerRespawnMs = 8000;
+function exploreEncounterCells(map) {
+    const out = [];
+    if (!map) return out;
+    for (let y = 0; y < map.height; y++) for (let x = 0; x < map.width; x++) if (exploreEncounterCell(map, x, y)) out.push([x, y]);
+    return out;
+}
+function exploreRoamerCount(map) { const n = exploreEncounterCells(map).length; return n ? Math.max(2, Math.min(7, Math.round(n / 35))) : 0; }
+// Célula para um selvagem nascer: de encontro, livre e longe do jogador (>= 4 tiles). rng: () => [0,1). Devolve [x, y] ou null.
+function exploreRoamerSpawnCell(map, cells, player, taken, rng) {
+    const free = cells.filter(([x, y]) => Math.abs(x - player.x) + Math.abs(y - player.y) >= 4 && !taken.some(t => t[0] === x && t[1] === y));
+    return free.length ? free[Math.floor(rng() * free.length)] : null;
+}
+// Próximo passo: uma célula vizinha que também seja de encontro (ou fica parado). Puro.
+function exploreRoamerStep(map, x, y, rng) {
+    const opts = [[1, 0], [-1, 0], [0, 1], [0, -1]].map(([dx, dy]) => [x + dx, y + dy]).filter(([nx, ny]) => exploreEncounterCell(map, nx, ny));
+    if (!opts.length || rng() < 0.35) return [x, y];
+    return opts[Math.floor(rng() * opts.length)];
+}
 
 // ---------------- F10.5 · Cidade de Viridian e o primeiro Ginásio (mapas só do modo Explorar) ----------------
 // Mesmo formato dos mapas do mundo (ASCII + WORLD_LEGEND, sem letras novas). `gym` marca a área do prédio (desenhada pela cena 3D);

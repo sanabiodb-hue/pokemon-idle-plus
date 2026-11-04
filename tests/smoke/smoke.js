@@ -1538,6 +1538,19 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
             check('Rotas vivas: a Loja Pokémon (Depot) vende pela compra oficial (1 bola = 1 preço)', shop && m1.n === m0.n + 1 && m1.g === m0.g - m0.price, JSON.stringify({ m0, m1 }));
             await page.click('#explore .ex-leave').catch(() => {}); await sleep(200); await talk();
             await page.evaluate(() => { game.gameState.currentRoute = 'kanto_route1'; gameUI.exploreView._goTo('route', null); });
+            // F10.6: selvagens visíveis no mato da rota; encostar num deles começa a batalha com aquele Pokémon
+            const roam = await page.evaluate(() => { const v = gameUI.exploreView; return { n: v.roamers.length, inGrass: v.roamers.every(r => exploreEncounterCell(v.map, r.x, r.y) === 'grass'), meshes: v.e3d.roamers ? v.e3d.roamers.size : 0 }; });
+            check('Selvagens visíveis: andam pelo mato alto da rota (um sprite 3D para cada)', roam.n >= 2 && roam.inGrass && roam.meshes === roam.n, JSON.stringify(roam));
+            const want = await page.evaluate(() => { const v = gameUI.exploreView, r = v.roamers[0]; v.state = { ...v.state, x: r.x * 16 + 8, y: r.y * 16 + 13 }; v._touchRoamer(); return r.wild.id; });
+            await page.waitForSelector('#explore [data-m="fight"]', { timeout: 20000 }).catch(() => {});
+            const met = await page.evaluate(() => ({ foe: gameUI.exploreView.battle && gameUI.exploreView.battle.foe.speciesId, left: gameUI.exploreView.roamers.length }));
+            check('Selvagens visíveis: encostar abre a batalha com o mesmo Pokémon e ele some do mapa', met.foe === want && met.left === roam.n - 1, JSON.stringify({ want, ...met }));
+            for (let i = 0; i < 14; i++) {
+                const st = await page.evaluate(() => { const v = gameUI.exploreView; return v.mode === 'world' && !v.battle ? (v.dialogLines ? 'dialog' : 'world') : v.dialogLines ? 'dialog' : v.busy ? 'busy' : 'menu'; });
+                if (st === 'world') break;
+                if (st === 'dialog') await page.keyboard.press('Enter'); else if (st === 'menu') await page.click('#explore [data-m="run"]').catch(() => {});
+                await sleep(st === 'busy' ? 800 : 350);
+            }
             const npc = await page.evaluate(() => { const v = gameUI.exploreView, n = v.npcs[0], d = { up: [0, -1], down: [0, 1], left: [-1, 0], right: [1, 0] }[n.dir], px = n.x + d[0] * 3, py = n.y + d[1] * 3, side = d[0] ? [0, -1] : [-1, 0]; v.state = { ...v.state, x: (px + side[0]) * 16 + 8, y: (py + side[1]) * 16 + 13 }; v.grace = 99; return { id: n.id, key: d[0] ? 'ArrowDown' : 'ArrowRight' }; });
             await page.keyboard.down(npc.key); await sleep(450); await page.keyboard.up(npc.key);
             const spotted = await page.waitForFunction(() => gameUI.exploreView.mode === 'cutscene' || !!gameUI.exploreView.dialogLines, null, { timeout: 8000 }).then(() => true, () => false);
