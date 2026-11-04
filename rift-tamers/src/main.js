@@ -1,10 +1,11 @@
 // Rift Tamers — cola do jogo: loop, batalhas ao vivo em 3D, painéis, modais, save e progresso offline.
-import { Game, newState, SAVE_KEY, ZONES, ZONE_LEN, UPGRADES, PERK_DEFS, upgradeCost, fmt, COLLAPSE_MIN_STAGE, EXPEDITION_UNLOCK, EXPEDITION_FLOORS, MAX_KEYS, KEY_PERIOD_S, BATTLE_OVERHEAD, ACHIEVEMENTS, rewardText } from './game.js';
+import { Game, newState, SAVE_KEY, ZONES, ZONE_LEN, UPGRADES, PERK_DEFS, upgradeCost, fmt, COLLAPSE_MIN_STAGE, EXPEDITION_UNLOCK, EXPEDITION_FLOORS, MAX_KEYS, KEY_PERIOD_S, BATTLE_OVERHEAD, ACHIEVEMENTS, rewardText, GOAL_ORDER } from './game.js';
 import { sfx, unlockAudio, setSound } from './sfx.js';
 import { step, triggerSync, SYNC_MAX, alive } from './battle.js';
 import { TYPE_INFO, TYPES, RELICS, STATUS_INFO, multiEffectiveness } from './data.js';
 import { statsOf, power, movesOf, RARITIES, RARITY_INDEX, ALL_SPECIES, speciesName, displayName, xpToNext, BODY_INFO, evoStage, EVO_LEVELS, formName } from './genome.js';
 import { Stage3D, portrait } from './render/scene.js';
+import { createHunt } from './hunt.js';
 
 const $ = (s, r = document) => r.querySelector(s);
 const esc = (s) => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -38,6 +39,7 @@ const ctxCreatures = new Map();      // genomas fora do save (iniciais, inimigos
 
 // ---------- batalha ao vivo ----------
 let ctx = null;           // { kind: 'stage'|'exp', battle, enemies, stage, endAt }
+let lowFps = 0;
 let view = 'arena', speed = 1, lastFrame = performance.now(), saveTimer = 0, hudTimer = 0, achTimer = 2;
 const unitEls = new Map();
 
@@ -46,15 +48,20 @@ function startBattle() {
     if (S().expedition && !S().expedition.choices) {
         const r = game.makeExpeditionBattle(); if (!r) { ctx = null; return; }
         ctx = { kind: 'exp', battle: r.battle, enemies: r.enemies, floor: S().expedition.floor };
-        stage3d.setIsland('rift', S().expedition.seed);
+        if (view === 'arena') stage3d.setIsland('rift', S().expedition.seed);
     } else if (S().expedition) { ctx = null; return; }
     else {
         const r = game.makeStageBattle();
         ctx = { kind: 'stage', battle: r.battle, enemies: r.enemies, stage: r.stage };
-        if (view !== 'sanctuary') stage3d.setIsland(game.zoneOf(r.stage).type, S().seed + ':z' + Math.floor((r.stage - 1) / ZONE_LEN));
+        if (r.stage !== lastBannerStage) {
+            if ((r.stage - 1) % ZONE_LEN === 0 && r.stage > 1) banner(game.zoneOf(r.stage).name, 'Nova zona · ' + TYPE_INFO[game.zoneOf(r.stage).type].name, TYPE_INFO[game.zoneOf(r.stage).type].color);
+            else if (game.isBoss(r.stage)) banner('CHEFE', 'Estágio ' + r.stage + ' · vida ×2,2', '#ffcf5a');
+            lastBannerStage = r.stage;
+        }
+        if (view === 'arena') stage3d.setIsland(game.zoneOf(r.stage).type, S().seed + ':z' + Math.floor((r.stage - 1) / ZONE_LEN));
     }
     for (const e of ctx.enemies) ctxCreatures.set(e.id, e);
-    if (view !== 'sanctuary') showBattleMeshes();
+    if (view === 'arena') showBattleMeshes();
 }
 function showBattleMeshes() {
     if (!ctx) { stage3d.clearCreatures(); clearUnits(); return; }
@@ -75,7 +82,7 @@ function buildUnits() {
     }
 }
 function updateUnits() {
-    if (!ctx || view === 'sanctuary') return;
+    if (!ctx || view !== 'arena') return;
     const anchors = stage3d.anchors();
     for (const u of ctx.battle.units) {
         const el = unitEls.get(u.id), a = anchors[u.id]; if (!el || !a) continue;
@@ -88,13 +95,15 @@ function updateUnits() {
     }
 }
 function onPopup(text, mesh, kind, e) {
-    if (view === 'sanctuary') return;
+    if (view === 'sanctuary' || (view === 'hunt' && !hunt.inBattle())) return;
+    if (view === 'hunt') e = null;
     if (e && e.tier === 'ult') sfx('ult'); else if (kind === 'crit' || kind === 'super' || kind === 'hit') sfx(kind, { pitch: 0.8 + Math.random() * 0.4 });
     const a = stage3d.anchor(mesh, 1.6); if (!a.visible) return;
     const el = document.createElement('div');
     el.className = 'pop ' + kind;
     el.textContent = typeof text === 'number' ? fmt(text) + (kind === 'crit' ? '!' : '') : kind === 'status' ? (STATUS_INFO[text]?.name || text) : text;
     el.style.left = (a.x + (Math.random() - 0.5) * 40) + 'px'; el.style.top = a.y + 'px';
+    if (kind === 'super' || kind === 'weak') { const sm = document.createElement('small'); sm.textContent = kind === 'super' ? 'SUPER EFETIVO' : 'pouco efetivo'; sm.style.cssText = 'display:block;font-size:9px;letter-spacing:1px;text-align:center'; el.appendChild(sm); }
     $('#overlay').appendChild(el); setTimeout(() => el.remove(), 1000);
 }
 function finishBattle() {
@@ -119,7 +128,7 @@ function frame() {
     if (ctx && !ctx.endAt) {
         if (game.perk('autosync') && S().settings.autoSync && ctx.battle.sync >= SYNC_MAX) triggerSync(ctx.battle);
         const ev = step(ctx.battle, dt * speed);
-        if (view !== 'sanctuary') {
+        if (view === 'arena') {
             stage3d.playEvents(ev);
             for (const e of ev) { if (e.t === 'faint') sfx('faint'); else if (e.t === 'sync') sfx('sync'); else if (e.t === 'end') sfx(e.result === 'A' ? 'win' : 'lose'); }
         }
@@ -127,6 +136,10 @@ function frame() {
     } else if (ctx && ctx.endAt && now >= ctx.endAt) { finishBattle(); pendingRebuild = false; if (!S().expedition || !S().expedition.choices) startBattle(); }
     else if (!ctx && S().starterChosen && !modalOpen() && (!S().expedition || !S().expedition.choices)) startBattle();
     stage3d.render();
+    if (!S().settings.qualityManual && S().settings.quality !== 'low') {
+        lowFps = stage3d.fps < 26 ? lowFps + dt : 0;
+        if (lowFps > 6) { const q = S().settings.quality === 'high' ? 'medium' : 'low'; S().settings.quality = q; stage3d.setQuality(q); lowFps = 0; log('Gráficos ajustados para ' + (q === 'medium' ? 'Médio' : 'Leve') + ' para manter a fluidez (mude em Ajustes).'); }
+    }
     updateUnits(); updateSync(); pumpPortraits();
     hudTimer -= dt; if (hudTimer <= 0) { hudTimer = 0.25; updateHud(); }
     saveTimer -= dt; if (saveTimer <= 0) { saveTimer = 10; save(); }
@@ -156,7 +169,9 @@ function updateHud() {
         chip('●', '#ff6a9a', fmt(s.orbs), 'Orbes de captura') +
         chip('⟁', '#ffcf5a', s.keys + '/' + MAX_KEYS, 'Chaves da Fenda: abrem expedições (1 por hora)') +
         (s.shards || s.stats.collapses ? chip('✦', '#ff4fd8', fmt(s.shards), 'Estilhaços (prestígio)') : '');
-    if (ctx && ctx.kind === 'exp') {
+    if (view === 'hunt') {
+        $('#zone-name').textContent = 'Mapa de Caça'; $('#zone-stage').innerHTML = `Idle: estágio ${s.stage}`; $('#stage-progress i').style.width = '0%';
+    } else if (ctx && ctx.kind === 'exp') {
         $('#zone-name').textContent = 'Expedição na Fenda'; $('#zone-stage').textContent = `Andar ${S().expedition ? S().expedition.floor : '—'}/${EXPEDITION_FLOORS}`;
         $('#stage-progress i').style.width = ((S().expedition ? S().expedition.floor - 1 : EXPEDITION_FLOORS) / EXPEDITION_FLOORS * 100) + '%';
     } else {
@@ -165,6 +180,9 @@ function updateHud() {
         $('#zone-stage').innerHTML = `${game.isBoss(s.stage) ? '♛ ' : ''}Estágio ${s.stage} <small style="font-size:11px;color:var(--mute)">${s.farmUntil ? 'treinando' : ''}</small>`;
         $('#stage-progress i').style.width = (inZone / ZONE_LEN * 100) + '%';
     }
+    const goalId = GOAL_ORDER.find(id => !s.achievements[id]), goal = goalId && ACHIEVEMENTS.find(a => a.id === goalId);
+    if (goal) { const [c, m] = goal.prog(s, game); $('#goal').innerHTML = `<small>Objetivo</small> ${goal.desc} <b>${fmt(Math.min(c, m))}/${fmt(m)}</b><i style="width:${Math.min(100, c / m * 100)}%"></i>`; $('#goal').hidden = false; }
+    else $('#goal').hidden = true;
     const t = game.tide(), rem = Math.ceil(game.tideRemaining() / 1000);
     $('#tide').innerHTML = `<small>Maré da Fenda</small><b style="color:${TYPE_INFO[t.type].color}">${TYPE_INFO[t.type].name} +25%</b><small>${Math.floor(rem / 60)}:${String(rem % 60).padStart(2, '0')}</small>`;
     $('#btn-push').classList.toggle('on', s.autoPush);
@@ -210,19 +228,22 @@ $('#btn-prev').onclick = () => { if (S().stage > 1) { S().stage--; S().farmUntil
 $('#btn-next').onclick = () => { if (S().stage < S().maxStage) { S().stage++; S().farmUntil = 0; ctx = null; startBattle(); updateHud(); } };
 
 // ---------- abas e painéis ----------
-let activeTab = null, pendingRebuild = false;
+let activeTab = null, pendingRebuild = false, lastBannerStage = 0;
+function banner(title, sub, color) { const el = $('#banner'); el.innerHTML = `<b style="color:${color}">${esc(title)}</b><small>${esc(sub)}</small>`; el.hidden = false; el.classList.remove('show'); void el.offsetWidth; el.classList.add('show'); clearTimeout(banner._t); banner._t = setTimeout(() => { el.hidden = true; }, 2600); if (title === 'CHEFE') sfx('ult'); }
 const liveTabs = new Set(['upgrades', 'collapse', 'expedition']);
 document.querySelectorAll('#tabs button').forEach(b => b.onclick = () => selectTab(b.dataset.tab));
 $('#panel-close').onclick = () => selectTab('arena');
 function selectTab(tab) {
     document.querySelectorAll('#tabs button').forEach(b => b.classList.toggle('on', b.dataset.tab === tab));
-    const wasSanct = view === 'sanctuary';
-    if (tab === 'arena') { activeTab = null; $('#panel').hidden = true; document.body.classList.remove('panel-open'); stage3d.setPanelOffset(0); }
+    const wasSanct = view === 'sanctuary', wasHunt = view === 'hunt';
+    if (wasHunt && tab !== 'hunt') { hunt.leave(); document.body.classList.remove('hunting'); }
+    if (tab === 'arena' || tab === 'hunt') { activeTab = null; $('#panel').hidden = true; document.body.classList.remove('panel-open'); stage3d.setPanelOffset(0); }
     else { activeTab = tab; $('#panel').hidden = false; document.body.classList.add('panel-open'); renderPanel(); stage3d.setPanelOffset(464); }
     sfx('ui');
-    view = tab === 'sanctuary' ? 'sanctuary' : 'arena';
+    view = tab === 'sanctuary' ? 'sanctuary' : tab === 'hunt' ? 'hunt' : 'arena';
+    if (view === 'hunt' && !wasHunt) { if (!S().starterChosen) return; clearUnits(); document.body.classList.add('hunting'); hunt.enter(); return; }
     if (view === 'sanctuary' && !wasSanct) { clearUnits(); stage3d.setIsland('bloom', S().seed + ':sanct'); stage3d.showSanctuary(sanctuaryGenomes()); }
-    if (view === 'arena' && wasSanct) { if (ctx) { stage3d.setIsland(ctx.kind === 'exp' ? 'rift' : game.zoneOf(ctx.stage).type, ctx.kind === 'exp' ? S().expedition.seed : S().seed + ':z' + Math.floor((ctx.stage - 1) / ZONE_LEN)); } showBattleMeshes(); }
+    if (view === 'arena' && (wasSanct || wasHunt)) { if (ctx) { stage3d.setIsland(ctx.kind === 'exp' ? 'rift' : game.zoneOf(ctx.stage).type, ctx.kind === 'exp' ? S().expedition.seed : S().seed + ':z' + Math.floor((ctx.stage - 1) / ZONE_LEN)); } showBattleMeshes(); }
 }
 const sanctuaryGenomes = () => S().creatures.filter(c => !S().team.includes(c.id)).sort((a, b) => power(b) - power(a));
 let lastPanelHtml = '';
@@ -338,7 +359,7 @@ function bindPanel(root) {
     root.querySelectorAll('[data-perk]').forEach(el => el.onclick = () => { if (game.buyPerk(el.dataset.perk)) { sfx('buy'); renderPanel(); updateHud(); } });
     root.querySelectorAll('[data-orbs]').forEach(el => el.onclick = () => { if (game.buyOrbs(Number(el.dataset.orbs))) renderPanel(); });
     root.querySelectorAll('[data-policy]').forEach(el => el.onclick = () => { S().capturePolicy = el.dataset.policy; renderPanel(); });
-    root.querySelectorAll('[data-q]').forEach(el => el.onclick = () => { S().settings.quality = el.dataset.q; stage3d.setQuality(el.dataset.q); renderPanel(); });
+    root.querySelectorAll('[data-q]').forEach(el => el.onclick = () => { S().settings.quality = el.dataset.q; S().settings.qualityManual = true; stage3d.setQuality(el.dataset.q); renderPanel(); });
     const q = (s) => root.querySelector(s);
     if (q('[data-autoteam]')) q('[data-autoteam]').onclick = () => { game.setTeam(sorted(S().creatures).slice(0, game.teamSize()).map(c => c.id)); ctx = null; };
     if (q('[data-fuse]')) q('[data-fuse]').onclick = () => fuseAnimation();
@@ -398,7 +419,7 @@ function openStarter() {
     });
 }
 function tutorial() {
-    openModal(`<h2>Bem-vindo à Fenda</h2><p class="note">• Suas criaturas lutam <b>sozinhas</b>, até offline: ao voltar, o jogo simula de verdade cada luta que aconteceu.<br>• Encha o anel <b>SYNC</b> causando dano e toque para a equipe toda agir de uma vez.<br>• Vitórias dão Essência e XP; inimigos derrotados podem ser <b>capturados</b> com orbes.<br>• Criaturas fora da equipe vivem no <b>Santuário</b> e produzem recursos.<br>• <b>Funda</b> genomas para criar criaturas novas, e entre na <b>Expedição</b> roguelike a partir do estágio 15.<br>• Quando travar, use o <b>Colapso</b>: recomeça mais forte com perks permanentes.</p><div class="modal-actions"><button class="primary" data-close>Vamos lá</button></div>`);
+    openModal(`<h2>Bem-vindo à Fenda</h2><p class="note">• Na aba <b>Caçar</b>, ande pelo mapa 3D: no mato alto aparecem criaturas selvagens. Lute por turnos, enfraqueça e lance um <b>Orbe</b> para capturar.<br>• Suas criaturas lutam <b>sozinhas</b>, até offline: ao voltar, o jogo simula de verdade cada luta que aconteceu.<br>• Encha o anel <b>SYNC</b> causando dano e toque para a equipe toda agir de uma vez.<br>• Vitórias dão Essência e XP; inimigos derrotados podem ser <b>capturados</b> com orbes.<br>• Criaturas fora da equipe vivem no <b>Santuário</b> e produzem recursos.<br>• <b>Funda</b> genomas para criar criaturas novas, e entre na <b>Expedição</b> roguelike a partir do estágio 15.<br>• Quando travar, use o <b>Colapso</b>: recomeça mais forte com perks permanentes.</p><div class="modal-actions"><button class="primary" data-close>Vamos lá</button></div>`);
 }
 function openOfflineReport(sum) {
     const h = Math.floor(sum.seconds / 3600), m = Math.floor(sum.seconds / 60) % 60;
@@ -447,6 +468,7 @@ function boot() {
     lastFrame = performance.now();
     requestAnimationFrame(frame);
 }
+const hunt = createHunt({ game: () => game, stage3d, sfx, toast, log, imgFor, nameHtml, typeTag, esc, fmt, hydrate });
 window.claude?.hot?.snapshot?.(() => ({ save: game.serialize() }));
-window.__rift = { get game() { return game; }, stage3d, get ctx() { return ctx; }, selectTab, save };
+window.__rift = { get game() { return game; }, stage3d, hunt, get ctx() { return ctx; }, selectTab, save };
 boot();

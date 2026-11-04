@@ -26,7 +26,7 @@ export class Stage3D {
         this.scene.add(this.sun);
         this.rim = new THREE.PointLight(0xff66ff, 30, 40); this.rim.position.set(-6, 5, -8); this.scene.add(this.rim);
         this.composer = new EffectComposer(this.renderer);
-        this.composer.addPass(new RenderPass(this.scene, this.camera));
+        this.renderPass = new RenderPass(this.scene, this.camera); this.composer.addPass(this.renderPass);
         this.bloom = new UnrealBloomPass(new THREE.Vector2(256, 256), 0.55, 0.5, 0.86);
         this.composer.addPass(this.bloom);
         this.composer.addPass(new OutputPass());
@@ -73,7 +73,7 @@ export class Stage3D {
         this.meshes.clear(); this.wander = [];
     }
     // Posiciona as duas equipes frente a frente.
-    showBattle(teamA, teamB) {
+    showBattle(teamA, teamB, opts = {}) {
         this.clearCreatures(); this.mode = 'battle'; this.focus = null;
         // paisagem: equipes à esquerda/direita; retrato (celular em pé): sua equipe perto da câmera, a inimiga ao fundo
         const portrait = this.h > this.w; this.portraitLayout = portrait;
@@ -81,10 +81,11 @@ export class Stage3D {
             const m = buildCreature(g, 1.05);
             const n = team.length, spread = (i - (n - 1) / 2) * (portrait ? 1.7 : 2.1);
             let x, z;
-            if (portrait) { x = spread; z = side < 0 ? 2.0 + (i % 2) * 0.9 : -(3.0 + (i % 2) * 0.9); }
+            if (opts.duel) { x = side * (portrait ? 1.4 : 3.2); z = side < 0 ? (portrait ? 0.6 : 1.6) : (portrait ? -3.4 : -1.6); }
+            else if (portrait) { x = spread; z = side < 0 ? 2.0 + (i % 2) * 0.9 : -(3.0 + (i % 2) * 0.9); }
             else { x = side * (3.0 + (i % 2) * 1.7 + Math.abs(spread) * 0.15); z = spread; }
             m.position.set(x, 0, z);
-            m.lookAt(portrait ? x * 0.3 : -side * 10, 0, portrait ? side * 10 : z * 0.3);
+            if (opts.duel) m.lookAt(-x, 0, -z); else m.lookAt(portrait ? x * 0.3 : -side * 10, 0, portrait ? side * 10 : z * 0.3);
             m.userData.home = m.position.clone(); m.userData.side = side; m.userData.portrait = portrait;
             this.scene.add(m); this.meshes.set(g.id, m);
             m.userData.anim.state = 'walk'; m.userData.enter = 0;   // entram correndo
@@ -159,6 +160,45 @@ export class Stage3D {
             else if (e.t === 'sync') { for (const m of this.meshes.values()) if (m.userData.side === -1) { this._shockwave(m.position, 0x7af7ff, 2.2); this._burst(m.position.clone().add(new THREE.Vector3(0, 1, 0)), 0x7af7ff, 40, 3.5); } this.shake = 0.6; }
         }
     }
+    // ---------- orbe de captura (batalha selvagem) ----------
+    _orbMesh() {
+        const g = new THREE.Group();
+        const top = new THREE.Mesh(new THREE.SphereGeometry(0.28, 24, 12, 0, Math.PI * 2, 0, Math.PI / 2), new THREE.MeshStandardMaterial({ color: '#ff3b8a', emissive: '#ff3b8a', emissiveIntensity: 0.4, roughness: 0.25, metalness: 0.3 }));
+        const bot = new THREE.Mesh(new THREE.SphereGeometry(0.28, 24, 12, 0, Math.PI * 2, Math.PI / 2, Math.PI / 2), new THREE.MeshStandardMaterial({ color: '#eef2ff', roughness: 0.3 }));
+        const band = new THREE.Mesh(new THREE.TorusGeometry(0.28, 0.03, 8, 32), new THREE.MeshStandardMaterial({ color: '#15102a' })); band.rotation.x = Math.PI / 2;
+        const btn = new THREE.Mesh(new THREE.SphereGeometry(0.07, 12, 8), new THREE.MeshStandardMaterial({ color: '#ffffff', emissive: '#7af7ff', emissiveIntensity: 1.2 })); btn.position.z = 0.27;
+        g.add(top, bot, band, btn); g.userData.btn = btn; return g;
+    }
+    orbThrow(fromId, foeId, done) {
+        const foe = this.meshes.get(foeId), from = this.meshes.get(fromId); if (!foe) return done?.();
+        const orb = this._orbMesh(); this.scene.add(orb); this.orb = orb;
+        const a = (from ? from.position : new THREE.Vector3(-4, 0, 0)).clone().add(new THREE.Vector3(0, 1.5, 0.8)), b = foe.position.clone().add(new THREE.Vector3(0, 1.0, 0));
+        this.fx.push({ o: new THREE.Object3D(), life: 0.7, max: 0.7, update: (f) => { const k = 1 - f.life / f.max; orb.position.lerpVectors(a, b, k); orb.position.y += Math.sin(k * Math.PI) * 2.2; orb.rotation.x += 0.4; }, done: () => {
+            this._burst(b, 0xff4fd8, 40, 3); this._shockwave(foe.position, 0xff4fd8, 1.5);
+            const s0 = foe.scale.x;      // a criatura é sugada para dentro do orbe
+            this.fx.push({ o: new THREE.Object3D(), life: 0.4, max: 0.4, update: (q) => { const k = q.life / q.max; foe.scale.setScalar(s0 * k); }, done: () => { foe.visible = false; foe.scale.setScalar(s0); foe.userData.hiddenInOrb = s0;
+                this.fx.push({ o: new THREE.Object3D(), life: 0.45, max: 0.45, update: (q) => { const k = 1 - q.life / q.max; orb.position.y = b.y + (1 - k) * 0.8 - k * (b.y - 0.28); }, done: () => { orb.position.y = 0.28 + foe.position.y; orb.rotation.set(0, -Math.PI / 2, 0); done?.(); } });
+            } });
+        } });
+    }
+    orbShake(done) {
+        const orb = this.orb; if (!orb) return done?.();
+        this.fx.push({ o: new THREE.Object3D(), life: 0.75, max: 0.75, update: (f) => { const k = 1 - f.life / f.max; orb.rotation.z = Math.sin(k * Math.PI * 2) * 0.5 * Math.sin(k * Math.PI); }, done: () => { orb.rotation.z = 0; done?.(); } });
+    }
+    orbResult(foeId, caught, done) {
+        const orb = this.orb, foe = this.meshes.get(foeId);
+        if (!orb) return done?.();
+        if (caught) {
+            orb.userData.btn.material.emissive.set('#ffcf5a');
+            for (let i = 0; i < 3; i++) setTimeout(() => this._burst(orb.position.clone().add(new THREE.Vector3(0, 0.3, 0)), 0xffe27a, 18, 2.2, 0.14), i * 160);
+            setTimeout(() => { this.scene.remove(orb); this.orb = null; done?.(); }, 1100);
+        } else {
+            this._burst(orb.position.clone(), 0xffffff, 50, 4); this.scene.remove(orb); this.orb = null;
+            if (foe) { foe.visible = true; foe.scale.setScalar(foe.userData.hiddenInOrb || foe.scale.x); foe.userData.anim.state = 'hit'; foe.userData.anim.k = 0; }
+            setTimeout(() => done?.(), 400);
+        }
+    }
+
     // Âncoras na tela (px CSS) para barras de vida e números de dano.
     anchor(obj, yOff = 2.3) {
         const v = obj.position.clone(); v.y += yOff * (obj.userData.size || 1);
@@ -168,10 +208,22 @@ export class Stage3D {
     anchors() { const out = {}; for (const [id, m] of this.meshes) out[id] = this.anchor(m); return out; }
 
     // ---------- loop ----------
+    // cena externa (Mapa de Caça) assume o renderer; null devolve a arena
+    setExternal(ext) {
+        this.external = ext;
+        this.renderPass.scene = ext ? ext.scene : this.scene; this.renderPass.camera = ext ? ext.camera : this.camera;
+        if (ext) { ext.camera.aspect = this.w / this.h; ext.camera.updateProjectionMatrix(); }
+    }
     render() {
-        const now = performance.now(), dt = Math.min(0.05, (now - this._last) / 1000); this._last = now;
+        const now = performance.now(), dt = Math.min(0.12, (now - this._last) / 1000); this._last = now;
         this.t += dt; this._frames++; this._fpsT += dt;
         if (this._fpsT > 1) { this.fps = this._frames / this._fpsT; this._frames = 0; this._fpsT = 0; }
+        if (this.external) {
+            const e = this.external; e.camera.aspect = this.w / this.h; e.camera.fov = this.h > this.w ? 62 : 50; e.camera.updateProjectionMatrix();
+            e.update(dt);
+            if (this.quality === 'low') this.renderer.render(e.scene, e.camera); else this.composer.render(dt);
+            return dt;
+        }
         this.island?.update(dt);
         if (this.sky) this.sky.userData.mat.uniforms.time.value = this.t;
         for (const m of this.meshes.values()) {

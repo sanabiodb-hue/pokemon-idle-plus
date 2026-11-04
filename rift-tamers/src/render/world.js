@@ -111,15 +111,15 @@ export function buildIsland(type, seedStr = 'island', opts = {}) {
     ring.rotation.x = -Math.PI / 2; ring.position.y = 0.06; group.add(ring);
     const ring2 = new THREE.Mesh(new THREE.RingGeometry(1.2, 1.3, 6), ring.material.clone()); ring2.rotation.x = -Math.PI / 2; ring2.position.y = 0.06; group.add(ring2);
     // adereços fora da arena
-    const props = [];
+    const props = [], obstacles = [];
     const count = opts.props ?? 26;
     for (let i = 0; i < count; i++) {
         // nada de adereços no setor da câmera (frente, +Z): o cenário emoldura a arena sem tapar a luta
-        let a = rng() * Math.PI * 2, r = 7 + rng() * (R * 0.8 - 7);
+        let a = rng() * Math.PI * 2, r = (opts.propMin ?? 7) + rng() * (R * 0.8 - (opts.propMin ?? 7));
         const toCam = Math.abs(((a - Math.PI / 2) + Math.PI * 3) % (Math.PI * 2) - Math.PI);
-        if (toCam < 1.15) a += (a > Math.PI / 2 ? 1 : -1) * (1.15 - toCam + 0.2);
+        if (!opts.anyAngle && toCam < 1.15) a += (a > Math.PI / 2 ? 1 : -1) * (1.15 - toCam + 0.2);
         const p = prop(pal.prop, pal, rng); p.position.set(Math.cos(a) * r, 0, Math.sin(a) * r); p.rotation.y = rng() * 6; p.scale.setScalar(0.7 + rng() * 0.6);
-        group.add(p); props.push(p);
+        group.add(p); props.push(p); obstacles.push({ x: p.position.x, z: p.position.z, r: 0.75 * p.scale.x });
     }
     // cristais flutuando sob a ilha
     for (let i = 0; i < 6; i++) {
@@ -162,5 +162,5 @@ export function buildIsland(type, seedStr = 'island', opts = {}) {
             p.traverse?.(c => { if (c.userData.spin) c.rotation.z += dt * c.userData.spin; if (c.userData.float) c.rotation.y += dt; });
         }
     };
-    return { group, update, pal };
+    return { group, update, pal, land, obstacles, radius: R };
 }

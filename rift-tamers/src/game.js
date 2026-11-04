@@ -45,26 +45,27 @@ export const PERK_DEFS = [
 
 // Conquistas: recompensas automáticas por marcos (retenção de longo prazo).
 export const ACHIEVEMENTS = [
-    { id: 'win1', name: 'Primeiro sangue', desc: 'Vença uma batalha', test: (s) => s.stats.wins >= 1, reward: { orbs: 10 } },
-    { id: 'zone1', name: 'Bosque vencido', desc: 'Passe do estágio 25', test: (s) => s.maxStageEver > 25, reward: { keys: 1, orbs: 15 } },
-    { id: 'stage50', name: 'Mergulho na Fenda', desc: 'Alcance o estágio 50', test: (s) => s.maxStageEver >= 50, reward: { shards: 2 } },
-    { id: 'stage100', name: 'Centenário', desc: 'Alcance o estágio 100', test: (s) => s.maxStageEver >= 100, reward: { shards: 8 } },
-    { id: 'stage250', name: 'Coração da Fenda', desc: 'Complete as 10 zonas (estágio 250)', test: (s) => s.maxStageEver > 250, reward: { shards: 40 } },
-    { id: 'cap10', name: 'Domador', desc: 'Capture 10 criaturas', test: (s) => s.stats.captures >= 10, reward: { orbs: 25 } },
-    { id: 'cap100', name: 'Mestre domador', desc: 'Capture 100 criaturas', test: (s) => s.stats.captures >= 100, reward: { orbs: 100, dna: 200 } },
-    { id: 'dex15', name: 'Catalogador', desc: '15 espécies no Genodex', test: (s, g) => g.dexCount() >= 15, reward: { shards: 2 } },
-    { id: 'dex30', name: 'Naturalista', desc: '30 espécies no Genodex', test: (s, g) => g.dexCount() >= 30, reward: { shards: 6 } },
-    { id: 'dex60', name: 'Genodex completo', desc: 'Todas as 60 espécies', test: (s, g) => g.dexCount() >= 60, reward: { shards: 30 } },
-    { id: 'prism1', name: 'Luz prismática', desc: 'Obtenha uma criatura prismática', test: (s) => s.stats.prismatics >= 1, reward: { shards: 5 } },
-    { id: 'fuse1', name: 'Geneticista', desc: 'Faça uma fusão', test: (s) => s.stats.fusions >= 1, reward: { dna: 60 } },
-    { id: 'fuse10', name: 'Arquiteto da vida', desc: 'Faça 10 fusões', test: (s) => s.stats.fusions >= 10, reward: { shards: 5 } },
-    { id: 'evo1', name: 'Metamorfose', desc: 'Evolua uma criatura (nível 30)', test: (s) => s.creatures.some(c => evoStage(c) >= 1), reward: { orbs: 20 } },
-    { id: 'evo2', name: 'Forma final', desc: 'Leve uma criatura à forma final (nível 90)', test: (s) => s.creatures.some(c => evoStage(c) >= 2), reward: { shards: 4 } },
-    { id: 'col1', name: 'Recomeço', desc: 'Faça o primeiro Colapso', test: (s) => s.stats.collapses >= 1, reward: { keys: 1 } },
-    { id: 'col5', name: 'Ciclo eterno', desc: 'Faça 5 Colapsos', test: (s) => s.stats.collapses >= 5, reward: { shards: 15 } },
-    { id: 'floor10', name: 'Explorador da Fenda', desc: 'Vença os 10 andares de uma expedição', test: (s) => s.stats.bestFloor >= 10, reward: { shards: 6, keys: 1 } },
-    { id: 'legend', name: 'Lenda viva', desc: 'Tenha uma criatura lendária ou mítica', test: (s) => s.creatures.some(c => RARITY_INDEX[c.rarity] >= 3), reward: { dna: 150 } },
+    { id: 'win1', prog: (s) => [s.stats.wins, 1], name: 'Primeiro sangue', desc: 'Vença uma batalha', test: (s) => s.stats.wins >= 1, reward: { orbs: 10 } },
+    { id: 'zone1', prog: (s) => [s.maxStageEver, 26], name: 'Bosque vencido', desc: 'Passe do estágio 25', test: (s) => s.maxStageEver > 25, reward: { keys: 1, orbs: 15 } },
+    { id: 'stage50', prog: (s) => [s.maxStageEver, 50], name: 'Mergulho na Fenda', desc: 'Alcance o estágio 50', test: (s) => s.maxStageEver >= 50, reward: { shards: 2 } },
+    { id: 'stage100', prog: (s) => [s.maxStageEver, 100], name: 'Centenário', desc: 'Alcance o estágio 100', test: (s) => s.maxStageEver >= 100, reward: { shards: 8 } },
+    { id: 'stage250', prog: (s) => [s.maxStageEver, 251], name: 'Coração da Fenda', desc: 'Complete as 10 zonas (estágio 250)', test: (s) => s.maxStageEver > 250, reward: { shards: 40 } },
+    { id: 'cap10', prog: (s) => [s.stats.captures, 10], name: 'Domador', desc: 'Capture 10 criaturas', test: (s) => s.stats.captures >= 10, reward: { orbs: 25 } },
+    { id: 'cap100', prog: (s) => [s.stats.captures, 100], name: 'Mestre domador', desc: 'Capture 100 criaturas', test: (s) => s.stats.captures >= 100, reward: { orbs: 100, dna: 200 } },
+    { id: 'dex15', prog: (s, g) => [g.dexCount(), 15], name: 'Catalogador', desc: '15 espécies no Genodex', test: (s, g) => g.dexCount() >= 15, reward: { shards: 2 } },
+    { id: 'dex30', prog: (s, g) => [g.dexCount(), 30], name: 'Naturalista', desc: '30 espécies no Genodex', test: (s, g) => g.dexCount() >= 30, reward: { shards: 6 } },
+    { id: 'dex60', prog: (s, g) => [g.dexCount(), 60], name: 'Genodex completo', desc: 'Todas as 60 espécies', test: (s, g) => g.dexCount() >= 60, reward: { shards: 30 } },
+    { id: 'prism1', prog: (s) => [s.stats.prismatics, 1], name: 'Luz prismática', desc: 'Obtenha uma criatura prismática', test: (s) => s.stats.prismatics >= 1, reward: { shards: 5 } },
+    { id: 'fuse1', prog: (s) => [s.stats.fusions, 1], name: 'Geneticista', desc: 'Faça uma fusão', test: (s) => s.stats.fusions >= 1, reward: { dna: 60 } },
+    { id: 'fuse10', prog: (s) => [s.stats.fusions, 10], name: 'Arquiteto da vida', desc: 'Faça 10 fusões', test: (s) => s.stats.fusions >= 10, reward: { shards: 5 } },
+    { id: 'evo1', prog: (s) => [Math.max(0, ...s.creatures.map(c => c.level)), 30], name: 'Metamorfose', desc: 'Evolua uma criatura (nível 30)', test: (s) => s.creatures.some(c => evoStage(c) >= 1), reward: { orbs: 20 } },
+    { id: 'evo2', prog: (s) => [Math.max(0, ...s.creatures.map(c => c.level)), 90], name: 'Forma final', desc: 'Leve uma criatura à forma final (nível 90)', test: (s) => s.creatures.some(c => evoStage(c) >= 2), reward: { shards: 4 } },
+    { id: 'col1', prog: (s) => [s.stats.collapses, 1], name: 'Recomeço', desc: 'Faça o primeiro Colapso', test: (s) => s.stats.collapses >= 1, reward: { keys: 1 } },
+    { id: 'col5', prog: (s) => [s.stats.collapses, 5], name: 'Ciclo eterno', desc: 'Faça 5 Colapsos', test: (s) => s.stats.collapses >= 5, reward: { shards: 15 } },
+    { id: 'floor10', prog: (s) => [s.stats.bestFloor, 10], name: 'Explorador da Fenda', desc: 'Vença os 10 andares de uma expedição', test: (s) => s.stats.bestFloor >= 10, reward: { shards: 6, keys: 1 } },
+    { id: 'legend', prog: (s) => [s.creatures.some(c => RARITY_INDEX[c.rarity] >= 3) ? 1 : 0, 1], name: 'Lenda viva', desc: 'Tenha uma criatura lendária ou mítica', test: (s) => s.creatures.some(c => RARITY_INDEX[c.rarity] >= 3), reward: { dna: 150 } },
 ];
+export const GOAL_ORDER = ['win1', 'cap10', 'evo1', 'dex15', 'zone1', 'fuse1', 'stage50', 'col1', 'floor10', 'evo2', 'dex30', 'legend', 'prism1', 'stage100', 'cap100', 'fuse10', 'col5', 'dex60', 'stage250'];
 export const rewardText = (r) => Object.entries(r).map(([k, v]) => ({ orbs: '● ', shards: '✦ ', dna: '⧉ ', keys: '⟁ ' }[k] + v)).join('  ');
 
 export const fmt = (n) => {
