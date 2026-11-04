@@ -5091,6 +5091,18 @@ body.exploring { overflow: hidden; }
 #explore .ex-badge-gem { width: 92px; height: 92px; clip-path: polygon(30% 0, 70% 0, 100% 30%, 100% 70%, 70% 100%, 30% 100%, 0 70%, 0 30%); background: radial-gradient(circle at 35% 30%, #fff8, transparent 45%), linear-gradient(135deg, var(--bc), #3a2a1a); animation: ex-spin 3s linear infinite; }
 @keyframes ex-badge { from { transform: translate(-50%, -50%) scale(0.3); opacity: 0; } to { transform: translate(-50%, -50%) scale(1); opacity: 1; } }
 @keyframes ex-spin { from { transform: rotateY(0deg); } to { transform: rotateY(360deg); } }
+/* F10.7: barra de EXP animada (a transição é posta pelo JS), brilho da caixa ao subir de nível e a tela de nível com os atributos */
+#explore .ex-me.lvup { animation: ex-lvup 0.7s ease-out; }
+@keyframes ex-lvup { 0% { box-shadow: 0 0 0 0 rgba(79, 163, 255, 0.9), 0 6px 18px rgba(0, 0, 0, 0.35); border-color: #4fa3ff; } 100% { box-shadow: 0 0 0 18px rgba(79, 163, 255, 0), 0 6px 18px rgba(0, 0, 0, 0.35); border-color: #3a3a52; } }
+#explore .ex-lvup { position: absolute; right: max(12px, env(safe-area-inset-right, 0px)); bottom: calc(272px + env(safe-area-inset-bottom, 0px)); width: min(280px, 70vw); background: #f8f8f0; color: #202030; border: 4px solid #3a3a52; border-radius: 12px; padding: 8px 12px; box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35); z-index: 6; pointer-events: none; }
+#explore .ex-lvup.go { animation: ex-lvup-in 0.25s ease-out; }
+#explore .ex-lvup b { display: flex; justify-content: space-between; gap: 8px; font-size: 15px; margin-bottom: 4px; }
+#explore .ex-lvup b em { font-style: normal; color: #2f6fd6; }
+#explore .ex-lvup table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; font-size: 14px; }
+#explore .ex-lvup th { text-align: left; font-weight: 600; padding: 2px 0; }
+#explore .ex-lvup td { text-align: right; padding: 2px 0 2px 8px; }
+#explore .ex-lvup td.up { color: #1f9d55; font-weight: bold; }
+@keyframes ex-lvup-in { from { transform: translateY(10px); opacity: 0; } to { transform: none; opacity: 1; } }
 #explore .ex-flash { position: absolute; inset: 0; pointer-events: none; opacity: 0; background: #000; z-index: 5; }
 #explore .ex-flash.go { animation: ex-flash 0.65s steps(1) forwards; }
 @keyframes ex-flash { 0%, 30%, 60% { opacity: 0.92; background: #fff; } 15%, 45%, 75% { opacity: 0; } 90% { opacity: 1; background: #000; } 100% { opacity: 0; } }
@@ -5100,6 +5112,8 @@ body.exploring { overflow: hidden; }
     #explore .ex-box { width: 60vw; }
     #explore .ex-foe { top: calc(64px + env(safe-area-inset-top, 0px)); }
     #explore .ex-me { bottom: calc(250px + env(safe-area-inset-bottom, 0px)); }
+    #explore .ex-lvup { right: auto; left: 50%; bottom: auto; top: calc(178px + env(safe-area-inset-top, 0px)); transform: translateX(-50%); }
+    #explore .ex-lvup.go { animation: none; }
     #explore .ex-btn { min-height: 48px; font-size: 14px; }
     #explore .ex-loc b { font-size: 13px; }
     #explore .ex-pm { width: 34px; height: 34px; }
@@ -5107,4 +5121,4 @@ body.exploring { overflow: hidden; }
     #explore .ex-loc { flex: 1 1 auto; }
     #explore .ex-party { order: 3; flex-basis: 100%; justify-content: flex-start; }
 }
-@media (prefers-reduced-motion: reduce) { #explore .ex-flash.go { animation: none; } }
+@media (prefers-reduced-motion: reduce) { #explore .ex-flash.go, #explore .ex-me.lvup, #explore .ex-lvup.go { animation: none; } }

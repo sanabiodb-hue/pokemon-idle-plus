@@ -481,10 +481,12 @@ class ExploreView {
     _dialog(lines, done) { this.dialogLines = lines.slice(); this.dialogDone = done || null; this.$('.ex-menu').innerHTML = ''; this.root.classList.add('ex-talking'); this._advanceDialog(); }
     _advanceDialog() {
         if (!this.dialogLines) return;
+        if (this._lineHide) { const h = this._lineHide; this._lineHide = null; h(); }          // F10.7: o painel de uma fala some quando ela passa
         if (!this.dialogLines.length) { this.dialogLines = null; this.root.classList.remove('ex-talking'); this.$('.ex-text').textContent = ''; const d = this.dialogDone; this.dialogDone = null; if (d) d(); return; }
         const line = this.dialogLines.shift();
         if (this._badgeLine && line === this._badgeLine) { this._badgeLine = null; this._sfx('caught'); this._showBadge(this._badgeId); }       // a insígnia aparece junto da fala dela
-        this.$('.ex-text').textContent = line + '  ▼';
+        if (line && typeof line === 'object' && line.show) this._lineHide = line.show() || null;            // fala com painel/efeito (tela de nível, evolução)
+        this.$('.ex-text').textContent = (line && typeof line === 'object' ? line.text : line) + '  ▼';
     }
     _say(lines, done, ms = 900) {
         const box = this.$('.ex-text'); this.$('.ex-menu').innerHTML = '';
@@ -597,7 +599,17 @@ class ExploreView {
             case 'faint': e.faint(s.side); this._sfx('faint'); this._boxes(); return next(1100);
             case 'recall': return next(600);
             case 'switch': e.setMine(this.battle.me().speciesId, this.battle.me().shiny); this._boxes(); return next(900);
-            case 'xp': { const me = this.battle.me(), r = this.game.exploreVictory(s.wild, me.idx, me.maxHp, me.hp); this.$('.ex-text').textContent = `${me.name} ganhou ${typeof ptNumber === 'function' ? ptNumber(r.expGained) : r.expGained} de EXP!`; return next(1000); }
+            case 'xp': {                                   // F10.7: o treinador ainda tem Pokémon — a barra enche aqui e quem subiu de nível já luta mais forte
+                const me = this.battle.me(), r = this.game.exploreVictory(s.wild, me.idx, me.maxHp, me.hp);
+                this.$('.ex-text').textContent = this._expText(me.name, r.expGained);
+                this._expRun(r.growth, () => {
+                    const learned = this.battle.refresh(); if (!this._activeEvolved(r.growth)) this._boxes();      // evoluiu: a caixa muda junto da fala da evolução
+                    const lines = this._growthLines(r.growth, learned);
+                    if (!lines.length) return next(350);
+                    this._dialog(lines, () => next(200));
+                });
+                return;
+            }
             case 'foeSwitch': e.setFoe(this.battle.foe.speciesId, false); this._boxes(); this._sfx('throw'); return next(1000);
             case 'throw': this._sfx('throw'); e.throwBall(s.ball, () => this._play(steps, done)); return;
             case 'shake': this._sfx('shake'); e.shakeBall(() => this._play(steps, done)); return;
@@ -607,41 +619,107 @@ class ExploreView {
         }
     }
     _finish() {
-        const b = this.battle, g = this.game, lines = [], me = b.me(), over = b.over;
+        const b = this.battle, g = this.game, me = b.me(), over = b.over;
         if ((over === 'win' || over === 'caught') && this.music) this.music.play('victory');
         if (over === 'win' || over === 'caught') {
-            const inst = me.inst, lv0 = inst.level, sp0 = inst.speciesId, name0 = me.name;
+            const pre = [], post = [], name0 = me.name;
             if (over === 'caught') {
                 const o = b.caught && b.caught.outcome;
-                if (o && o.firstCatch) lines.push(`Os dados de ${b.foe.name} foram registrados na Pokédex!`);
-                if (o && o.uid) lines.push(g.gameState.party.includes(o.uid) ? `${b.foe.name} entrou para a sua equipe!` : `${b.foe.name} foi enviado ao PC.`);
+                if (o && o.firstCatch) pre.push(`Os dados de ${b.foe.name} foram registrados na Pokédex!`);
+                if (o && o.uid) pre.push(g.gameState.party.includes(o.uid) ? `${b.foe.name} entrou para a sua equipe!` : `${b.foe.name} foi enviado ao PC.`);
             }
             const r = g.exploreVictory(b.wild, me.idx, me.maxHp, me.hp);
-            lines.push(`${name0} ganhou ${typeof ptNumber === 'function' ? ptNumber(r.expGained) : r.expGained} de EXP!`);
-            if (r.goldGained > 0) lines.push(`Você recebeu ${r.goldGained} de ouro.`);
-            const now = g._partyInstance(me.idx) || inst;
-            if (now.level > lv0) lines.push(`${name0} subiu para o nível ${now.level}!`);
-            if (now.speciesId !== sp0) { lines.push(`O quê? ${name0} está evoluindo!`); lines.push(`Parabéns! ${name0} evoluiu para ${POKEMON_DATA[now.speciesId].name}!`); this._sfx('heal'); }
+            post.push(...this._growthLines(r.growth, b.refresh()));
+            if (r.goldGained > 0) post.push(`Você recebeu ${r.goldGained} de ouro.`);
             if (b.trainer) {
                 const t = b.trainer, prize = this.game.exploreTrainerReward(exploreTrainerPrize(t.team) * (t.leader ? 3 : 1), t.id);
                 this.defeated.add(t.id); this.game.exploreMark('defeated', t.id);
-                lines.unshift(`Você derrotou ${t.cls} ${t.name}!`, `${t.name}: "${t.klass.lose}"`);
-                if (prize.amount > 0) lines.push(`Você recebeu ${prize.amount} de ouro pela vitória.`);
+                post.push(`Você derrotou ${t.cls} ${t.name}!`, `${t.name}: "${t.klass.lose}"`);
+                if (prize.amount > 0) post.push(`Você recebeu ${prize.amount} de ouro pela vitória.`);
                 if (t.leader && t.badge && this.game.exploreAwardBadge(t.badge)) {
                     const bd = EXPLORE_BADGES[t.badge];
-                    lines.push(`Você recebeu a ${bd.name}!`, `Efeito: ${bd.effect}.`);
+                    post.push(`Você recebeu a ${bd.name}!`, `Efeito: ${bd.effect}.`);
                     this._badgeLine = `Você recebeu a ${bd.name}!`; this._badgeId = t.badge;
                 }
             }
             this.keep = b.keep();
-        } else if (over === 'run') this.keep = b.keep();
+            const end = () => { this._showBadge(null); this._endBattle(false); };
+            const runExp = () => {                         // "ganhou EXP" com a barra enchendo; depois as falas (nível, evolução, prêmio)
+                this.busy = true; this.$('.ex-menu').innerHTML = '';
+                this.$('.ex-text').textContent = this._expText(name0, r.expGained);
+                this._expRun(r.growth, () => { this.busy = false; if (!this._activeEvolved(r.growth)) this._boxes(); if (post.length) this._dialog(post, end); else setTimeout(end, 500); });
+            };
+            if (pre.length) this._dialog(pre, runExp); else runExp();
+            return;
+        }
+        const lines = [];
+        if (over === 'run') this.keep = b.keep();
         const lose = over === 'lose';
         if (lose) { this.keep = {}; lines.push('Tudo escureceu…'); }
         if (!lines.length) return this._endBattle(lose);
         this._dialog(lines, () => { this._showBadge(null); this._endBattle(lose); });
     }
+    // ---------------- F10.7 · EXP animada e tela de nível ----------------
+    _activeEvolved(growth) { const a = growth && growth.before[growth.active], z = growth && growth.after[growth.active]; return !!(a && z && a.uid === z.uid && a.speciesId !== z.speciesId); }
+    _expText(name, n) { return `${name} ganhou ${typeof ptNumber === 'function' ? ptNumber(n) : n} de EXP!`; }
+    // Anima a barra de EXP do Pokémon em campo pelos trechos de exploreExpSegments; a cada nível, som e brilho na caixa.
+    _expRun(growth, done) {
+        const a = growth && growth.before[growth.active], z = growth && growth.after[growth.active];
+        const segs = a && z && a.uid === z.uid ? exploreExpSegments(a, z) : [];
+        const bar = this.$('.ex-me .ex-exp i'), lv = this.$('.ex-me .ex-name em'), box = this.$('.ex-me');
+        this._expAnim = { segs: segs.length, levels: 0 };
+        if (!segs.length || !bar) return done();
+        const run = (k) => {
+            if (k >= segs.length || !this.open) return done();
+            const s = segs[k], ms = Math.round(220 + 900 * Math.max(0, s.to - s.from));
+            if (lv) lv.textContent = `Nv${s.level}`;
+            bar.style.transition = 'none'; bar.style.width = `${s.from * 100}%`; void bar.offsetWidth;
+            bar.style.transition = `width ${ms}ms linear`; bar.style.width = `${s.to * 100}%`;
+            if (s.to > s.from) this._sfx('exp', ms / 1000);
+            setTimeout(() => {
+                if (s.to >= 1) {                                 // encheu: sobe de nível
+                    this._expAnim.levels++; this._sfx('lvup');
+                    if (box) { box.classList.remove('lvup'); void box.offsetWidth; box.classList.add('lvup'); }
+                    return setTimeout(() => run(k + 1), 380);
+                }
+                run(k + 1);
+            }, ms + 40);
+        };
+        run(0);
+    }
+    // Falas depois da EXP: tela de nível do Pokémon em campo, níveis dos outros da equipe (EXP dividida) e golpes novos
+    _growthLines(growth, learned = []) {
+        const out = []; if (!growth) return out;
+        const list = (xs) => xs.length > 1 ? `${xs.slice(0, -1).join(', ')} e ${xs[xs.length - 1]}` : xs[0];
+        growth.after.forEach((z, i) => {
+            const a = growth.before[i]; if (!a || !z || a.uid !== z.uid) return;
+            const mine = i === growth.active, evolved = z.speciesId !== a.speciesId;
+            if (z.level > a.level) out.push(mine ? { text: `${a.name} subiu para o nível ${z.level}!`, show: () => this._lvupPanel(a, z) } : `${a.name} também subiu para o nível ${z.level}! (EXP dividida)`);
+            else if (evolved) out.push(mine ? `${a.name} subiu de nível!` : `${a.name} também subiu de nível! (EXP dividida)`);
+            if (!evolved) return;                          // evolução (o jogo evolui na hora): o sprite em campo troca com brilho
+            const to = z.speciesId, shiny = !!(this.battle && this.battle.party.find(u => u.idx === i) || {}).shiny;
+            out.push(`O quê? ${a.name} está evoluindo!`);
+            out.push({ text: `Parabéns! ${a.name} evoluiu para ${POKEMON_DATA[to].name}!${z.level < a.level ? ` Espécie nova na Pokédex: recomeça no Nv${z.level}.` : ''}`,
+                show: () => { this._sfx('heal'); if (mine && this.e3d) { this.e3d.setMine(to, shiny); this.e3d.heal('me'); this._boxes(); } } });
+        });
+        for (const l of learned) {
+            if (l.forgot && l.forgot.length) out.push(`1, 2 e… Puf! ${l.name} esqueceu ${list(l.forgot)}.`);
+            out.push({ text: `${l.name} aprendeu ${list(l.learned)}!`, show: () => { this._sfx('item'); } });
+        }
+        return out;
+    }
+    _lvupPanel(a, z) {
+        let el = this.$('.ex-lvup');
+        if (!el) { el = document.createElement('div'); el.className = 'ex-lvup'; el.setAttribute('role', 'status'); this.root.appendChild(el); }
+        const rows = exploreStatGains(a.stats, z.stats);
+        el.innerHTML = `<b>${escapeHtml(a.name)} <em>Nv ${a.level} → ${z.level}</em></b><table>${rows.map(r => `<tr><th>${r.label}</th><td>${r.from}</td><td>→ ${r.to}</td><td class="${r.delta > 0 ? 'up' : ''}">${r.delta > 0 ? '+' : ''}${r.delta}</td></tr>`).join('')}</table>`;
+        el.hidden = false; el.classList.remove('go'); void el.offsetWidth; el.classList.add('go');
+        this._sfx('lvup');
+        return () => { el.hidden = true; };
+    }
     _endBattle(lose) {
         this.battle = null; this.mode = 'world';
+        const lu = this.$('.ex-lvup'); if (lu) lu.hidden = true; this._lineHide = null;
         this.e3d.endBattle(); this.$('.ex-battle').hidden = true; this.root.classList.remove('ex-in-battle');
         this._refreshFollower(); this.e3d.resetTrail(this.state.dir); this._renderParty();
         this.grace = 3; this._applyPhase(); this._areaMusic();
@@ -650,7 +728,7 @@ class ExploreView {
 
     // ---------------- som (sintetizado; sem arquivos) ----------------
     _audioInit() { try { if (!this.audio) { const A = window.AudioContext || window.webkitAudioContext; if (A) this.audio = new A(); } if (this.audio && this.audio.state === 'suspended') this.audio.resume(); } catch (e) { this.audio = null; } }
-    _sfx(kind) {
+    _sfx(kind, arg) {
         const ac = this.audio; if (!ac || ac.state !== 'running') return;
         const tone = (f, d, type = 'square', v = 0.05, delay = 0, slide = 1) => { const t = ac.currentTime + delay, o = ac.createOscillator(), g = ac.createGain(); o.type = type; o.frequency.setValueAtTime(f, t); if (slide !== 1) o.frequency.exponentialRampToValueAtTime(f * slide, t + d); g.gain.setValueAtTime(v, t); g.gain.exponentialRampToValueAtTime(0.0001, t + d); o.connect(g); g.connect(ac.destination); o.start(t); o.stop(t + d + 0.02); };
         const seq = (notes, step = 0.09, type = 'square') => notes.forEach((n, i) => tone(n, step * 1.4, type, 0.05, i * step));
@@ -667,6 +745,8 @@ class ExploreView {
             case 'ui': tone(880, 0.04, 'square', 0.03); break;
             case 'spotted': seq([988, 1319, 988, 1319], 0.06, 'square'); break;
             case 'item': seq([784, 988, 1175, 1568], 0.08, 'triangle'); break;
+            case 'exp': tone(330, Math.max(0.12, arg || 0.5), 'square', 0.025, 0, 2.6); break;        // F10.7: a barra enchendo (sobe o tom)
+            case 'lvup': seq([784, 988, 1175, 1568, 1175, 1568], 0.075, 'square'); break;
             case 'rustle': tone(3200, 0.05, 'sawtooth', 0.008, 0, 0.4); break;
         }
     }

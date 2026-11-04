@@ -1545,6 +1545,17 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
             await page.waitForSelector('#explore [data-m="fight"]', { timeout: 20000 }).catch(() => {});
             const met = await page.evaluate(() => ({ foe: gameUI.exploreView.battle && gameUI.exploreView.battle.foe.speciesId, left: gameUI.exploreView.roamers.length }));
             check('Selvagens visíveis: encostar abre a batalha com o mesmo Pokémon e ele some do mapa', met.foe === want && met.left === roam.n - 1, JSON.stringify({ want, ...met }));
+            // F10.7: vencer com a barra quase cheia — a barra de EXP anima, o Pokémon sobe de nível e a tela de nível mostra os atributos
+            // (a espécie seguinte já registrada: a evolução mantém o nível, como manda a regra do jogo, e a fala da evolução troca o sprite)
+            const lv0 = await page.evaluate(() => { const b = gameUI.exploreView.battle, inst = b.me().inst, grp = POKEMON_DATA[inst.speciesId].expGroup || 'medium'; const ev = POKEMON_DATA[inst.speciesId].evolvesTo; for (const e of [].concat(ev || [])) game.gameState.pokedex[e.id] = 'caught'; inst.exp = getExpForLevel(grp, inst.level + 1) - 1; game._instanceStats.clear(); b.foe.hp = 1; return inst.level; });
+            await page.click('#explore [data-m="fight"]').catch(() => {}); await page.click('#explore .ex-btn.mv[data-i="0"]').catch(() => {});
+            const lvShown = await page.waitForFunction(() => !!document.querySelector('#explore .ex-lvup:not([hidden])'), null, { timeout: 30000 }).then(() => true, () => false);
+            const lvup = await page.evaluate(() => { const p = document.querySelector('#explore .ex-lvup'), v = gameUI.exploreView; return { rows: p ? p.querySelectorAll('tr').length : 0, title: p ? p.querySelector('b').innerText : '', ups: p ? p.querySelectorAll('td.up').length : 0, anim: v._expAnim, box: document.querySelector('#explore .ex-me .ex-name em').textContent, text: document.querySelector('#explore .ex-text').textContent, hpn: document.querySelector('#explore .ex-me .ex-hpn').textContent, maxHp: v.battle && v.battle.me().maxHp }; });
+            check('EXP e nível: a barra de EXP anima até subir de nível e a tela de nível mostra PS/Ataque/Defesa/Velocidade com o ganho', lvShown && lvup.rows === 4 && lvup.ups >= 1 && lvup.anim && lvup.anim.levels === 1 && lvup.title.includes(`Nv ${lv0} → ${lv0 + 1}`) && lvup.box === `Nv${lv0 + 1}` && /subiu para o nível/.test(lvup.text), JSON.stringify({ lv0, ...lvup }));
+            const evoSeen = [];
+            for (let i = 0; i < 8; i++) { const t = await page.evaluate(() => document.querySelector('#explore .ex-text').textContent); evoSeen.push(t); if (/evoluiu para/.test(t)) break; if (!(await page.evaluate(() => !!gameUI.exploreView.dialogLines))) break; await page.keyboard.press('Enter'); await sleep(200); }
+            const evo = await page.evaluate(() => { const v = gameUI.exploreView, b = v.battle; return { panelHidden: !document.querySelector('#explore .ex-lvup:not([hidden])'), box: document.querySelector('#explore .ex-me').innerText, species: b && b.me().speciesId, inst: b && b.me().inst.speciesId, name: b && b.me().name }; });
+            check('EXP e nível: a evolução aparece numa fala própria, a tela de nível some e a caixa passa a ser da espécie nova (nível mantido)', /evoluiu para/.test(evoSeen[evoSeen.length - 1]) && evo.panelHidden && evo.species === evo.inst && evo.box.includes(evo.name) && evo.box.includes(`Nv${lv0 + 1}`), JSON.stringify({ evoSeen, ...evo }));
             for (let i = 0; i < 14; i++) {
                 const st = await page.evaluate(() => { const v = gameUI.exploreView; return v.mode === 'world' && !v.battle ? (v.dialogLines ? 'dialog' : 'world') : v.dialogLines ? 'dialog' : v.busy ? 'busy' : 'menu'; });
                 if (st === 'world') break;
@@ -1623,14 +1634,16 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
             await page.waitForSelector('#explore [data-m="fight"]', { timeout: 20000 }).catch(() => {});
             const lb = await page.evaluate(() => { const b = gameUI.exploreView.battle; return { leader: !!(b && b.trainer && b.trainer.leader), music: gameUI.exploreView.music && gameUI.exploreView.music.track, types: b ? b.trainer.team.map(w => POKEMON_DATA[w.id].types.join('/')) : [] }; });
             check('Ginásio: batalha da Líder com música própria e equipe Pedra/Terra', lb.leader && lb.music === 'leader' && lb.types.length === 3 && lb.types.every(t => /rock|ground/.test(t)), JSON.stringify(lb));
-            await page.evaluate(() => { const b = gameUI.exploreView.battle; for (const u of b.party) { u.stats = { ...u.stats, attack: 99999, speed: 99999 }; u.hp = u.maxHp; } });
+            // atalho do teste: equipe muito forte. Reaplicado a cada turno porque, desde a F10.7, a equipe em campo recalcula nível e atributos quando ganha EXP no meio da batalha
+            const boost = () => page.evaluate(() => { const b = gameUI.exploreView.battle; if (b) for (const u of b.party) { u.stats = { ...u.stats, attack: 99999, speed: 99999 }; u.hp = u.maxHp; } });
+            await boost();
             let badgeShown = false;
             for (let i = 0; i < 50; i++) {
                 const st = await page.evaluate(() => { const v = gameUI.exploreView; return { k: v.mode === 'world' && !v.battle ? (v.dialogLines ? 'dialog' : 'world') : v.dialogLines ? 'dialog' : v.busy ? 'busy' : 'menu', badge: !!(document.querySelector('#explore .ex-badge-show') && !document.querySelector('#explore .ex-badge-show').hidden) }; });
                 if (st.badge) badgeShown = true;
                 if (st.k === 'world') break;
                 if (st.k === 'dialog') await page.keyboard.press('Enter');
-                else if (st.k === 'menu') { await page.click('#explore [data-m="fight"]').catch(() => {}); await page.click('#explore .ex-btn.mv[data-i="1"]').catch(() => {}); }
+                else if (st.k === 'menu') { await boost(); await page.click('#explore [data-m="fight"]').catch(() => {}); await page.click('#explore .ex-btn.mv[data-i="1"]').catch(() => {}); }
                 await sleep(st.k === 'busy' ? 700 : 300);
             }
             const after = await page.evaluate(() => { game.saveNow(); return { badge: game.exploreHasBadge('rocha'), bonus: game.exploreCatchBonus() }; });

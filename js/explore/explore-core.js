@@ -126,6 +126,25 @@ class ExploreBattle {
     canFight() { return this.active >= 0; }
     // Estado para guardar entre batalhas (vida, PP e status por indivíduo)
     keep() { const out = {}; for (const u of this.party) out[u.uid] = { hp: u.hp / u.maxHp, status: u.status, pp: Object.fromEntries(u.moves.map(m => [m.name, m.pp])) }; return out; }
+    // F10.7: depois de ganhar EXP no meio da batalha (treinador com mais Pokémon), a equipe em campo usa o nível e os atributos novos.
+    // Os PS máximos que cresceram entram na vida atual (como nos jogos principais); golpe novo do nível entra com PP cheio.
+    // Devolve [{ idx, name, learned: [nomes], forgot: [nomes] }] de quem aprendeu golpe novo (o menu tem no máximo 4).
+    refresh() {
+        const g = this.game, out = [];
+        for (const u of this.party) {
+            const inst = g._partyInstance(u.idx), s = inst && g.calculateBattleStats(u.idx);
+            if (!inst || !s) continue;
+            const grow = s.hp - u.maxHp;
+            u.level = inst.level; u.stats = s; u.maxHp = s.hp;
+            if (inst.speciesId !== u.speciesId) { u.speciesId = inst.speciesId; u.types = POKEMON_DATA[inst.speciesId].types; u.name = getInstanceDisplayName(inst); }   // evoluiu: luta como a espécie nova
+            u.hp = u.hp > 0 ? Math.max(1, Math.min(s.hp, u.hp + Math.max(0, grow))) : 0;
+            const skill = g.getSkillForInstance(inst), fresh = exploreMoveset(inst.speciesId, skill ? skill.skillLevel : exploreSkillLevelFor(inst.level));
+            const old = new Map(u.moves.map(m => [m.name, m])), learned = fresh.filter(m => !old.has(m.name)).map(m => m.name);
+            const forgot = u.moves.filter(m => !fresh.some(f => f.name === m.name)).map(m => m.name);
+            if (learned.length) { u.moves = fresh.map(m => old.has(m.name) ? old.get(m.name) : m); out.push({ idx: u.idx, name: u.name, learned, forgot }); }
+        }
+        return out;
+    }
 
     _name(u) { return u === this.foe ? (this.trainer ? `${u.name} de ${this.trainer.name}` : `${u.name} selvagem`) : u.name; }
     _useMove(att, def, move, out) {
@@ -385,6 +404,35 @@ function exploreRoamerStep(map, x, y, rng) {
     return opts[Math.floor(rng() * opts.length)];
 }
 
+// ---------------- F10.7 · EXP e subida de nível (funções puras; a interface só anima o que elas dizem) ----------------
+// Quanto da barra de EXP do nível atual já está cheia (0–1). No nível máximo a barra fica vazia.
+function exploreExpFrac(speciesId, level, exp) {
+    const d = POKEMON_DATA[speciesId], g = (d && d.expGroup) || 'medium', lv = Math.max(1, Math.floor(Number(level) || 1));
+    if (lv >= MAX_POKEMON_LEVEL || !EXP_GROUPS[g]) return 0;
+    const a = getExpForLevel(g, lv), b = getExpForLevel(g, lv + 1);
+    return b > a ? Math.max(0, Math.min(1, ((Number(exp) || 0) - a) / (b - a))) : 0;
+}
+// Trechos da animação da barra: [{ level, from, to }]. Subiu de nível: enche até o fim no nível antigo, (no máximo `maxFull` barras
+// cheias dos níveis do meio, os últimos) e então o nível novo de 0 até onde parou. Sem subir: um trecho só (ou nenhum se nada mudou).
+// Evolução que recomeça o nível (primeiro registro da espécie, regra do jogo): só enche a barra do nível antigo.
+function exploreExpSegments(before, after, maxFull = 1) {
+    if (!before || !after) return [];
+    const evolved = before.speciesId != null && after.speciesId != null && after.speciesId !== before.speciesId;
+    if (evolved && after.level <= before.level) return [{ level: before.level, from: before.frac, to: 1 }];   // subiu, evoluiu e (espécie nova) recomeçou do nível baixo: a barra só enche
+    if (after.level <= before.level) return after.frac > before.frac ? [{ level: before.level, from: before.frac, to: after.frac }] : [];
+    const out = [{ level: before.level, from: before.frac, to: 1 }];
+    const firstMid = Math.max(before.level + 1, after.level - Math.max(0, maxFull | 0));
+    for (let lv = firstMid; lv < after.level; lv++) out.push({ level: lv, from: 0, to: 1 });
+    out.push({ level: after.level, from: 0, to: after.frac });
+    return out;
+}
+const EXPLORE_STAT_LABELS = [['hp', 'PS'], ['attack', 'Ataque'], ['defense', 'Defesa'], ['speed', 'Velocidade']];
+// Tabela da tela de nível: atributo, antes, depois e ganho (do próprio Pokémon, sem o bônus da equipe)
+function exploreStatGains(before, after) {
+    if (!before || !after) return [];
+    return EXPLORE_STAT_LABELS.map(([key, label]) => { const from = Math.round(Number(before[key]) || 0), to = Math.round(Number(after[key]) || 0); return { key, label, from, to, delta: to - from }; });
+}
+
 // ---------------- F10.5 · Cidade de Viridian e o primeiro Ginásio (mapas só do modo Explorar) ----------------
 // Mesmo formato dos mapas do mundo (ASCII + WORLD_LEGEND, sem letras novas). `gym` marca a área do prédio (desenhada pela cena 3D);
 // `exits` = células que levam a outro mapa; `trainers` = treinadores fixos (o ginásio não sorteia posições).
@@ -524,9 +572,18 @@ function installExplore(GameCoreClass) {
             const st = this.gameState;
             if (Number.isInteger(partyIndex) && partyIndex >= 0 && partyIndex < st.party.length) st.activePokemonIndex = partyIndex;
             wild._captureResolved = true;
+            const before = st.party.map((_, i) => this.exploreSnapshot(i));
             const r = this._processVictoryRewards(wild, st.team[st.activePokemonIndex], maxHp, hp);
+            // F10.7: como cada Pokémon da equipe estava antes e ficou depois (a interface anima a barra e mostra a tela de nível)
+            r.growth = { active: st.activePokemonIndex, before, after: st.party.map((_, i) => this.exploreSnapshot(i)) };
             this.save();
             return r;
+        },
+        // F10.7: retrato de um Pokémon da equipe para a animação de EXP (nível, barra, espécie e atributos do próprio indivíduo)
+        exploreSnapshot(partyIndex) {
+            const inst = this._partyInstance(partyIndex); if (!inst) return null;
+            const s = this._getInstanceStats(inst) || {};
+            return { uid: inst.uid, speciesId: inst.speciesId, name: getInstanceDisplayName(inst), level: inst.level, exp: inst.exp, frac: exploreExpFrac(inst.speciesId, inst.level, inst.exp), stats: { hp: s.hp, attack: s.attack, defense: s.defense, speed: s.speed } };
         },
         // F10.2: item achado no chão. Bolas e poções respeitam os limites do inventário; ouro passa pelo portão de dinheiro (motivo 'reward').
         exploreGiveItem(item, routeLevel) {
