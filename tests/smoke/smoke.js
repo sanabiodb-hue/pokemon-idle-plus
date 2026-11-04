@@ -1511,6 +1511,55 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
             await context.close();
         }
 
+        // ---------- F10.2 · Rotas vivas: Loja Pokémon, treinador que vê o jogador (batalha sem fuga, prêmio) e item no chão ----------
+        {
+            const { page, context } = await newPage(() => localStorage.setItem('pokemon_idle_tutorial_done', '1'), { viewport: { width: 1280, height: 800 } });
+            await page.goto(base);
+            await page.waitForFunction(() => typeof game !== 'undefined' && game.currentBattle, null, { timeout: 15000 });
+            await page.evaluate(() => { game.gameState.gold = 3000; for (const uid of game.gameState.party) game.gameState.ownedPokemon[uid].level = 60; });
+            await page.click('[data-tab="tab-map"]'); await page.click('#explore-open');
+            await page.waitForFunction(() => gameUI.exploreView.open && gameUI.exploreView.map && gameUI.exploreView.map.id === 'starter_town', null, { timeout: 20000 });
+            const talk = async () => { for (let i = 0; i < 8; i++) { if (!(await page.evaluate(() => !!gameUI.exploreView.dialogLines))) return; await page.keyboard.press('Enter'); await sleep(120); } };
+            await talk();
+            await page.evaluate(() => { const v = gameUI.exploreView; v.state = { ...v.state, x: 21 * 16 + 8, y: 5 * 16 + 13, dir: 'up' }; });
+            await page.keyboard.press('Enter'); await sleep(200); await talk();
+            const shop = await page.waitForSelector('#explore [data-buy="pokeball"][data-qty="1"]', { timeout: 5000 }).then(() => true, () => false);
+            const m0 = await page.evaluate(() => ({ n: game.getBallCount('pokeball'), g: game.getMoney(), price: game.getShopItems().find(i => i.id === 'pokeball').price }));
+            await page.click('#explore [data-buy="pokeball"][data-qty="1"]').catch(() => {}); await sleep(200);
+            const m1 = await page.evaluate(() => ({ n: game.getBallCount('pokeball'), g: game.getMoney() }));
+            check('Rotas vivas: a Loja Pokémon (Depot) vende pela compra oficial (1 bola = 1 preço)', shop && m1.n === m0.n + 1 && m1.g === m0.g - m0.price, JSON.stringify({ m0, m1 }));
+            await page.click('#explore .ex-leave').catch(() => {}); await sleep(200); await talk();
+            await page.evaluate(() => { game.gameState.currentRoute = 'kanto_route1'; gameUI.exploreView._goTo('route', null); });
+            const npc = await page.evaluate(() => { const v = gameUI.exploreView, n = v.npcs[0], d = { up: [0, -1], down: [0, 1], left: [-1, 0], right: [1, 0] }[n.dir], px = n.x + d[0] * 3, py = n.y + d[1] * 3, side = d[0] ? [0, -1] : [-1, 0]; v.state = { ...v.state, x: (px + side[0]) * 16 + 8, y: (py + side[1]) * 16 + 13 }; v.grace = 99; return { id: n.id, key: d[0] ? 'ArrowDown' : 'ArrowRight' }; });
+            await page.keyboard.down(npc.key); await sleep(450); await page.keyboard.up(npc.key);
+            const spotted = await page.waitForFunction(() => gameUI.exploreView.mode === 'cutscene' || !!gameUI.exploreView.dialogLines, null, { timeout: 8000 }).then(() => true, () => false);
+            const bang = await page.evaluate(() => { const e = document.querySelector('#explore .ex-bang'); return !!e; });
+            check('Rotas vivas: o treinador vê o jogador em linha reta ("!") e vem falar', spotted && bang);
+            await page.waitForFunction(() => !!gameUI.exploreView.dialogLines, null, { timeout: 8000 }).catch(() => {}); await talk();
+            const tb = await page.waitForSelector('#explore [data-m="fight"]', { timeout: 20000 }).then(() => true, () => false);
+            const info = await page.evaluate(() => { const b = gameUI.exploreView.battle; return { trainer: !!(b && b.trainer), balls: document.querySelectorAll('#explore .ex-foe .ex-team i').length, team: b && b.trainer ? b.trainer.team.length : -1 }; });
+            check('Rotas vivas: batalha contra treinador mostra as bolas da equipe dele', tb && info.trainer && info.balls === info.team && info.team >= 1, JSON.stringify(info));
+            await page.click('#explore [data-m="run"]'); await sleep(200);
+            const ran = await page.evaluate(() => ({ text: document.querySelector('#explore .ex-text').textContent, turn: gameUI.exploreView.battle.turn }));
+            check('Rotas vivas: não dá para fugir de treinador (o turno não passa)', /Não dá para fugir/.test(ran.text) && ran.turn === 0, JSON.stringify(ran));
+            const g0 = await page.evaluate(() => game.getMoney());
+            for (let i = 0; i < 40; i++) {
+                const st = await page.evaluate(() => { const v = gameUI.exploreView; return v.mode === 'world' && !v.battle ? (v.dialogLines ? 'dialog' : 'world') : v.dialogLines ? 'dialog' : v.busy ? 'busy' : 'menu'; });
+                if (st === 'world') break;
+                if (st === 'dialog') await page.keyboard.press('Enter');
+                else if (st === 'menu') { await page.click('#explore [data-m="fight"]').catch(() => {}); await page.click('#explore .ex-btn.mv[data-i="1"]').catch(() => {}); }
+                await sleep(st === 'busy' ? 700 : 300);
+            }
+            const won = await page.evaluate((id) => ({ defeated: gameUI.exploreView.defeated.has(id), gold: game.getMoney(), mode: gameUI.exploreView.mode }), npc.id);
+            check('Rotas vivas: vencer o treinador paga o prêmio e o marca como vencido', won.defeated && won.gold > g0 && won.mode === 'world', JSON.stringify({ g0, ...won }));
+            const it = await page.evaluate(() => { const v = gameUI.exploreView, i = v.items.find(x => x.item.kind === 'ball') || v.items[0]; v.state = { ...v.state, x: (i.x - 1) * 16 + 8, y: i.y * 16 + 13 }; v.grace = 99; v.npcs.forEach(n => v.defeated.add(n.id)); return { id: i.id, kind: i.item.kind, ball: i.item.id || null, before: i.item.id ? game.getBallCount(i.item.id) : 0 }; });
+            await page.keyboard.down('ArrowRight'); await sleep(350); await page.keyboard.up('ArrowRight'); await sleep(300);
+            const got = await page.evaluate((it) => ({ taken: gameUI.exploreView.taken.has(it.id), text: document.querySelector('#explore .ex-text').textContent, after: it.ball ? game.getBallCount(it.ball) : 0 }), it);
+            check('Rotas vivas: pisar no item no chão o recolhe ("Você encontrou…")', got.taken && /Você encontrou/.test(got.text) && (it.kind !== 'ball' || got.after > it.before), JSON.stringify({ it, got }));
+            await talk(); await page.click('#explore .ex-close').catch(() => {});
+            await context.close();
+        }
+
         check('整个过程中没有页面错误或 console.error', errors.length === 0, errors.slice(0, 5).join(' | '));
     } catch (e) {
         check('冒烟测试流程', false, e.stack || String(e));

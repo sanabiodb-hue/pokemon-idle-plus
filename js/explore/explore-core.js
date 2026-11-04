@@ -99,6 +99,8 @@ function exploreRunChance(playerSpeed, wildSpeed, attempts) {
 class ExploreBattle {
     constructor(game, wild, opts = {}) {
         this.game = game; this.wild = wild; this.turn = 0; this.over = null; this.runs = 0; this.caught = null;
+        this.trainer = opts.trainer || null;            // F10.2: { cls, name, team: [wild…], klass } — a batalha vai até o último Pokémon dele
+        this.foeIndex = 0;
         const st = game.gameState, keep = opts.keep || {};
         this.party = st.party.map((uid, i) => {
             const inst = game._partyInstance(i), stats = game.calculateBattleStats(i);
@@ -112,16 +114,20 @@ class ExploreBattle {
         }).filter(Boolean);
         const wantActive = this.party.findIndex(u => u.idx === st.activePokemonIndex && u.hp > 0);
         this.active = wantActive >= 0 ? wantActive : this.party.findIndex(u => u.hp > 0);
-        const ws = game.calculateStats(wild);
-        this.foe = { wild, speciesId: wild.id, level: wild.level, types: POKEMON_DATA[wild.id].types, stats: ws, maxHp: ws.hp, hp: ws.hp, moves: exploreMoveset(wild.id, exploreSkillLevelFor(wild.level)), status: null, name: POKEMON_DATA[wild.id].name, shiny: !!wild.isShiny };
+        this.foe = this._makeFoe(wild);
         this.participants = new Set(this.active >= 0 ? [this.active] : []);
     }
+    _makeFoe(wild) {
+        const ws = this.game.calculateStats(wild);
+        return { wild, speciesId: wild.id, level: wild.level, types: POKEMON_DATA[wild.id].types, stats: ws, maxHp: ws.hp, hp: ws.hp, moves: exploreMoveset(wild.id, exploreSkillLevelFor(wild.level)), status: null, name: POKEMON_DATA[wild.id].name, shiny: !!wild.isShiny };
+    }
+    foesLeft() { return this.trainer ? this.trainer.team.length - this.foeIndex - (this.foe.hp > 0 ? 0 : 1) : (this.foe.hp > 0 ? 1 : 0); }
     me() { return this.party[this.active]; }
     canFight() { return this.active >= 0; }
     // Estado para guardar entre batalhas (vida, PP e status por indivíduo)
     keep() { const out = {}; for (const u of this.party) out[u.uid] = { hp: u.hp / u.maxHp, status: u.status, pp: Object.fromEntries(u.moves.map(m => [m.name, m.pp])) }; return out; }
 
-    _name(u) { return u === this.foe ? `${u.name} selvagem` : u.name; }
+    _name(u) { return u === this.foe ? (this.trainer ? `${u.name} de ${this.trainer.name}` : `${u.name} selvagem`) : u.name; }
     _useMove(att, def, move, out) {
         const g = this.game, isPlayer = att !== this.foe;
         move.pp = Math.max(0, move.pp - 1);
@@ -159,7 +165,16 @@ class ExploreBattle {
         }
     }
     _checkFaints(out) {
-        if (this.foe.hp <= 0 && !this.over) { out.push({ t: 'faint', side: 'foe', msg: `${this._name(this.foe)} desmaiou!` }); this.over = 'win'; return; }
+        if (this.foe.hp <= 0 && !this.over) {
+            out.push({ t: 'faint', side: 'foe', msg: `${this._name(this.foe)} desmaiou!` });
+            if (this.trainer && this.foeIndex < this.trainer.team.length - 1) {          // o treinador manda o próximo
+                out.push({ t: 'xp', wild: this.foe.wild });
+                this.foeIndex++; this.foe = this._makeFoe(this.trainer.team[this.foeIndex]);
+                out.push({ t: 'foeSwitch', msg: `${this.trainer.cls} ${this.trainer.name} enviou ${this.foe.name}!` });
+                return;
+            }
+            this.over = 'win'; return;
+        }
         const me = this.me();
         if (me && me.hp <= 0) {
             out.push({ t: 'faint', side: 'me', msg: `${me.name} desmaiou!` });
@@ -200,6 +215,7 @@ class ExploreBattle {
             return out;
         }
         if (action.type === 'run') {
+            if (this.trainer) { out.push({ t: 'text', msg: 'Não dá para fugir de uma batalha contra treinador!' }); return out; }
             this.turn++; this.runs++;
             if (g.rng() < exploreRunChance(me.stats.speed, this.foe.stats.speed, this.runs - 1)) { out.push({ t: 'text', msg: 'Você fugiu em segurança!' }); this.over = 'run'; return out; }
             out.push({ t: 'text', msg: 'Não deu para fugir!' });
@@ -227,6 +243,7 @@ class ExploreBattle {
             this._foeTurn(out); return out;
         }
         if (action.type === 'ball') {
+            if (this.trainer) { out.push({ t: 'text', msg: 'O treinador bloqueou a bola! Não dá para capturar o Pokémon de outra pessoa.' }); return out; }
             const ball = getBallType(action.id);
             if (!ball || g.getBallCount(ball.id) <= 0) { out.push({ t: 'text', msg: 'Você não tem essa bola!' }); return out; }
             this.turn++;
@@ -240,6 +257,104 @@ class ExploreBattle {
         return out;
     }
 }
+
+// ---------------- F10.2 · treinadores e itens das rotas (puros e determinísticos pelo id do mapa) ----------------
+const EXPLORE_TRAINER_CLASSES = [
+    { cls: 'Caçador de Insetos', types: ['bug', 'grass'], colors: { jacket: '#5fbf57', cap: '#e8d24a', pants: '#3a4a2a' }, intro: 'Ei! Meus insetos estão prontos!', lose: 'Meus insetos… voltem!' },
+    { cls: 'Garota do Campo', types: ['normal', 'fairy', 'grass'], colors: { jacket: '#ff8ac8', cap: '#ffffff', pants: '#6a4a8a' }, intro: 'Você parece forte. Vamos ver!', lose: 'Puxa, você é bom mesmo!' },
+    { cls: 'Montanhista', types: ['rock', 'ground', 'fighting'], colors: { jacket: '#b5793a', cap: '#6b4a2e', pants: '#3a3a46' }, intro: 'As montanhas me ensinaram a lutar!', lose: 'Fui soterrado…' },
+    { cls: 'Pescador', types: ['water', 'ice'], colors: { jacket: '#3f78e2', cap: '#e8e8e8', pants: '#2a3a5a' }, intro: 'Pesquei um adversário!', lose: 'Esse escapou da rede…' },
+    { cls: 'Jovem Treinador', types: [], colors: { jacket: '#e94560', cap: '#2f6fd6', pants: '#2a2a46' }, intro: 'Nossos olhos se cruzaram! Batalha!', lose: 'Perdi! Você é demais!' },
+    { cls: 'Mística', types: ['psychic', 'ghost', 'dark'], colors: { jacket: '#7e5cff', cap: '#2a1a4a', pants: '#1a1a2a' }, intro: 'Eu previ este encontro…', lose: 'Isso eu não previ.' },
+];
+const EXPLORE_TRAINER_NAMES = ['Léo', 'Bia', 'Davi', 'Nina', 'Caio', 'Lara', 'Rafa', 'Mel', 'Igor', 'Luna', 'Theo', 'Íris', 'Bruno', 'Clara', 'Enzo', 'Sofia'];
+const EXPLORE_SIGHT = 4;            // tiles de visão em linha reta do treinador
+const EXPLORE_DIRS = { up: [0, -1], down: [0, 1], left: [-1, 0], right: [1, 0] };
+
+const _exploreWalk = (map, x, y) => !worldCellBlocked(map, x, y);
+// Posições de treinadores: chão andável (não mato alto), com pelo menos 3 tiles livres à frente, longe do início e entre si.
+// Devolve [{ id, x, y, dir, cls, name, seed }]. Puro: o mesmo mapa dá sempre os mesmos treinadores.
+function exploreTrainerSpots(map, count) {
+    if (!map || map.type === 'city') return [];
+    const rnd = worldRng(worldStringSeed('trainers:v1:' + map.id)), out = [], start = map.spawn || { x: 0, y: 0 };
+    const cand = [];
+    for (let y = 1; y < map.height - 1; y++) for (let x = 1; x < map.width - 1; x++) {
+        if (!_exploreWalk(map, x, y) || map.rows[y][x] === 'w') continue;
+        let best = null, bestRun = 0;
+        for (const dir of ['down', 'left', 'right', 'up']) {
+            const [dx, dy] = EXPLORE_DIRS[dir]; let run = 0;
+            while (run < EXPLORE_SIGHT && _exploreWalk(map, x + dx * (run + 1), y + dy * (run + 1))) run++;
+            if (run > bestRun) { bestRun = run; best = dir; }
+        }
+        if (bestRun >= 3 && Math.abs(x - start.x) + Math.abs(y - start.y) > 7) cand.push({ x, y, dir: best });
+    }
+    for (let tries = 0; out.length < count && cand.length && tries < 400; tries++) {
+        const c = cand[Math.floor(rnd() * cand.length)];
+        if (out.some(o => Math.abs(o.x - c.x) + Math.abs(o.y - c.y) < 9)) continue;
+        const k = EXPLORE_TRAINER_CLASSES[Math.floor(rnd() * EXPLORE_TRAINER_CLASSES.length)];
+        out.push({ id: `${map.id}#t${out.length}`, x: c.x, y: c.y, dir: c.dir, cls: k.cls, klass: k, name: EXPLORE_TRAINER_NAMES[Math.floor(rnd() * EXPLORE_TRAINER_NAMES.length)], seed: Math.floor(rnd() * 1e9) });
+    }
+    return out;
+}
+// Quantos treinadores um mapa tem (pela área): 2 a 4
+function exploreTrainerCount(map) { return map && map.type !== 'city' ? Math.max(2, Math.min(4, Math.round(map.width * map.height / 1200))) : 0; }
+
+// O treinador vê o jogador? Linha reta na direção dele, até EXPLORE_SIGHT tiles, parada no primeiro bloqueio. Devolve a distância ou null.
+function exploreTrainerSees(cmap, t, px, py) {
+    const [dx, dy] = EXPLORE_DIRS[t.dir] || [0, 1];
+    for (let d = 1; d <= EXPLORE_SIGHT; d++) {
+        const x = t.x + dx * d, y = t.y + dy * d;
+        if (x === px && y === py) return d;
+        if (worldCellBlocked(cmap, x, y)) return null;
+    }
+    return null;
+}
+// Cópia do mapa só para colisão: treinadores viram obstáculo (letra de pedra), o desenho continua usando o mapa original
+function exploreCollisionMap(map, cells) {
+    if (!cells || !cells.length) return map;
+    const rows = map.rows.map(r => r.split(''));
+    for (const c of cells) if (rows[c.y] && rows[c.y][c.x] !== undefined) rows[c.y][c.x] = 'r';
+    return { ...map, rows: rows.map(r => r.join('')) };
+}
+// Equipe do treinador: 1 a 3 Pokémon da tabela natural da rota (preferindo os tipos da classe), nível no topo da faixa da rota.
+// Usa o gerador do jogo (createWildPokemon, sem shiny) e marca cada um como de treinador (não pode ser capturado).
+function exploreTrainerTeam(game, route, t) {
+    const rnd = worldRng(t.seed >>> 0), list = ((route && route.pokemon) || []).filter(p => POKEMON_DATA[p.id] && !(typeof isRestrictedSpecies === 'function' && isRestrictedSpecies(p.id)));
+    if (!list.length) return [];
+    const pref = list.filter(p => POKEMON_DATA[p.id].types.some(ty => t.klass.types.includes(ty)));
+    const pool = pref.length ? pref : list, n = 1 + Math.floor(rnd() * 3), top = (route.levelRange && route.levelRange[1]) || 5;
+    const team = [];
+    for (let i = 0; i < n; i++) {
+        const sp = pool[Math.floor(rnd() * pool.length)], lv = Math.max(2, top + Math.floor(rnd() * 3) - (n - 1 - i));
+        const w = game.createWildPokemon(sp.id, lv, 0);
+        if (w) { w._trainer = true; team.push(w); }
+    }
+    return team;
+}
+// Prêmio em ouro (como nos jogos: proporcional ao nível do último Pokémon e ao tamanho da equipe)
+function exploreTrainerPrize(team) { if (!team.length) return 0; const top = Math.max(...team.map(w => w.level)); return Math.max(10, Math.round(top * 12 * (1 + 0.25 * (team.length - 1)))); }
+
+// Itens no chão: tiles andáveis fora do caminho e do mato, longe do início. Devolve [{ id, x, y, item: { kind, id?, qty } }].
+const EXPLORE_ITEM_TABLE = [[{ kind: 'ball', id: 'pokeball', qty: 3 }, 40], [{ kind: 'potion', qty: 2 }, 25], [{ kind: 'ball', id: 'greatball', qty: 2 }, 15], [{ kind: 'ball', id: 'ultraball', qty: 1 }, 5], [{ kind: 'gold', qty: 1 }, 15]];
+function exploreItemSpots(map, count) {
+    if (!map || map.type === 'city') return [];
+    const rnd = worldRng(worldStringSeed('items:v1:' + map.id)), start = map.spawn || { x: 0, y: 0 }, out = [], cand = [];
+    for (let y = 1; y < map.height - 1; y++) for (let x = 1; x < map.width - 1; x++) {
+        const ch = map.rows[y][x], def = WORLD_LEGEND[ch];
+        if (!def || def.walkable !== true || def.kind === 'path' || ch === 'w') continue;
+        if (Math.abs(x - start.x) + Math.abs(y - start.y) > 6) cand.push({ x, y });
+    }
+    const total = EXPLORE_ITEM_TABLE.reduce((a, e) => a + e[1], 0);
+    for (let tries = 0; out.length < count && cand.length && tries < 300; tries++) {
+        const c = cand[Math.floor(rnd() * cand.length)];
+        if (out.some(o => Math.abs(o.x - c.x) + Math.abs(o.y - c.y) < 6)) continue;
+        let r = rnd() * total, item = EXPLORE_ITEM_TABLE[0][0];
+        for (const [it, w] of EXPLORE_ITEM_TABLE) { r -= w; if (r < 0) { item = it; break; } }
+        out.push({ id: `${map.id}#i${out.length}`, x: c.x, y: c.y, item: { ...item } });
+    }
+    return out;
+}
+function exploreItemCount(map) { return map && map.type !== 'city' ? Math.max(3, Math.min(6, Math.round(map.width * map.height / 900))) : 0; }
 
 // ---------------- GameCore ----------------
 function installExplore(GameCoreClass) {
@@ -290,10 +405,24 @@ function installExplore(GameCoreClass) {
             this.save();
             return r;
         },
+        // F10.2: item achado no chão. Bolas e poções respeitam os limites do inventário; ouro passa pelo portão de dinheiro (motivo 'reward').
+        exploreGiveItem(item, routeLevel) {
+            if (!item) return { ok: false };
+            if (item.kind === 'ball') { const r = this.addBalls(item.id, item.qty); return { ok: !!(r && r.ok), added: r && r.added || 0 }; }
+            if (item.kind === 'potion') { const inv = this.ensureInventory(), room = Math.max(0, this.getPotionCapacity() - inv.potions), n = Math.min(room, item.qty); inv.potions += n; this.save(); return { ok: true, added: n }; }
+            if (item.kind === 'gold') { const amount = Math.max(20, Math.round((routeLevel || 5) * 15)); const r = this.earnMoney(amount, 'reward', { source: 'explore_item' }); this.save(); return { ok: r.ok, added: r.amount || 0 }; }
+            return { ok: false };
+        },
+        exploreTrainerReward(amount, trainerId) {
+            if (!(amount > 0)) return { ok: false, amount: 0 };
+            const r = this.earnMoney(Math.round(amount), 'reward', { source: 'explore_trainer', trainer: trainerId });
+            this.save();
+            return { ok: r.ok, amount: r.amount || 0 };
+        },
         // Uma tentativa de captura manual com a bola escolhida: gasta 1 bola, três balançadas (um sorteio cada) e, se pegar, _applyCapture.
         exploreCapture(wild, ballId, hpFrac, hasStatus) {
             const ball = getBallType(ballId);
-            if (!ball || this.getBallCount(ball.id) <= 0 || wild._captureResolved) return { ok: false, caught: false, shakes: 0 };
+            if (!ball || this.getBallCount(ball.id) <= 0 || wild._captureResolved || wild._trainer) return { ok: false, caught: false, shakes: 0 };
             this.consumeBall(ball.id, 1);
             const chance = exploreCaptureChance(speciesCatchRate(POKEMON_DATA[wild.id]), ball, hpFrac, hasStatus);
             const shakes = exploreShakes(chance, () => this.rng());

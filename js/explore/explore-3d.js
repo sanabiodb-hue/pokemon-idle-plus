@@ -76,7 +76,7 @@ class Explore3D {
         const T = this.T;
         this._clear(this.world);
         this._lights(this.world, true);
-        this.map = map; this._shadowAt = null; this.renderer.shadowMap.needsUpdate = true;
+        this.map = map; this._shadowAt = null; this.npcs = new Map(); this.items = new Map(); this.renderer.shadowMap.needsUpdate = true;
         const W = map.width, H = map.height;
         const groundChar = (ch) => EXPLORE_GROUND_COLORS[ch] ? ch : (WORLD_LEGEND[ch] && WORLD_LEGEND[ch].kind === 'object' ? this._groundUnder(map) : '.');
         // chão: uma malha com cor por vértice (cada célula = 2 triângulos próprios, cores nítidas por tile)
@@ -171,8 +171,8 @@ class Explore3D {
     _liquid(list, lava) {
         const T = this.T, mat = this._mat({ color: lava ? '#ff5a1f' : '#3a9be0', emissive: lava ? '#ff3a00' : '#0b3a66', emissiveIntensity: lava ? 1.3 : 0.35, roughness: 0.15, metalness: 0.1, transparent: !lava, opacity: 0.88 });
         const geo = new T.PlaneGeometry(1, 1); geo.rotateX(-Math.PI / 2);
-        this._inst(geo, mat, list, (x, y) => ({ x: x + 0.5, y: -0.12, z: y + 0.5, sx: 1 }), false);
-        this._inst(new T.BoxGeometry(1, 0.3, 1), this._mat({ color: lava ? '#2a1a14' : '#3d6b8a' }), list, (x, y) => ({ x: x + 0.5, y: -0.45, z: y + 0.5, sx: 1 }), false);
+        // F10.2: no nível do chão (abaixo dele ficava escondida pelo topo do bloco de base do mapa e aparecia preta)
+        this._inst(geo, mat, list, (x, y) => ({ x: x + 0.5, y: -0.004, z: y + 0.5, sx: 1 }), false);
         this.anim.push({ liquid: mat, lava });
     }
     // Prédios da cidade: letras de telhado e parede viram blocos com telhado, janelas, porta e o emblema do Centro Pokémon
@@ -200,9 +200,14 @@ class Explore3D {
     // ---------------- treinador e seguidor ----------------
     ensureTrainer() {
         if (this.trainer) { if (this.trainer.parent !== this.world) this.world.add(this.trainer); return this.trainer; }
+        this.trainer = this._trainerModel({ jacket: '#ff3b3b', cap: '#ff3b3b', pants: '#2a3a6a', bag: '#2f6fd6' }); this.world.add(this.trainer);
+        return this.trainer;
+    }
+    // Modelo de treinador (o jogador e os NPCs das rotas): colors = { jacket, cap, pants, bag }
+    _trainerModel(colors) {
         const T = this.T, g = new T.Group(), body = new T.Group(); g.add(body);
         const mat = (c, o = {}) => this._mat({ color: c, roughness: 0.6, ...o });
-        const jacket = mat('#ff3b3b'), pants = mat('#2a3a6a'), skin = mat('#f1c7a5'), cap = mat('#ff3b3b'), white = mat('#ffffff');
+        const jacket = mat(colors.jacket), pants = mat(colors.pants || '#2a3a6a'), skin = mat('#f1c7a5'), cap = mat(colors.cap), white = mat('#ffffff');
         const add = (geo, m, x, y, z, parent = body) => { const o = new T.Mesh(geo, m); o.position.set(x, y, z); o.castShadow = this.q.shadows === 'dynamic'; parent.add(o); return o; };
         const legs = [-1, 1].map(s => { const p = new T.Group(); p.position.set(s * 0.09, 0.42, 0); body.add(p); add(new T.CapsuleGeometry(0.07, 0.26, 4, 8), pants, 0, -0.2, 0, p); add(new T.BoxGeometry(0.11, 0.06, 0.18), white, 0, -0.39, 0.03, p); return p; });
         add(new T.CapsuleGeometry(0.17, 0.28, 6, 12), jacket, 0, 0.7, 0);
@@ -210,23 +215,49 @@ class Explore3D {
         add(new T.SphereGeometry(0.17, 18, 14), skin, 0, 1.07, 0);
         add(new T.SphereGeometry(0.18, 18, 10, 0, Math.PI * 2, 0, Math.PI / 2), cap, 0, 1.12, 0);
         const brim = add(new T.CylinderGeometry(0.14, 0.14, 0.02, 18, 1, false, -Math.PI / 2, Math.PI), white, 0, 1.12, 0.11); brim.scale.z = 1.5;
-        add(new T.BoxGeometry(0.26, 0.3, 0.13), mat('#2f6fd6'), 0, 0.73, -0.19);
+        add(new T.BoxGeometry(0.26, 0.3, 0.13), mat(colors.bag || '#6b4a2e'), 0, 0.73, -0.19);
         for (const s of [-1, 1]) add(new T.SphereGeometry(0.025, 8, 6), mat('#1a1a2a'), s * 0.06, 1.08, 0.15);
         const sh = new T.Mesh(new T.CircleGeometry(0.3, 20), new T.MeshBasicMaterial({ color: 0, transparent: true, opacity: 0.3, depthWrite: false })); sh.rotation.x = -Math.PI / 2; sh.position.y = 0.02; g.add(sh);
         g.userData = { legs, arms, body, t: 0 };
-        this.trainer = g; this.world.add(g);
         return g;
     }
+    _walkAnim(g, moving, dt, speed = 11) {
+        const U = g.userData; U.t += dt * (moving ? speed : 2);
+        U.legs.forEach((l, i) => { l.rotation.x = moving ? Math.sin(U.t + i * Math.PI) * 0.7 : 0; });
+        U.arms.forEach((a, i) => { a.rotation.x = moving ? Math.sin(U.t + i * Math.PI + Math.PI) * 0.6 : 0; });
+        U.body.position.y = moving ? Math.abs(Math.sin(U.t)) * 0.04 : 0;
+    }
+    // ---------------- F10.2 · treinadores NPC e itens ----------------
+    setNpcs(list) {
+        for (const m of (this.npcs || new Map()).values()) this.world.remove(m);
+        this.npcs = new Map();
+        for (const n of list) {
+            const g = this._trainerModel({ jacket: n.colors.jacket, cap: n.colors.cap, pants: n.colors.pants, bag: '#6b4a2e' });
+            g.position.set(n.x + 0.5, 0, n.y + 0.85); g.rotation.y = { down: 0, up: Math.PI, left: -Math.PI / 2, right: Math.PI / 2 }[n.dir] ?? 0;
+            this.world.add(g); this.npcs.set(n.id, g);
+        }
+    }
+    moveNpc(id, x, z, dir, moving, dt) {
+        const g = this.npcs && this.npcs.get(id); if (!g) return;
+        g.position.set(x, 0, z); g.rotation.y = { down: 0, up: Math.PI, left: -Math.PI / 2, right: Math.PI / 2 }[dir] ?? g.rotation.y;
+        this._walkAnim(g, moving, dt);
+    }
+    npc(id) { return this.npcs ? this.npcs.get(id) : null; }
+    setItems(list) {
+        for (const m of (this.items || new Map()).values()) this.world.remove(m);
+        this.items = new Map();
+        for (const it of list) { const b = this._ballMesh(it.item.kind === 'ball' ? it.item.id : 'pokeball'); b.scale.setScalar(0.8); b.position.set(it.x + 0.5, 0.2, it.y + 0.5); b.userData.phase = (it.x * 7 + it.y) % 6; this.world.add(b); this.items.set(it.id, b); }
+    }
+    removeItem(id) { const b = this.items && this.items.get(id); if (b) { this._burst(b.position.clone(), '#ffe27a', 18, 2); this.world.remove(b); this.items.delete(id); } }
+    // posição na tela (px CSS) de um objeto 3D, para o balão "!" e outros rótulos do HTML
+    screenOf(obj, yOff = 1.5) { const v = obj.position.clone(); v.y += yOff; v.project(this.camera); return { x: (v.x * 0.5 + 0.5) * this.w, y: (-v.y * 0.5 + 0.5) * this.h, visible: v.z < 1 }; }
     // state: { x, y (px do mundo), dir, moving }
     setTrainer(state, dt, running) {
         const g = this.ensureTrainer(), U = g.userData;
         g.position.set(state.x / WORLD_TILE_SIZE, 0, state.y / WORLD_TILE_SIZE);
         const want = { down: 0, up: Math.PI, left: -Math.PI / 2, right: Math.PI / 2 }[state.dir] ?? 0;
         let d = want - g.rotation.y; d = Math.atan2(Math.sin(d), Math.cos(d)); g.rotation.y += d * Math.min(1, dt * 14);
-        U.t += dt * (state.moving ? (running ? 16 : 11) : 2);
-        U.legs.forEach((l, i) => { l.rotation.x = state.moving ? Math.sin(U.t + i * Math.PI) * 0.7 : 0; });
-        U.arms.forEach((a, i) => { a.rotation.x = state.moving ? Math.sin(U.t + i * Math.PI + Math.PI) * 0.6 : 0; });
-        U.body.position.y = state.moving ? Math.abs(Math.sin(U.t)) * 0.04 : 0;
+        this._walkAnim(g, state.moving, dt, running ? 16 : 11);
         // o líder segue alguns passos atrás (rastro do treinador)
         const p = g.position;
         this.trail = this.trail || [];
@@ -295,6 +326,14 @@ class Explore3D {
         const L = this.layout || { me: [-2.2, 1.7] }; this.meSpr = this.pokemonSprite(id, shiny, this.h > this.w ? 2.2 : 2.5); this.meSpr.position.set(L.me[0], 0.1, L.me[1]); this.meSpr.userData.base = this.meSpr.position.clone();
         this.battle.add(this.meSpr);
         this._burst(this.meSpr.position.clone().add(new this.T.Vector3(0, 1, 0)), '#ffffff', 30, 2.5);
+    }
+    // F10.2: o treinador manda o próximo Pokémon (entra deslizando no lugar do anterior)
+    setFoe(id, shiny) {
+        if (this.foeSpr) this.battle.remove(this.foeSpr);
+        const L = this.layout || { foe: [2.8, -2.2] };
+        this.foeSpr = this.pokemonSprite(id, shiny, 2.5); this.foeSpr.position.set(L.foe[0] + 6, 0.1, L.foe[1]); this.foeSpr.userData.base = new this.T.Vector3(L.foe[0], 0.1, L.foe[1]);
+        this.battle.add(this.foeSpr);
+        this._tween(0.5, (k) => { this.foeSpr.position.x = L.foe[0] + 6 * (1 - k) * (1 - k); });
     }
     endBattle() { this.mode = 'world'; this._clear(this.battle); this.meSpr = this.foeSpr = this.ball = null; this.camera.far = this.q.fogFar + 8; this.camera.updateProjectionMatrix(); }
     _spr(side) { return side === 'me' ? this.meSpr : this.foeSpr; }
@@ -377,6 +416,7 @@ class Explore3D {
         }
         if (this.windU) this.windU.value = this.t;
         for (const a of this.anim || []) { if (a.liquid) a.liquid.emissiveIntensity = (a.lava ? 1.2 : 0.3) + Math.sin(this.t * 2) * 0.15; if (a.glow) a.glow.emissiveIntensity = 1 + Math.sin(this.t * 3) * 0.4; }
+        if (this.items) for (const b of this.items.values()) { b.rotation.y += dt * 1.5; b.position.y = 0.2 + Math.sin(this.t * 2.5 + b.userData.phase) * 0.05; }
         if (this.pad) { this.pad.rotation.z += dt * 1.5; this.pad.material.opacity = 0.6 + Math.sin(this.t * 4) * 0.25; }
         const portrait = this.h > this.w;
         if (this.mode === 'world' && this.trainer) {
