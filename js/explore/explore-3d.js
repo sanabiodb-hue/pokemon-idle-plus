@@ -53,10 +53,12 @@ class Explore3D {
         this.phase = phase;
         const T = this.T, sky = this.baseSky.clone();
         if (phase.sky) sky.lerp(new T.Color(phase.sky), 0.65);
+        const canopy = this.map && this.map.canopy > 0 ? this.map.canopy : 1;           // F10.8: copa da floresta: menos luz e névoa esverdeada
+        if (canopy < 1) sky.lerp(new T.Color('#1f4a34'), 1 - canopy);
         this.world.background = sky; if (this.world.fog) this.world.fog.color.copy(sky);
         const u = this.world.userData;
-        if (u.hemi) u.hemi.intensity = u.hemiBase * (phase.hemi / 1.25);
-        if (u.sunLight) { u.sunLight.intensity = phase.sun; u.sunLight.color.set(phase.sunColor); }
+        if (u.hemi) u.hemi.intensity = u.hemiBase * (phase.hemi / 1.25) * canopy;
+        if (u.sunLight) { u.sunLight.intensity = phase.sun * canopy; u.sunLight.color.set(phase.sunColor); }
         if (this.lampMat) this.lampMat.emissiveIntensity = phase.lamps ? 3.2 : 0.6;
     }
     // F10.3: folhas saltando ao pisar no mato alto
@@ -197,10 +199,10 @@ class Explore3D {
         const T = this.T, cx = gm.x + gm.w / 2, cz = gm.y + gm.h / 2, front = gm.y + gm.h;
         const add = (geo, mat, x, y, z) => { const m = new T.Mesh(geo, mat); m.position.set(x, y, z); m.castShadow = this.q.shadows !== 'blob'; m.receiveShadow = this.q.shadows !== 'blob'; this.world.add(m); return m; };
         add(new T.BoxGeometry(gm.w, 2.2, gm.h), this._mat({ color: '#d9d2c2', roughness: 0.9 }), cx, 1.1, cz);
-        add(new T.BoxGeometry(gm.w + 0.3, 0.45, gm.h + 0.3), this._mat({ color: '#c2652a', roughness: 0.6 }), cx, 2.42, cz);
-        const ridge = add(new T.CylinderGeometry(0.01, gm.h / 2 + 0.15, 0.9, 4, 1), this._mat({ color: '#a84f1e', roughness: 0.6, flatShading: true }), cx, 3.08, cz); ridge.rotation.y = Math.PI / 4; ridge.scale.x = gm.w / gm.h;
+        add(new T.BoxGeometry(gm.w + 0.3, 0.45, gm.h + 0.3), this._mat({ color: gm.roof || '#c2652a', roughness: 0.6 }), cx, 2.42, cz);
+        const ridge = add(new T.CylinderGeometry(0.01, gm.h / 2 + 0.15, 0.9, 4, 1), this._mat({ color: gm.ridge || '#a84f1e', roughness: 0.6, flatShading: true }), cx, 3.08, cz); ridge.rotation.y = Math.PI / 4; ridge.scale.x = gm.w / gm.h;
         for (const dx of [-0.32, 0.32]) add(new T.BoxGeometry(0.6, 1.25, 0.06), this._mat({ color: '#5a3a22', roughness: 0.7 }), gm.door.x + 0.5 + dx, 0.63, front + 0.03);
-        const emblem = add(new T.CylinderGeometry(0.42, 0.42, 0.08, 8), this._mat({ color: '#d9a441', roughness: 0.3, metalness: 0.4, emissive: '#5a3a10', emissiveIntensity: 0.4 }), gm.door.x + 0.5, 1.75, front + 0.06); emblem.rotation.x = Math.PI / 2;
+        const emblem = add(new T.CylinderGeometry(0.42, 0.42, 0.08, 8), this._mat({ color: gm.emblem || '#d9a441', roughness: 0.3, metalness: 0.4, emissive: '#5a3a10', emissiveIntensity: 0.4 }), gm.door.x + 0.5, 1.75, front + 0.06); emblem.rotation.x = Math.PI / 2;
         const c = document.createElement('canvas'); c.width = 256; c.height = 64; const g = c.getContext('2d');
         g.fillStyle = '#3a2a1a'; g.fillRect(0, 0, 256, 64); g.fillStyle = '#ffd27a'; g.font = 'bold 40px sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText('GINÁSIO', 128, 34);
         const tex = new T.CanvasTexture(c); tex.colorSpace = T.SRGBColorSpace;

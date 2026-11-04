@@ -71,6 +71,9 @@ function exploreStepEncounter(map, prev, next, rng, rateMult = 1) {
     return null;
 }
 
+// F10.8: dano com bônus de insígnia (arredonda; um golpe que acerta nunca perde dano)
+function exploreBoostedDamage(damage, bonus) { const d = Math.max(0, Number(damage) || 0); return bonus > 0 && d > 0 ? Math.max(d, Math.round(d * (1 + bonus))) : d; }
+
 // Chance de captura manual. Com vida cheia vale a mesma chance da bola no idle (captureChance da F9.5); quanto menos vida, maior.
 function exploreCaptureChance(rate, ball, hpFrac, hasStatus, bonus = 0) {
     if (!ball) return 0;
@@ -156,8 +159,9 @@ class ExploreBattle {
         const crit = g._getCritParams(isPlayer);
         const atkStat = att.status === 'burn' ? Math.max(1, Math.floor(att.stats.attack / 2)) : att.stats.attack;
         const r = g._computeDamage(att.level, atkStat, def.stats.defense, [move.type], def.types, move.power, crit.rate, crit.multiplier);
-        def.hp = Math.max(0, def.hp - r.damage);
-        out.push({ t: 'hit', side: isPlayer ? 'me' : 'foe', dmg: r.damage, eff: r.typeEffectiveness, crit: r.criticalHit, mtype: move.type, power: move.power, hp: def.hp, maxHp: def.maxHp });
+        const dmg = isPlayer ? exploreBoostedDamage(r.damage, g.exploreDamageBonus ? g.exploreDamageBonus() : 0) : r.damage;   // F10.8: Insígnia Casulo
+        def.hp = Math.max(0, def.hp - dmg);
+        out.push({ t: 'hit', side: isPlayer ? 'me' : 'foe', dmg, eff: r.typeEffectiveness, crit: r.criticalHit, mtype: move.type, power: move.power, hp: def.hp, maxHp: def.maxHp });
         if (r.criticalHit) out.push({ t: 'text', msg: 'Um golpe crítico!' });
         if (r.effectivenessText) out.push({ t: 'text', msg: r.effectivenessText });
         const s = EXPLORE_TYPE_STATUS[move.type];
@@ -296,7 +300,7 @@ const _exploreWalk = (map, x, y) => !worldCellBlocked(map, x, y);
 function exploreTrainerSpots(map, count) {
     if (map && Array.isArray(map.trainers)) return map.trainers.map(t => {              // F10.5: treinadores fixos (ginásio)
         const base = EXPLORE_TRAINER_CLASSES.find(k => k.cls === t.cls) || EXPLORE_TRAINER_CLASSES[2];
-        const klass = t.leader ? { ...base, cls: t.cls, intro: t.intro || base.intro, lose: t.lose || base.lose, colors: { jacket: '#8a5a2a', cap: '#3a2a1a', pants: '#2a2a30' } } : base;
+        const klass = t.leader ? { ...base, cls: t.cls, intro: t.intro || base.intro, lose: t.lose || base.lose, colors: t.colors || { jacket: '#8a5a2a', cap: '#3a2a1a', pants: '#2a2a30' } } : base;
         return { ...t, klass, seed: worldStringSeed(t.id) };
     });
     if (!map || map.type === 'city') return [];
@@ -441,10 +445,11 @@ const EXPLORE_MAPS = {
         id: 'explore_viridian', type: 'city', name: 'Cidade de Viridian', width: 28, height: 22,
         spawn: { x: 13, y: 19, dir: 'up' },
         gym: { x: 3, y: 3, w: 7, h: 4, door: { x: 6, y: 6 } },
-        interactions: [{ id: 'pokemon_center', type: 'heal', label: 'Centro Pokémon', cell: { x: 20, y: 5 } }, { id: 'gym', type: 'gym', label: 'Ginásio de Viridian', cell: { x: 6, y: 7 } }],
-        exits: [{ y: 21, x0: 12, x1: 14, to: 'kanto_route1', at: { x: 16, y: 1, dir: 'down' } }],
+        interactions: [{ id: 'pokemon_center', type: 'heal', label: 'Centro Pokémon', cell: { x: 20, y: 5 } }, { id: 'gym', type: 'gym', label: 'Ginásio de Viridian', cell: { x: 6, y: 7 }, to: 'explore_gym_rock' }],
+        exits: [{ y: 21, x0: 12, x1: 14, to: 'kanto_route1', at: { x: 16, y: 1, dir: 'down' } },
+            { y: 0, x0: 12, x1: 14, to: 'explore_forest', at: { x: 14, y: 33, dir: 'up' } }],                // F10.8: ao norte, a Floresta de Viridian
         rows: [
-            'TTTTTTTTTTTTTTTTTTTTTTTTTTTT', 'TTTTTTTTTTTTTTTTTTTTTTTTTTTT', 'TT........................TT', 'TT.OOOOOOO.........ABC....TT',
+            'TTTTTTTTTTTTpppTTTTTTTTTTTTT', 'TTTTTTTTTTTTpppTTTTTTTTTTTTT', 'TT........................TT', 'TT.OOOOOOO.........ABC....TT',
             'TT.OOOOOOO.........DGF....TT', 'TT.OOOOOOO..........q.....TT', 'TT.OOOOOOO.........qqq....TT', 'TT.qqqqqqqqqqqqqqqqqqqqqq.TT',
             'TT.qqlqqqqqqqqqqqqqqqqlqq.TT', 'TT.qqqqqqqqqqqqqqqqqqqqqq.TT', 'TT.qqqqqhqqqqqqqqqhqqqqqq.TT', 'TT.qqqqqqqqqqqqqqqqqqqqqq.TT',
             'TTbqqqqqqqlqqqqqqlqqqqqqqbTT', 'TT.qqqqqqqqqqqqqqqqqqqqqq.TT', 'TT..........ppp...........TT', 'TT.========.ppp.=========.TT',
@@ -454,6 +459,7 @@ const EXPLORE_MAPS = {
     },
     explore_gym_rock: {
         id: 'explore_gym_rock', type: 'city', name: 'Ginásio de Viridian', width: 13, height: 16, indoor: true,
+        gymInfo: { leader: 'Petra', type: 'Pedra', badge: 'rocha', back: 'Bom te ver de novo, campeão!' },
         spawn: { x: 6, y: 14, dir: 'up' },
         exits: [{ y: 15, x0: 5, x1: 7, to: 'explore_viridian', at: { x: 6, y: 8, dir: 'down' } }],
         trainers: [
@@ -465,10 +471,68 @@ const EXPLORE_MAPS = {
         rows: ['OOOOOOOOOOOOO', 'OXqqqqqqqqqXO', 'OqqqqqqqqqqqO', 'OqRRqqqqqRRqO', 'OqqqqqqqqqqqO', 'OqqqqqqqqqqqO', 'OqqqqqqqqqqqO', 'OqRRqqqqqRRqO',
             'OqqqqqqqqqqqO', 'OqqqqqqqqqqqO', 'OqqqqqqqqqqqO', 'OqRqRqqqRqRqO', 'OqqqqqqqqqqqO', 'OXqqqqqqqqqXO', 'OqqqqqqqqqqqO', 'OOOOOqqqOOOOO'],
     },
+    // F10.8: Floresta de Viridian — mata fechada (copa escurece a luz), caminho sinuoso, mato alto com insetos (encontros da rota
+    // kanto_viridian_forest, Nv 11–15) e Caçadores de Insetos em pontos fixos com visão pelo caminho.
+    explore_forest: {
+        id: 'explore_forest', type: 'route', name: 'Floresta de Viridian', width: 30, height: 36, route: 'kanto_viridian_forest', biome: 'forest', canopy: 0.62, music: 'forest',
+        spawn: { x: 14, y: 33, dir: 'up' },
+        exits: [{ y: 35, x0: 13, x1: 15, to: 'explore_viridian', at: { x: 13, y: 2, dir: 'down' } }, { y: 0, x0: 15, x1: 17, to: 'explore_pewter', at: { x: 13, y: 18, dir: 'up' } }],
+        trainers: [
+            { id: 'explore_forest#t0', x: 16, y: 25, dir: 'left', cls: 'Caçador de Insetos', name: 'Davi' },
+            { id: 'explore_forest#t1', x: 6, y: 19, dir: 'left', cls: 'Caçador de Insetos', name: 'Nina' },
+            { id: 'explore_forest#t2', x: 20, y: 11, dir: 'up', cls: 'Caçador de Insetos', name: 'Theo' },
+            { id: 'explore_forest#t3', x: 26, y: 4, dir: 'left', cls: 'Caçador de Insetos', name: 'Caio' },
+        ],
+        rows: [
+            'TTTTTTTTTTTTTTTpppTTTTTTTTTTTT', 'TTTTTTTTTTTTTTTpppTTTTTTTTTTTT', 'TTTTTTTTTTTTTT.pppwwwww....oTT', 'TTTTTTTTTTTTTT.pppppppppp...TT',
+            'TTTTTTTTTTTTTT.pppppppppp...TT', 'TTTTTTTTTTTTTTy......ww.....TT', 'TTTTTTTTTTTTTTTTTTTTTwwppwwwTT', 'TT........wwwwwwwww..wwppwwwTT',
+            'TTo....f..wwwwwwwww..wwppwwwTT', 'TT..ppppppppppppppppp..ppwwwTT', 'TT..ppppppppppppppppp..ppwwwTT', 'TT........wwwwwwwwww.....wwwTT',
+            'TTww......wwwwwwwwww......b.TT', 'TTwwppwwTTTTTTTTTTTTTTTTTTTTTT', 'TTwwppwwTTTTTTTTTTTTTTTTTTTTTT', 'TTwwppwwTTTTTTTTTTTTTTTTTTTTTT',
+            'TTwwppwwTTTTTTTTTTTTTTTTTTTTTT', 'TTwwppwwTTTTTTTTTTTTTTTTTTTTTT', 'TT..pp..wwww.....TTTTTTTTTTTTT', 'TT..pp..wwwwy...fTTTTTTTTTTTTT',
+            'TT..pp..pppppppp.TTTTTTTTTTTTT', 'TTT.pppppppppppp.TTTTTTTTTTTTT', 'TTT..............TTTTTTTTTTTTT', 'TTTTTTTTTTTTbpppbTTTTTTTTTTTTT',
+            'TTTTTTTTTTTT.ppp.TTTTTTTTTTTTT', 'TTTTTTTTTTTT.ppp.TTTTTTTTTTTTT', 'TTTf.........ppp.s........oTTT', 'TTT.wwwwwww..ppp...wwwwwww.TTT',
+            'TTT.wwwwwww..ppp...wwwwwww.TTT', 'TTT.wwwwwww..ppp...wwwwwww.TTT', 'TTT.wwwwwww..ppp...wwwwwww.TTT', 'TTTo.........ppp..........yTTT',
+            'TTTTTTTTTTTT.pppyTTTTTTTTTTTTT', 'TTTTTTTTTTTTfppp.TTTTTTTTTTTTT', 'TTTTTTTTTTTT.ppp.TTTTTTTTTTTTT', 'TTTTTTTTTTTT.ppp.TTTTTTTTTTTTT',
+        ],
+    },
+    // F10.8: Cidade de Pewter — Centro Pokémon, Loja Pokémon e o segundo Ginásio (Inseto) no meio da praça
+    explore_pewter: {
+        id: 'explore_pewter', type: 'city', name: 'Cidade de Pewter', width: 28, height: 21,
+        spawn: { x: 13, y: 17, dir: 'up' },
+        gym: { x: 10, y: 3, w: 8, h: 4, door: { x: 13, y: 6 }, roof: '#4f9a3a', ridge: '#3a7a2a', emblem: '#9ad84a' },
+        interactions: [{ id: 'pokemon_center', type: 'heal', label: 'Centro Pokémon', cell: { x: 4, y: 5 } }, { id: 'depot', type: 'depot', label: 'Loja Pokémon', cell: { x: 23, y: 5 } },
+            { id: 'gym', type: 'gym', label: 'Ginásio de Pewter', cell: { x: 13, y: 7 }, to: 'explore_gym_bug' }],
+        exits: [{ y: 20, x0: 12, x1: 14, to: 'explore_forest', at: { x: 16, y: 2, dir: 'down' } }],
+        rows: [
+            'TTTTTTTTTTTTTTTTTTTTTTTTTTTT', 'TTTTTTTTTTTTTTTTTTTTTTTTTTTT', 'TT........................TT', 'TT.ABC....OOOOOOOO....HIJ.TT',
+            'TT.DGF....OOOOOOOO....KNM.TT', 'TT..q.....OOOOOOOO.....q..TT', 'TT.qqq....OOOOOOOO....qqq.TT', 'TT.qqqqqqqqqqqqqqqqqqqqqq.TT',
+            'TT.qqlqqqqqqqqqqqqqqqqlqq.TT', 'TT.qqqqqqqqqqqqqqqqqqqqqq.TT', 'TT.qqqqqhqqqqqqqqqhqqqqqq.TT', 'TT.qqqqqqqqqqqqqqqqqqqqqq.TT',
+            'TTbqqqqqqqlqqqqqqlqqqqqqqbTT', 'TT..r.......ppp.......r...TT', 'TT.====r===.ppp.===r=====.TT', 'TT..y.......ppp.....r...f.TT',
+            'TT.r...b....ppp.z.y.......TT', 'TT...f...y..ppp......y.r..TT', 'TT....r.....ppp....b..f...TT', 'TTTTTTTTTTTTpppTTTTTTTTTTTTT',
+            'TTTTTTTTTTTTpppTTTTTTTTTTTTT',
+        ],
+    },
+    // F10.8: Ginásio de Pewter — estufa de cerca viva (tipo Inseto). Mesma disposição de treinadores do primeiro ginásio.
+    explore_gym_bug: {
+        id: 'explore_gym_bug', type: 'city', name: 'Ginásio de Pewter', width: 13, height: 16, indoor: true,
+        gymInfo: { leader: 'Silvana', type: 'Inseto', badge: 'casulo', back: 'Meus insetos ainda falam de você!' },
+        spawn: { x: 6, y: 14, dir: 'up' },
+        exits: [{ y: 15, x0: 5, x1: 7, to: 'explore_pewter', at: { x: 13, y: 8, dir: 'down' } }],
+        trainers: [
+            { id: 'explore_gym_bug#t0', x: 2, y: 9, dir: 'right', cls: 'Caçador de Insetos', name: 'Enzo', team: [10, 13, 14], levelMult: 0.9 },
+            { id: 'explore_gym_bug#t1', x: 10, y: 6, dir: 'left', cls: 'Caçador de Insetos', name: 'Lara', team: [48, 46, 11], levelMult: 0.95 },
+            { id: 'explore_gym_bug#t2', x: 6, y: 2, dir: 'down', cls: 'Líder de Ginásio', name: 'Silvana', team: [12, 47, 15, 123], levelMult: 1.1, leader: true, badge: 'casulo',
+                colors: { jacket: '#5fae3a', cap: '#2f5a1e', pants: '#3a2a1a' },
+                intro: 'Eu sou Silvana, Líder do Ginásio de Pewter! Na floresta, quem não se adapta fica pelo caminho. Vamos ver se você se adapta!', lose: 'Você atravessou a minha floresta inteira… A Insígnia Casulo é sua!' },
+        ],
+        rows: ['TTTTTTTTTTTTT', 'Tf.........fT', 'T...........T', 'T.bb.....bb.T', 'T...........T', 'T.....,.....T', 'T...........T', 'T.bb.....bb.T',
+            'T...........T', 'T...........T', 'T.,.......,.T', 'T.b.o...o.b.T', 'T...........T', 'Ty.........yT', 'T...........T', 'TTTTT...TTTTT'],
+    },
 };
 // Insígnias do modo Explorar (independentes das insígnias regionais do idle). O efeito só vale no Explorar.
 const EXPLORE_BADGES = {
     rocha: { id: 'rocha', name: 'Insígnia Rocha', color: '#b5793a', effect: '+10% de chance de captura no modo Explorar', catchBonus: 0.1 },
+    casulo: { id: 'casulo', name: 'Insígnia Casulo', color: '#7cc44a', effect: '+10% de dano dos seus golpes no modo Explorar', damageBonus: 0.1 },     // F10.8
 };
 function exploreMapById(id) { return Object.prototype.hasOwnProperty.call(EXPLORE_MAPS, id) ? EXPLORE_MAPS[id] : getWorldMap(id); }
 // Equipe de treinador fixo (ginásio): espécies declaradas, nível pela média da sua equipe × levelMult (o ginásio acompanha o seu progresso)
@@ -525,6 +589,7 @@ function installExplore(GameCoreClass) {
             p.badges.push(id); this._emit('explore_badge', { id }); this.save();
             return true;
         },
+        exploreDamageBonus() { const p = this.exploreProgress(); return (p.badges || []).reduce((a, id) => a + ((EXPLORE_BADGES[id] && EXPLORE_BADGES[id].damageBonus) || 0), 0); },
         exploreCatchBonus() { const p = this.exploreProgress(); return (p.badges || []).reduce((a, id) => a + ((EXPLORE_BADGES[id] && EXPLORE_BADGES[id].catchBonus) || 0), 0); },
         exploreSetPosition(at) {
             const p = this.exploreProgress(), clean = sanitizeExploreState({ at });

@@ -103,7 +103,7 @@ class ExploreView {
         if (this.music) this.music.setEnabled(on);
         const b = this.$('.ex-music'); if (b) { b.textContent = on ? '🔊' : '🔇'; b.setAttribute('aria-pressed', on ? 'true' : 'false'); }
     }
-    _areaMusic() { if (this.music && this.map) this.music.play(this.map.indoor ? 'gym' : this.map.type === 'city' ? 'town' : 'route'); }
+    _areaMusic() { if (this.music && this.map) this.music.play(this.map.music || (this.map.indoor ? 'gym' : this.map.type === 'city' ? 'town' : 'route')); }
     // fase do dia pelo relógio do aparelho (hourOverride só para testes); reaplicada a cada 30 s
     _applyPhase() {
         const d = new Date(), h = this.hourOverride !== null ? this.hourOverride : d.getHours() + d.getMinutes() / 60, ph = exploreDayPhase(h);
@@ -203,9 +203,11 @@ class ExploreView {
     }
 
     // ---------------- mapas e transições ----------------
-    _route() { return this.game.getRoute(this.game.gameState.currentRoute); }
+    // rota dos encontros: a do mapa (F10.8: a Floresta tem a rota própria) ou a rota escolhida no jogo
+    _route() { return this.map && this.map.route ? this.game.getRoute(this.map.route) : this._gameRoute(); }
+    _gameRoute() { return this.game.getRoute(this.game.gameState.currentRoute); }
     _routeMap() {
-        const route = this._route();
+        const route = this._gameRoute();
         if (!route) return null;
         const fixed = worldMapIdForRoute(route.id);
         if (fixed) return getWorldMap(fixed);
@@ -227,8 +229,9 @@ class ExploreView {
         this.e3d.setExitPad(pad); this.onPad = !!pad;
         this.e3d.setTrainer(this.state, 0, false); this._refreshFollower(); this.e3d.resetTrail(this.state.dir);
         const route = this._route();
-        this.$('.ex-loc-name').textContent = map.type === 'city' ? map.name : (route ? route.name : map.name);
-        this.$('.ex-loc-sub').textContent = map.indoor ? `Líder Petra · tipo Pedra${this.game.exploreHasBadge('rocha') ? ' · 🏅 vencido' : ''}` : map.id === 'explore_viridian' ? 'Centro Pokémon · Ginásio' : map.type === 'city' ? 'Centro Pokémon · Loja Pokémon' : (route && route.levelRange ? `Nv ${route.levelRange[0]}–${route.levelRange[1]} · ${exploreMapHasGrass(map) ? 'mato alto' : 'todo o chão'} tem encontros` : '');
+        const gi = map.gymInfo, own = Object.prototype.hasOwnProperty.call(EXPLORE_MAPS, map.id);
+        this.$('.ex-loc-name').textContent = map.type === 'city' || own ? map.name : (route ? route.name : map.name);
+        this.$('.ex-loc-sub').textContent = gi ? `Líder ${gi.leader} · tipo ${gi.type}${this.game.exploreHasBadge(gi.badge) ? ' · 🏅 vencido' : ''}` : map.type === 'city' ? ['Centro Pokémon', (map.interactions || []).some(i => i.type === 'depot') && 'Loja Pokémon', map.gym && 'Ginásio'].filter(Boolean).join(' · ') : (route && route.levelRange ? `Nv ${route.levelRange[0]}–${route.levelRange[1]} · ${exploreMapHasGrass(map) ? 'mato alto' : 'todo o chão'} tem encontros` : '');
         this.grace = 3; this.steps0 = this.state.distance;
         // F10.2: treinadores (obstáculos na colisão) e itens no chão
         this.npcs = exploreTrainerSpots(map, exploreTrainerCount(map)).map(t => ({ ...t, colors: t.klass.colors }));
@@ -365,11 +368,15 @@ class ExploreView {
         if (this.mode !== 'world' || !this.map) return;
         const c = this._cell(), [dx, dy] = { up: [0, -1], down: [0, 1], left: [-1, 0], right: [1, 0] }[this.state.dir] || [0, 1];
         const talk = (this.npcs || []).find(n => n.x === c.x + dx && n.y === c.y + dy);
-        if (talk) { const k = talk.klass; this._dialog([this.defeated.has(talk.id) ? `${k.cls} ${talk.name}: "${talk.leader ? 'A Insígnia Rocha é sua. Continue treinando!' : k.lose}"` : `${k.cls} ${talk.name}: "${k.intro}"`], this.defeated.has(talk.id) ? null : () => this._trainerBattle(talk)); return; }
+        if (talk) { const k = talk.klass, bd = talk.badge && EXPLORE_BADGES[talk.badge]; this._dialog([this.defeated.has(talk.id) ? `${k.cls} ${talk.name}: "${talk.leader && bd ? `A ${bd.name} é sua. Continue treinando!` : k.lose}"` : `${k.cls} ${talk.name}: "${k.intro}"`], this.defeated.has(talk.id) ? null : () => this._trainerBattle(talk)); return; }
         const it = worldInteractionNear(this.map, this.state);
         if (!it) return;
         if (it.type === 'heal') this._center();
-        else if (it.type === 'gym') { this._sfx('item'); this._goTo('explore_gym_rock', null); this._dialog(this.game.exploreHasBadge('rocha') ? ['Ginásio de Viridian. A Líder Petra acena: "Bom te ver de novo, campeão!"'] : ['Ginásio de Viridian — Líder Petra. Tipo: Pedra.', 'Vença os aprendizes e desafie a Líder para ganhar a Insígnia Rocha!']); }
+        else if (it.type === 'gym') {                      // F10.8: cada porta leva ao seu ginásio (gymInfo diz líder, tipo e insígnia)
+            const to = it.to || 'explore_gym_rock', gm = EXPLORE_MAPS[to], gi = gm.gymInfo, bd = EXPLORE_BADGES[gi.badge];
+            this._sfx('item'); this._goTo(to, null);
+            this._dialog(this.game.exploreHasBadge(gi.badge) ? [`${gm.name}. A Líder ${gi.leader} acena: "${gi.back}"`] : [`${gm.name} — Líder ${gi.leader}. Tipo: ${gi.type}.`, `Vença os aprendizes e desafie a Líder para ganhar a ${bd.name}!`]);
+        }
         else if (it.type === 'depot') this._dialog(['Bem-vindo à Loja Pokémon! (o Depot guarda seus Pokémon; para organizá-los, use a aba PC)'], () => this._mart());
     }
     // Loja Pokémon: as mesmas compras da aba Caça (buyShopItem: preço do jogo, compra atômica, limite de estoque)

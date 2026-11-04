@@ -1654,6 +1654,69 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
             await context.close();
         }
 
+        // ---------- F10.8 · Floresta de Viridian (Caçadores de Insetos, trilha própria), Cidade de Pewter e o Ginásio Inseto (Insígnia Casulo) ----------
+        {
+            const { page, context } = await newPage(() => localStorage.setItem('pokemon_idle_tutorial_done', '1'), { viewport: { width: 1280, height: 800 } });
+            await page.goto(base);
+            await page.waitForFunction(() => typeof game !== 'undefined' && game.currentBattle, null, { timeout: 15000 });
+            await page.evaluate(() => { for (const uid of game.gameState.party) game.gameState.ownedPokemon[uid].level = 40; });
+            await page.click('[data-tab="tab-map"]'); await page.click('#explore-open');
+            await page.waitForFunction(() => gameUI.exploreView.open && gameUI.exploreView.map, null, { timeout: 20000 });
+            const talk = async () => { for (let i = 0; i < 10; i++) { if (!(await page.evaluate(() => !!gameUI.exploreView.dialogLines))) return; await page.keyboard.press('Enter'); await sleep(120); } };
+            await talk();
+            await page.evaluate(() => { const v = gameUI.exploreView; v.setQuality('low', true); v._goTo('explore_viridian', { x: 13, y: 2, dir: 'up' }); v.grace = 99; });
+            await page.keyboard.down('ArrowUp');
+            const inForest = await page.waitForFunction(() => gameUI.exploreView.map.id === 'explore_forest', null, { timeout: 20000 }).then(() => true, () => false);
+            await page.keyboard.up('ArrowUp');
+            const fo = await page.evaluate(() => { const v = gameUI.exploreView, r = game.getRoute('kanto_viridian_forest'), ids = r.pokemon.map(p => p.id); return { name: document.querySelector('#explore .ex-loc-name').textContent, sub: document.querySelector('#explore .ex-loc-sub').textContent, music: v.music && v.music.track, roam: v.roamers.length, roamOk: v.roamers.every(x => ids.includes(x.wild.id) && x.wild.level >= 11 && x.wild.level <= 15), bugs: v.npcs.filter(n => n.klass.cls === 'Caçador de Insetos').length, hemi: v.e3d.world.userData.hemi.intensity, hemiBase: v.e3d.world.userData.hemiBase }; });
+            check('Floresta: a saída norte de Viridian leva à Floresta de Viridian (Nv 11–15, trilha própria, mata escurecida)', inForest && fo.name === 'Floresta de Viridian' && /Nv 11–15/.test(fo.sub) && fo.music === 'forest' && fo.hemi < fo.hemiBase * 0.8, JSON.stringify(fo));
+            check('Floresta: selvagens visíveis são da floresta e há 4 Caçadores de Insetos', fo.roam >= 2 && fo.roamOk && fo.bugs === 4, JSON.stringify(fo));
+            // um Caçador vê você no caminho, vem falar e a batalha começa com Pokémon de inseto
+            await page.evaluate(() => { const v = gameUI.exploreView; v.state = { ...v.state, x: 14 * 16 + 8, y: 27 * 16 + 13, dir: 'up' }; v.grace = 99; });
+            await page.keyboard.down('ArrowUp');
+            const spot = await page.waitForFunction(() => gameUI.exploreView.mode === 'cutscene' || !!gameUI.exploreView.dialogLines, null, { timeout: 15000 }).then(() => true, () => false);
+            await page.keyboard.up('ArrowUp');
+            await page.waitForFunction(() => !!gameUI.exploreView.dialogLines, null, { timeout: 8000 }).catch(() => {}); await talk();
+            const bb = await page.waitForSelector('#explore [data-m="fight"]', { timeout: 20000 }).then(() => true, () => false);
+            const fb = await page.evaluate(() => { const b = gameUI.exploreView.battle; return b ? { cls: b.trainer && b.trainer.cls, types: b.trainer.team.map(w => POKEMON_DATA[w.id].types) } : null; });
+            check('Floresta: o Caçador de Insetos vê você no caminho e batalha com insetos', spot && bb && fb && fb.cls === 'Caçador de Insetos' && fb.types.every(t => t.includes('bug') || t.includes('grass')), JSON.stringify(fb));
+            const boost = () => page.evaluate(() => { const b = gameUI.exploreView.battle; if (b) for (const u of b.party) { u.stats = { ...u.stats, attack: 99999, speed: 99999 }; u.hp = u.maxHp; } });
+            const fight = async (n) => { for (let i = 0; i < n; i++) {
+                const st = await page.evaluate(() => { const v = gameUI.exploreView; return { k: v.mode === 'world' && !v.battle ? (v.dialogLines ? 'dialog' : 'world') : v.dialogLines ? 'dialog' : v.busy ? 'busy' : 'menu', badge: !!(document.querySelector('#explore .ex-badge-show') && !document.querySelector('#explore .ex-badge-show').hidden) }; });
+                if (st.badge) fight.badge = true;
+                if (st.k === 'world') return;
+                if (st.k === 'dialog') await page.keyboard.press('Enter');
+                else if (st.k === 'menu') { await boost(); await page.click('#explore [data-m="fight"]').catch(() => {}); await page.click('#explore .ex-btn.mv[data-i="1"]').catch(() => {}); }
+                await sleep(st.k === 'busy' ? 700 : 300);
+            } };
+            await fight(50);
+            check('Floresta: vencer o Caçador o marca como vencido', await page.evaluate(() => gameUI.exploreView.defeated.has('explore_forest#t0') && gameUI.exploreView.mode === 'world'));
+            // saída norte da floresta → Pewter; a porta do ginásio leva ao Ginásio Inseto
+            await page.evaluate(() => { const v = gameUI.exploreView; v.npcs.forEach(n => v.defeated.add(n.id)); v.state = { ...v.state, x: 16 * 16 + 8, y: 2 * 16 + 13, dir: 'up' }; v.grace = 99; });
+            await page.keyboard.down('ArrowUp');
+            const inPewter = await page.waitForFunction(() => gameUI.exploreView.map.id === 'explore_pewter', null, { timeout: 15000 }).then(() => true, () => false);
+            await page.keyboard.up('ArrowUp'); await talk();
+            const pe = await page.evaluate(() => ({ name: document.querySelector('#explore .ex-loc-name').textContent, sub: document.querySelector('#explore .ex-loc-sub').textContent, music: gameUI.exploreView.music && gameUI.exploreView.music.track }));
+            check('Pewter: a saída norte da floresta leva à Cidade de Pewter (Centro, Loja e Ginásio)', inPewter && pe.name === 'Cidade de Pewter' && pe.sub === 'Centro Pokémon · Loja Pokémon · Ginásio' && pe.music === 'town', JSON.stringify(pe));
+            await page.evaluate(() => { const v = gameUI.exploreView; v.state = { ...v.state, x: 13 * 16 + 8, y: 7 * 16 + 13, dir: 'up' }; });
+            await page.keyboard.press('Enter'); await sleep(300);
+            const gy = await page.evaluate(() => ({ map: gameUI.exploreView.map.id, sub: document.querySelector('#explore .ex-loc-sub').textContent, text: document.querySelector('#explore .ex-text').textContent }));
+            check('Ginásio de Pewter: a porta abre o ginásio da Líder Silvana (tipo Inseto)', gy.map === 'explore_gym_bug' && /Silvana · tipo Inseto/.test(gy.sub) && /Insígnia Casulo/.test(gy.text + (await page.evaluate(() => (gameUI.exploreView.dialogLines || []).join(' ')))), JSON.stringify(gy));
+            await talk();
+            await page.evaluate(() => { const v = gameUI.exploreView; v.npcs.filter(n => !n.leader).forEach(n => v.defeated.add(n.id)); v.state = { ...v.state, x: 6 * 16 + 8, y: 7 * 16 + 13, dir: 'up' }; v.grace = 99; });
+            await page.keyboard.down('ArrowUp');
+            await page.waitForFunction(() => gameUI.exploreView.mode === 'cutscene' || !!gameUI.exploreView.dialogLines, null, { timeout: 15000 }).catch(() => {});
+            await page.keyboard.up('ArrowUp');
+            await page.waitForFunction(() => !!gameUI.exploreView.dialogLines, null, { timeout: 10000 }).catch(() => {}); await talk();
+            const lb = await page.waitForSelector('#explore [data-m="fight"]', { timeout: 20000 }).then(() => true, () => false);
+            const lead = await page.evaluate(() => { const b = gameUI.exploreView.battle; return b ? { leader: b.trainer.leader, n: b.trainer.team.length, bug: b.trainer.team.every(w => POKEMON_DATA[w.id].types.includes('bug')), music: gameUI.exploreView.music && gameUI.exploreView.music.track } : null; });
+            check('Ginásio de Pewter: batalha da Líder com música de líder e equipe de 4 insetos', lb && lead && lead.leader && lead.n === 4 && lead.bug && lead.music === 'leader', JSON.stringify(lead));
+            fight.badge = false; await fight(70);
+            const cas = await page.evaluate(() => { game.saveNow(); return { badge: game.exploreHasBadge('casulo'), dmg: game.exploreDamageBonus(), mode: gameUI.exploreView.mode }; });
+            check('Ginásio de Pewter: vencer a Líder dá a Insígnia Casulo (mostrada na tela) com +10% de dano no Explorar', fight.badge && cas.badge && Math.abs(cas.dmg - 0.1) < 1e-9 && cas.mode === 'world', JSON.stringify({ shown: fight.badge, ...cas }));
+            await context.close();
+        }
+
         check('整个过程中没有页面错误或 console.error', errors.length === 0, errors.slice(0, 5).join(' | '));
     } catch (e) {
         check('冒烟测试流程', false, e.stack || String(e));

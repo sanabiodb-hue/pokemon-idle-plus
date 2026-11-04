@@ -53,6 +53,10 @@ const EXPLORE_TRACKS = {
         lead: _seq('D5:1 D5:1 A5:1 D5:1 C6:1 A5:1 F5:1 A5:1 G5:1 G5:1 D6:1 C6:1 A5:2 F5:2 D5:1 D5:1 A5:1 D5:1 C6:1 D6:1 E6:1 C6:1 Bb5:1 A5:1 G5:1 E5:1 D5:4'),
         bass: _seq('D2:1 D3:1 D2:1 D3:1 F2:1 F3:1 F2:1 F3:1 G2:1 G3:1 G2:1 G3:1 A2:1 A3:1 A2:1 A3:1 D2:1 D3:1 D2:1 D3:1 Bb2:1 Bb3:1 Bb2:1 Bb3:1 G2:1 G3:1 A2:1 A3:1 D2:4'),
         pad: _seq('A4:8 G4:4 A4:4 F4:8 G4:4 F4:4') },
+    forest: { bpm: 112, loop: true, wave: ['triangle', 'triangle', 'sine'],          // F10.8: Floresta de Viridian (lá menor, misteriosa)
+        lead: _seq('A4:1 C5:1 E5:2 D5:1 C5:1 B4:2 A4:1 B4:1 C5:1 E5:1 D5:2 -:2 F5:1 E5:1 D5:2 C5:1 B4:1 A4:2 G4:1 A4:1 B4:1 C5:1 A4:2 -:2'),
+        bass: _seq('A2:2 E3:2 A2:2 E3:2 F2:2 C3:2 G2:2 D3:2 D2:2 A2:2 A2:2 E3:2 F2:2 G2:2 A2:4'),
+        pad: _seq('C4:4 E4:4 A3:4 B3:4 F4:4 E4:4 D4:4 C4:4') },
     victory: { bpm: 140, loop: false, wave: ['square', 'triangle', 'triangle'],
         lead: _seq('G4:1 C5:1 E5:1 G5:3 E5:1 G5:5'),
         bass: _seq('C3:2 G3:2 C3:4 C3:4'),
