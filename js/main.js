@@ -49,6 +49,8 @@ window.addEventListener('DOMContentLoaded', () => {
 
     // 初始化UI
     gameUI = new GameUI(game);
+    // F10: modo Explorar (andar pela rota em 3D, encontros no mato alto e batalha por turnos); entra pela aba Mapa
+    if (typeof ExploreView === 'function') gameUI.exploreView = new ExploreView(gameUI);
 
     // 初次渲染
     gameUI.renderTeam();

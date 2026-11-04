@@ -1921,6 +1921,7 @@ class GameCore {
     _battleBlockReason() {
         if (this._isOfflineSimulating) return 'offline';
         if (this._towerMode) return 'tower';
+        if (this._exploreMode) return 'explore';        // F10: modo Explorar ativo (batalhas manuais por turnos); a automática volta ao sair
         if (this.healTimer) return 'healing';
         if (this._nextBattleTimeout) return 'next_scheduled';
         if (this.battleTimer) return 'in_battle';

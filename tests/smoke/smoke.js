@@ -1454,6 +1454,53 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
             await context.close();
         }
 
+        // ---------- F10 · Modo Explorar: cidade 3D → rota → encontro no mato → batalha por turnos → sair devolve o idle ----------
+        for (const vp of [{ name: 'desktop 1280x800', viewport: { width: 1280, height: 800 } }, { name: 'celular 390x844', viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true }]) {
+            const { page, context } = await newPage(() => localStorage.setItem('pokemon_idle_tutorial_done', '1'), { viewport: vp.viewport, isMobile: !!vp.isMobile, hasTouch: !!vp.hasTouch });
+            await page.goto(base);
+            await page.waitForFunction(() => typeof game !== 'undefined' && game.currentBattle, null, { timeout: 15000 });
+            await page.click('[data-tab="tab-map"]');
+            check(`Explorar ${vp.name}: o botão "Explorar" aparece na aba Mapa`, await page.locator('#explore-open').isVisible());
+            await page.click('#explore-open');
+            const opened = await page.waitForFunction(() => gameUI.exploreView.open && gameUI.exploreView.map && gameUI.exploreView.map.id === 'starter_town', null, { timeout: 20000 }).then(() => true, () => false);
+            check(`Explorar ${vp.name}: abre na Cidade Inicial em 3D`, opened);
+            const guard = await page.evaluate(() => ({ exploring: game.isExploring(), timer: !!game.battleTimer, start: game.startBattle(), why: game._battleGuard.last }));
+            check(`Explorar ${vp.name}: a batalha automática fica segura enquanto explora`, guard.exploring && !guard.timer && guard.start === false && guard.why === 'explore', JSON.stringify(guard));
+            const fit = await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1);
+            check(`Explorar ${vp.name}: sem rolagem horizontal`, fit);
+            if (vp.hasTouch) check(`Explorar ${vp.name}: joystick e botões A/B aparecem no toque`, await page.evaluate(() => getComputedStyle(document.querySelector('#explore .ex-joy')).display !== 'none' && getComputedStyle(document.querySelector('#explore .ex-ab')).display !== 'none'));
+            for (let i = 0; i < 4; i++) { await page.keyboard.press('Enter'); await sleep(120); }
+            await page.keyboard.down('ArrowDown');
+            const routed = await page.waitForFunction(() => gameUI.exploreView.map.type !== 'city', null, { timeout: 20000 }).then(() => true, () => false);
+            await page.keyboard.up('ArrowDown');
+            check(`Explorar ${vp.name}: andando para o sul pela saída da cidade chega à rota`, routed, await page.evaluate(() => JSON.stringify(gameUI.exploreView.state)));
+            await page.evaluate(() => { const v = gameUI.exploreView; if (v.mode === 'world') v._encounter(); });
+            const menu = await page.waitForSelector('#explore [data-m="fight"]', { timeout: 20000 }).then(() => true, () => false);
+            const labels = await page.evaluate(() => [...document.querySelectorAll('#explore .ex-menu .ex-btn')].map(b => b.textContent.trim()));
+            check(`Explorar ${vp.name}: encontro abre a batalha com LUTAR / BOLSA / POKÉMON / FUGIR`, menu && labels.join('|') === 'LUTAR|BOLSA|POKÉMON|FUGIR', JSON.stringify(labels));
+            const boxes = await page.evaluate(() => ({ foe: document.querySelector('#explore .ex-foe').innerText, me: document.querySelector('#explore .ex-me').innerText }));
+            check(`Explorar ${vp.name}: caixas de PS do selvagem e do seu Pokémon com nível`, /Nv\d+/.test(boxes.foe) && /Nv\d+/.test(boxes.me) && /\d+ \/ \d+/.test(boxes.me), JSON.stringify(boxes));
+            const hp0 = await page.evaluate(() => gameUI.exploreView.battle.foe.hp);
+            await page.click('#explore [data-m="fight"]'); await page.click('#explore .ex-btn.mv[data-i="0"]');
+            await page.waitForFunction(() => { const v = gameUI.exploreView; return !v.battle || v.battle.over || (!v.busy && document.querySelector('#explore [data-m="fight"]')); }, null, { timeout: 25000 }).catch(() => {});
+            const turn = await page.evaluate(() => { const v = gameUI.exploreView; return { turn: v.battle ? v.battle.turn : -1, hp: v.battle ? v.battle.foe.hp : 0, over: v.battle ? v.battle.over : 'ended' }; });
+            check(`Explorar ${vp.name}: um golpe passa um turno e causa dano`, turn.turn === 1 && (turn.hp < hp0 || turn.over), JSON.stringify({ hp0, ...turn }));
+            for (let i = 0; i < 12; i++) {
+                const st = await page.evaluate(() => { const v = gameUI.exploreView; return v.mode === 'world' && !v.battle ? (v.dialogLines ? 'dialog' : 'world') : v.dialogLines ? 'dialog' : v.busy ? 'busy' : 'menu'; });
+                if (st === 'world') break;
+                if (st === 'dialog') await page.keyboard.press('Enter');
+                else if (st === 'menu') await page.click('#explore [data-m="run"]').catch(() => {});
+                await sleep(st === 'busy' ? 900 : 400);
+                await page.waitForFunction(() => !gameUI.exploreView.busy, null, { timeout: 15000 }).catch(() => {});
+            }
+            check(`Explorar ${vp.name}: a batalha termina e volta ao mapa`, await page.evaluate(() => gameUI.exploreView.mode === 'world' && !gameUI.exploreView.battle));
+            for (let i = 0; i < 6; i++) { if (!(await page.evaluate(() => !!gameUI.exploreView.dialogLines))) break; await page.keyboard.press('Enter'); await sleep(120); }
+            await page.click('#explore .ex-close');
+            const back = await page.evaluate(() => ({ exploring: game.isExploring(), hidden: document.getElementById('explore').hidden, battle: !!(game.battleTimer || game.healTimer || game._nextBattleTimeout) }));
+            check(`Explorar ${vp.name}: sair fecha o modo e a batalha automática volta`, !back.exploring && back.hidden && back.battle, JSON.stringify(back));
+            await context.close();
+        }
+
         check('整个过程中没有页面错误或 console.error', errors.length === 0, errors.slice(0, 5).join(' | '));
     } catch (e) {
         check('冒烟测试流程', false, e.stack || String(e));
