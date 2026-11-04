@@ -1567,6 +1567,15 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
             const got = await page.evaluate((it) => ({ taken: gameUI.exploreView.taken.has(it.id), text: document.querySelector('#explore .ex-text').textContent, after: it.ball ? game.getBallCount(it.ball) : 0 }), it);
             check('Rotas vivas: pisar no item no chão o recolhe ("Você encontrou…")', got.taken && /Você encontrou/.test(got.text) && (it.kind !== 'ball' || got.after > it.before), JSON.stringify({ it, got }));
             await talk(); await page.click('#explore .ex-close').catch(() => {});
+            // F10.4: recarregar a página mantém o progresso (treinador vencido, item pego) e volta para a mesma rota e posição
+            const saved = await page.evaluate(() => { const at = game.exploreProgress().at; game.saveNow(); return at; });
+            await page.reload();
+            await page.waitForFunction(() => typeof game !== 'undefined' && game.currentBattle, null, { timeout: 15000 });
+            await page.click('[data-tab="tab-map"]'); await page.click('#explore-open');
+            await page.waitForFunction(() => gameUI.exploreView.open && gameUI.exploreView.map, null, { timeout: 20000 });
+            const again = await page.evaluate((args) => { const v = gameUI.exploreView; return { map: v.map.id, x: v.state.x, y: v.state.y, defeated: v.defeated.has(args.npc), itemBack: v.items.some(i => i.id === args.item) }; }, { npc: npc.id, item: it.id });
+            check('Progresso salvo: depois de recarregar, volta à mesma rota e posição, o treinador continua vencido e o item não reaparece', !!saved && again.map === saved.map && again.x === saved.x && again.y === saved.y && again.defeated && !again.itemBack, JSON.stringify({ saved, again }));
+            await talk(); await page.click('#explore .ex-close').catch(() => {});
             await context.close();
         }
 

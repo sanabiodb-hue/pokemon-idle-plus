@@ -356,10 +356,47 @@ function exploreItemSpots(map, count) {
 }
 function exploreItemCount(map) { return map && map.type !== 'city' ? Math.max(3, Math.min(6, Math.round(map.width * map.height / 900))) : 0; }
 
+// ---------------- F10.4 · progresso salvo (campo aditivo opcional `explore` no save) ----------------
+// { defeated: [ids de treinador], taken: [ids de item], at: { map, x, y, dir } }. Só é gravado quando há algo; saves sem ele ficam idênticos.
+const EXPLORE_SAVE_MAX = 2000;
+const _EXPLORE_ID_RE = /^[a-z0-9_]{1,40}#[ti]\d{1,2}$/;
+const _EXPLORE_MAP_RE = /^[a-z0-9_]{1,40}$/;
+function sanitizeExploreState(raw) {
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
+    const list = (a, kind) => Array.isArray(a) ? [...new Set(a.filter(x => typeof x === 'string' && _EXPLORE_ID_RE.test(x) && x.includes('#' + kind)))].slice(0, EXPLORE_SAVE_MAX) : [];
+    const out = {}, d = list(raw.defeated, 't'), t = list(raw.taken, 'i');
+    if (d.length) out.defeated = d;
+    if (t.length) out.taken = t;
+    const at = raw.at;
+    if (at && typeof at === 'object' && typeof at.map === 'string' && _EXPLORE_MAP_RE.test(at.map) && Number.isFinite(at.x) && Number.isFinite(at.y) && at.x >= 0 && at.y >= 0 && at.x <= 1e5 && at.y <= 1e5)
+        out.at = { map: at.map, x: Math.round(at.x), y: Math.round(at.y), dir: ['up', 'down', 'left', 'right'].includes(at.dir) ? at.dir : 'down' };
+    return Object.keys(out).length ? out : null;
+}
+
 // ---------------- GameCore ----------------
 function installExplore(GameCoreClass) {
     Object.assign(GameCoreClass.prototype, {
         isExploring() { return !!this._exploreMode; },
+        // F10.4: progresso da exploração no save (treinadores vencidos, itens pegos, última posição)
+        exploreProgress() {
+            const gs = this.gameState;
+            if (!gs.explore || typeof gs.explore !== 'object') gs.explore = {};
+            if (!Array.isArray(gs.explore.defeated)) gs.explore.defeated = [];
+            if (!Array.isArray(gs.explore.taken)) gs.explore.taken = [];
+            return gs.explore;
+        },
+        exploreMark(kind, id) {
+            const p = this.exploreProgress(), list = kind === 'defeated' ? p.defeated : kind === 'taken' ? p.taken : null;
+            if (!list || typeof id !== 'string' || !_EXPLORE_ID_RE.test(id) || list.includes(id)) return false;
+            if (list.length >= EXPLORE_SAVE_MAX) list.shift();
+            list.push(id); this.save();
+            return true;
+        },
+        exploreSetPosition(at) {
+            const p = this.exploreProgress(), clean = sanitizeExploreState({ at });
+            if (clean && clean.at) p.at = clean.at; else delete p.at;
+            this.save();
+        },
         // Por que não dá para explorar agora (null = pode)
         exploreBlockReason() {
             if (!EXPLORE_ENABLED) return 'disabled';

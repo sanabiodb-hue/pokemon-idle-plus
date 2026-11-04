@@ -26,7 +26,7 @@ class ExploreView {
         this.ui = ui; this.game = ui.game;
         this.open = false; this.keep = {}; this.keys = []; this.joy = { x: 0, y: 0 }; this.path = null; this.running = false;
         this.mode = 'world'; this.busy = false; this.grace = 0; this.audio = null;
-        this.defeated = new Set(); this.taken = new Set();
+        this.defeated = new Set(); this.taken = new Set();        // F10.4: carregados do save ao abrir (gameState.explore)
         let mu = null; try { mu = localStorage.getItem(EXPLORE_MUSIC_KEY); } catch (e) { mu = null; }
         this.musicOn = mu !== 'off'; this.music = null; this.hourOverride = null; this._phaseCheck = 0;        // F10.2: só desta sessão (como a posição); voltam ao recarregar
         // F10.1: qualidade gráfica (preferência salva neste aparelho; senão a escolha automática pelo aparelho)
@@ -74,8 +74,21 @@ class ExploreView {
         if (this.ui.worldView && this.ui.worldView.controls) this.ui.worldView.controls.clear();
         addEventListener('keydown', this._onKeyDown, true); addEventListener('keyup', this._onKeyUp, true); addEventListener('resize', this._onResize);
         this.e3d.resize();
-        this._goTo(EXPLORE_TOWN, null);
-        this._dialog(['Bem-vindo ao modo Explorar!', 'Ande com as setas/WASD (ou o joystick). Shift corre. Enter/Espaço interage.', 'Siga pelo caminho ao sul até a rota. No mato alto aparecem Pokémon selvagens!']);
+        // F10.4: progresso salvo — treinadores vencidos, itens pegos e a última posição (se ainda for a cidade ou a rota atual)
+        const pr = this.game.exploreProgress();
+        this.defeated = new Set(pr.defeated); this.taken = new Set(pr.taken);
+        const resume = this._resumeAt();
+        if (resume) {
+            this._goTo(resume.map.id, null);
+            this.state = { ...this.state, x: resume.at.x, y: resume.at.y, dir: resume.at.dir };
+            this.e3d.setTrainer(this.state, 0, false); this.e3d.resetTrail(this.state.dir);
+            this._dialog(['Bem-vindo de volta! Você continua de onde parou.']);
+        } else {
+            this._goTo(EXPLORE_TOWN, null);
+            this._dialog(['Bem-vindo ao modo Explorar!', 'Ande com as setas/WASD (ou o joystick). Shift corre. Enter/Espaço interage.', 'Siga pelo caminho ao sul até a rota. No mato alto aparecem Pokémon selvagens!']);
+        }
+        this._onHide = () => { if (document.hidden) this._savePosition(); };
+        document.addEventListener('visibilitychange', this._onHide);
         this._last = performance.now(); this._lastRender = this._last; this._acc = 0; this._activeUntil = 0;
         this._auto = { start: this._last, frames: 0, ms: 0 };
         this._renderQualityButton();
@@ -125,6 +138,7 @@ class ExploreView {
         if (!this.open || this.mode === 'battle' || this.mode === 'cutscene') return;
         this.open = false; this.mode = 'world'; this.root.classList.remove('ex-shopping'); this._bang(null);
         if (this.music) this.music.stop();
+        this._savePosition(); if (this._onHide) document.removeEventListener('visibilitychange', this._onHide);
         cancelAnimationFrame(this._raf);
         removeEventListener('keydown', this._onKeyDown, true); removeEventListener('keyup', this._onKeyUp, true); removeEventListener('resize', this._onResize);
         this.keys = []; this.joy = { x: 0, y: 0 }; this.path = null;
@@ -220,9 +234,20 @@ class ExploreView {
         this.npcs = exploreTrainerSpots(map, exploreTrainerCount(map)).map(t => ({ ...t, colors: t.klass.colors }));
         this.items = exploreItemSpots(map, exploreItemCount(map)).filter(i => !this.taken.has(i.id));
         this._rebuildCollision(); this.e3d.setNpcs(this.npcs); this.e3d.setItems(this.items); this.cut = null; this._bang(null);
-        this._applyPhase(); if (this.open) this._areaMusic();
+        this._applyPhase(); if (this.open) { this._areaMusic(); this._savePosition(); }
         this._renderParty();
     }
+    _resumeAt() {
+        const at = this.game.exploreProgress().at; if (!at) return null;
+        const rm = this._routeMap();
+        if (!(at.map === EXPLORE_TOWN || (rm && rm.id === at.map))) return null;          // a rota do jogo mudou: começa na cidade
+        const map = getWorldMap(at.map); if (!map) return null;
+        if (worldCellBlocked(map, Math.floor(at.x / WORLD_TILE_SIZE), Math.floor(at.y / WORLD_TILE_SIZE))) return null;
+        const npcs = exploreTrainerSpots(map, exploreTrainerCount(map));
+        if (npcs.some(n => n.x === Math.floor(at.x / WORLD_TILE_SIZE) && n.y === Math.floor(at.y / WORLD_TILE_SIZE))) return null;
+        return { map, at };
+    }
+    _savePosition() { if (this.map && this.state && this.mode !== 'battle') this.game.exploreSetPosition({ map: this.map.id, x: this.state.x, y: this.state.y, dir: this.state.dir }); }
     _rebuildCollision() { this.cmap = exploreCollisionMap(this.map, (this.npcs || []).map(n => ({ x: n.x, y: n.y }))); }
     _cell() { return { x: Math.floor(this.state.x / WORLD_TILE_SIZE), y: Math.floor(this.state.y / WORLD_TILE_SIZE) }; }
     // item pisado: entrega pelo núcleo (limites do inventário, ouro pelo portão) e avisa
@@ -230,7 +255,7 @@ class ExploreView {
         const c = this._cell(), it = (this.items || []).find(i => i.x === c.x && i.y === c.y);
         if (!it) return false;
         const route = this._route(), r = this.game.exploreGiveItem(it.item, route && route.levelRange ? route.levelRange[1] : 5);
-        this.taken.add(it.id); this.items = this.items.filter(i => i !== it); this.e3d.removeItem(it.id); this._renderParty();
+        this.taken.add(it.id); this.game.exploreMark('taken', it.id); this.items = this.items.filter(i => i !== it); this.e3d.removeItem(it.id); this._renderParty();
         const name = it.item.kind === 'ball' ? `${getBallType(it.item.id).name}${r.added > 1 ? ` ×${r.added}` : ''}` : it.item.kind === 'potion' ? `Poção${r.added > 1 ? ` ×${r.added}` : ''}` : `${r.added} de ouro`;
         this._sfx('item'); this.keys = []; this.path = null;
         this._dialog(r.added > 0 ? [`Você encontrou ${name}!`] : ['Você encontrou um item, mas a bolsa já está cheia dele.']);
@@ -544,7 +569,7 @@ class ExploreView {
             if (now.speciesId !== sp0) { lines.push(`O quê? ${name0} está evoluindo!`); lines.push(`Parabéns! ${name0} evoluiu para ${POKEMON_DATA[now.speciesId].name}!`); this._sfx('heal'); }
             if (b.trainer) {
                 const t = b.trainer, prize = this.game.exploreTrainerReward(exploreTrainerPrize(t.team), t.id);
-                this.defeated.add(t.id);
+                this.defeated.add(t.id); this.game.exploreMark('defeated', t.id);
                 lines.unshift(`Você derrotou ${t.cls} ${t.name}!`, `${t.name}: "${t.klass.lose}"`);
                 if (prize.amount > 0) lines.push(`Você recebeu ${prize.amount} de ouro pela vitória.`);
             }

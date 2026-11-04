@@ -312,6 +312,8 @@ function sanitizeSave(raw, now = Date.now()) {
         const benefits = sanitizeBenefits(raw.account);
         if (benefits.length > 0) out.account = { benefits };
     }
+    // ---- F10.4: progresso do modo Explorar (campo aditivo opcional; vazio não é gravado, então saves sem exploração ficam idênticos) ----
+    if (_isObj(raw.explore) && typeof sanitizeExploreState === 'function') { const ex = sanitizeExploreState(raw.explore); if (ex) out.explore = ex; }
     // ---- 经济累计数字（可选字段；没有 = 从未有过经济活动）----
     if (_isObj(raw.economy)) out.economy = sanitizeEconomyState(raw.economy);
     if (_isObj(raw.upgrades)) { const up = sanitizeUpgradesState(raw.upgrades); if (Object.keys(up).length) out.upgrades = up; }
