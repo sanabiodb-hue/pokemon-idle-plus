@@ -72,11 +72,11 @@ function exploreStepEncounter(map, prev, next, rng) {
 }
 
 // Chance de captura manual. Com vida cheia vale a mesma chance da bola no idle (captureChance da F9.5); quanto menos vida, maior.
-function exploreCaptureChance(rate, ball, hpFrac, hasStatus) {
+function exploreCaptureChance(rate, ball, hpFrac, hasStatus, bonus = 0) {
     if (!ball) return 0;
     if (ball.id === 'masterball') return 1;
     const f = Math.max(0, Math.min(1, Number.isFinite(hpFrac) ? hpFrac : 1));
-    const c = captureChance(rate, ball) * (1 + EXPLORE.hpCatchBonus * (1 - f)) * (hasStatus ? EXPLORE.statusCatchBonus : 1);
+    const c = captureChance(rate, ball) * (1 + EXPLORE.hpCatchBonus * (1 - f)) * (hasStatus ? EXPLORE.statusCatchBonus : 1) * (1 + Math.max(0, bonus || 0));
     return Math.max(EXPLORE.catchMin, Math.min(EXPLORE.catchMax, c));
 }
 // Três balançadas independentes: P(capturar) = chance exatamente. Devolve o nº de balançadas que passaram (3 = capturado).
@@ -275,6 +275,11 @@ const _exploreWalk = (map, x, y) => !worldCellBlocked(map, x, y);
 // Posições de treinadores: chão andável (não mato alto), com pelo menos 3 tiles livres à frente, longe do início e entre si.
 // Devolve [{ id, x, y, dir, cls, name, seed }]. Puro: o mesmo mapa dá sempre os mesmos treinadores.
 function exploreTrainerSpots(map, count) {
+    if (map && Array.isArray(map.trainers)) return map.trainers.map(t => {              // F10.5: treinadores fixos (ginásio)
+        const base = EXPLORE_TRAINER_CLASSES.find(k => k.cls === t.cls) || EXPLORE_TRAINER_CLASSES[2];
+        const klass = t.leader ? { ...base, cls: t.cls, intro: t.intro || base.intro, lose: t.lose || base.lose, colors: { jacket: '#8a5a2a', cap: '#3a2a1a', pants: '#2a2a30' } } : base;
+        return { ...t, klass, seed: worldStringSeed(t.id) };
+    });
     if (!map || map.type === 'city') return [];
     const rnd = worldRng(worldStringSeed('trainers:v1:' + map.id)), out = [], start = map.spawn || { x: 0, y: 0 };
     const cand = [];
@@ -356,8 +361,54 @@ function exploreItemSpots(map, count) {
 }
 function exploreItemCount(map) { return map && map.type !== 'city' ? Math.max(3, Math.min(6, Math.round(map.width * map.height / 900))) : 0; }
 
+// ---------------- F10.5 · Cidade de Viridian e o primeiro Ginásio (mapas só do modo Explorar) ----------------
+// Mesmo formato dos mapas do mundo (ASCII + WORLD_LEGEND, sem letras novas). `gym` marca a área do prédio (desenhada pela cena 3D);
+// `exits` = células que levam a outro mapa; `trainers` = treinadores fixos (o ginásio não sorteia posições).
+const EXPLORE_MAPS = {
+    explore_viridian: {
+        id: 'explore_viridian', type: 'city', name: 'Cidade de Viridian', width: 28, height: 22,
+        spawn: { x: 13, y: 19, dir: 'up' },
+        gym: { x: 3, y: 3, w: 7, h: 4, door: { x: 6, y: 6 } },
+        interactions: [{ id: 'pokemon_center', type: 'heal', label: 'Centro Pokémon', cell: { x: 20, y: 5 } }, { id: 'gym', type: 'gym', label: 'Ginásio de Viridian', cell: { x: 6, y: 7 } }],
+        exits: [{ y: 21, x0: 12, x1: 14, to: 'kanto_route1', at: { x: 16, y: 1, dir: 'down' } }],
+        rows: [
+            'TTTTTTTTTTTTTTTTTTTTTTTTTTTT', 'TTTTTTTTTTTTTTTTTTTTTTTTTTTT', 'TT........................TT', 'TT.OOOOOOO.........ABC....TT',
+            'TT.OOOOOOO.........DGF....TT', 'TT.OOOOOOO..........q.....TT', 'TT.OOOOOOO.........qqq....TT', 'TT.qqqqqqqqqqqqqqqqqqqqqq.TT',
+            'TT.qqlqqqqqqqqqqqqqqqqlqq.TT', 'TT.qqqqqqqqqqqqqqqqqqqqqq.TT', 'TT.qqqqqhqqqqqqqqqhqqqqqq.TT', 'TT.qqqqqqqqqqqqqqqqqqqqqq.TT',
+            'TTbqqqqqqqlqqqqqqlqqqqqqqbTT', 'TT.qqqqqqqqqqqqqqqqqqqqqq.TT', 'TT..........ppp...........TT', 'TT.========.ppp.=========.TT',
+            'TT..y.......ppp.........f.TT', 'TT.f...b....ppp.z.y.f.....TT', 'TT...f...y..ppp......y....TT', 'TT....f.....ppp....b..f...TT',
+            'TTTTTTTTTTTTpppTTTTTTTTTTTTT', 'TTTTTTTTTTTTpppTTTTTTTTTTTTT',
+        ],
+    },
+    explore_gym_rock: {
+        id: 'explore_gym_rock', type: 'city', name: 'Ginásio de Viridian', width: 13, height: 16, indoor: true,
+        spawn: { x: 6, y: 14, dir: 'up' },
+        exits: [{ y: 15, x0: 5, x1: 7, to: 'explore_viridian', at: { x: 6, y: 8, dir: 'down' } }],
+        trainers: [
+            { id: 'explore_gym_rock#t0', x: 2, y: 9, dir: 'right', cls: 'Montanhista', name: 'Rui', team: [74, 27], levelMult: 0.9 },
+            { id: 'explore_gym_rock#t1', x: 10, y: 6, dir: 'left', cls: 'Montanhista', name: 'Vera', team: [27, 74, 95], levelMult: 0.95 },
+            { id: 'explore_gym_rock#t2', x: 6, y: 2, dir: 'down', cls: 'Líder de Ginásio', name: 'Petra', team: [74, 111, 95], levelMult: 1.08, leader: true, badge: 'rocha',
+                intro: 'Eu sou Petra, Líder do Ginásio de Viridian! Minha defesa é dura como pedra. Mostre do que você é capaz!', lose: 'Incrível… sua força rachou a minha rocha. Você merece a Insígnia Rocha!' },
+        ],
+        rows: ['OOOOOOOOOOOOO', 'OXqqqqqqqqqXO', 'OqqqqqqqqqqqO', 'OqRRqqqqqRRqO', 'OqqqqqqqqqqqO', 'OqqqqqqqqqqqO', 'OqqqqqqqqqqqO', 'OqRRqqqqqRRqO',
+            'OqqqqqqqqqqqO', 'OqqqqqqqqqqqO', 'OqqqqqqqqqqqO', 'OqRqRqqqRqRqO', 'OqqqqqqqqqqqO', 'OXqqqqqqqqqXO', 'OqqqqqqqqqqqO', 'OOOOOqqqOOOOO'],
+    },
+};
+// Insígnias do modo Explorar (independentes das insígnias regionais do idle). O efeito só vale no Explorar.
+const EXPLORE_BADGES = {
+    rocha: { id: 'rocha', name: 'Insígnia Rocha', color: '#b5793a', effect: '+10% de chance de captura no modo Explorar', catchBonus: 0.1 },
+};
+function exploreMapById(id) { return Object.prototype.hasOwnProperty.call(EXPLORE_MAPS, id) ? EXPLORE_MAPS[id] : getWorldMap(id); }
+// Equipe de treinador fixo (ginásio): espécies declaradas, nível pela média da sua equipe × levelMult (o ginásio acompanha o seu progresso)
+function exploreFixedTeam(game, t) {
+    const party = game.gameState.party.map((_, i) => game._partyInstance(i)).filter(Boolean);
+    const avg = party.length ? party.reduce((a, p) => a + p.level, 0) / party.length : 5;
+    const base = Math.max(8, Math.round(avg * (t.levelMult || 1)));
+    return t.team.map((id, i) => { const w = game.createWildPokemon(id, Math.max(2, Math.min(MAX_POKEMON_LEVEL, base - (t.team.length - 1 - i))), 0); if (w) w._trainer = true; return w; }).filter(Boolean);
+}
+
 // ---------------- F10.4 · progresso salvo (campo aditivo opcional `explore` no save) ----------------
-// { defeated: [ids de treinador], taken: [ids de item], at: { map, x, y, dir } }. Só é gravado quando há algo; saves sem ele ficam idênticos.
+// { defeated: [ids de treinador], taken: [ids de item], badges: [ids de EXPLORE_BADGES], at: { map, x, y, dir } }. Só é gravado quando há algo; saves sem ele ficam idênticos.
 const EXPLORE_SAVE_MAX = 2000;
 const _EXPLORE_ID_RE = /^[a-z0-9_]{1,40}#[ti]\d{1,2}$/;
 const _EXPLORE_MAP_RE = /^[a-z0-9_]{1,40}$/;
@@ -367,6 +418,8 @@ function sanitizeExploreState(raw) {
     const out = {}, d = list(raw.defeated, 't'), t = list(raw.taken, 'i');
     if (d.length) out.defeated = d;
     if (t.length) out.taken = t;
+    const b = Array.isArray(raw.badges) ? [...new Set(raw.badges.filter(x => typeof x === 'string' && typeof EXPLORE_BADGES !== 'undefined' && Object.prototype.hasOwnProperty.call(EXPLORE_BADGES, x)))] : [];
+    if (b.length) out.badges = b;
     const at = raw.at;
     if (at && typeof at === 'object' && typeof at.map === 'string' && _EXPLORE_MAP_RE.test(at.map) && Number.isFinite(at.x) && Number.isFinite(at.y) && at.x >= 0 && at.y >= 0 && at.x <= 1e5 && at.y <= 1e5)
         out.at = { map: at.map, x: Math.round(at.x), y: Math.round(at.y), dir: ['up', 'down', 'left', 'right'].includes(at.dir) ? at.dir : 'down' };
@@ -392,6 +445,15 @@ function installExplore(GameCoreClass) {
             list.push(id); this.save();
             return true;
         },
+        exploreHasBadge(id) { const p = this.exploreProgress(); return Array.isArray(p.badges) && p.badges.includes(id); },
+        exploreAwardBadge(id) {
+            if (!Object.prototype.hasOwnProperty.call(EXPLORE_BADGES, id)) return false;
+            const p = this.exploreProgress(); if (!Array.isArray(p.badges)) p.badges = [];
+            if (p.badges.includes(id)) return false;
+            p.badges.push(id); this._emit('explore_badge', { id }); this.save();
+            return true;
+        },
+        exploreCatchBonus() { const p = this.exploreProgress(); return (p.badges || []).reduce((a, id) => a + ((EXPLORE_BADGES[id] && EXPLORE_BADGES[id].catchBonus) || 0), 0); },
         exploreSetPosition(at) {
             const p = this.exploreProgress(), clean = sanitizeExploreState({ at });
             if (clean && clean.at) p.at = clean.at; else delete p.at;
@@ -461,7 +523,7 @@ function installExplore(GameCoreClass) {
             const ball = getBallType(ballId);
             if (!ball || this.getBallCount(ball.id) <= 0 || wild._captureResolved || wild._trainer) return { ok: false, caught: false, shakes: 0 };
             this.consumeBall(ball.id, 1);
-            const chance = exploreCaptureChance(speciesCatchRate(POKEMON_DATA[wild.id]), ball, hpFrac, hasStatus);
+            const chance = exploreCaptureChance(speciesCatchRate(POKEMON_DATA[wild.id]), ball, hpFrac, hasStatus, this.exploreCatchBonus());
             const shakes = exploreShakes(chance, () => this.rng());
             if (shakes < 3) {
                 this._emit('capture_failed', { id: wild.id, ball: ball.id, chance, left: this.getBallCount(ball.id), shiny: !!wild.isShiny, reason: 'explore' });

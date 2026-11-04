@@ -49,6 +49,7 @@ class Explore3D {
     // F10.3: fase do dia (explore-ambience.js): céu e névoa misturados à cor da fase, força e cor das luzes, postes acesos à noite
     applyDayPhase(phase) {
         if (!phase || !this.baseSky) return;
+        if (this.map && this.map.indoor) phase = EXPLORE_DAY_PHASES[2];       // dentro do ginásio não há dia nem noite
         this.phase = phase;
         const T = this.T, sky = this.baseSky.clone();
         if (phase.sky) sky.lerp(new T.Color(phase.sky), 0.65);
@@ -111,17 +112,19 @@ class Explore3D {
         }
         // fundo abaixo do mapa (borda) e névoa
         const under = new T.Mesh(new T.BoxGeometry(W + 0.2, 2, H + 0.2), this._mat({ color: '#3b2f24', roughness: 1 })); under.position.set(W / 2, -1.01, H / 2); this.world.add(under);
-        const outer = new T.Mesh(new T.PlaneGeometry(W + 120, H + 120), this._mat({ color: new T.Color(EXPLORE_GROUND_COLORS[this._groundUnder(map)] || '#5fbf57').offsetHSL(0, -0.1, -0.12), roughness: 1 }));
+        const outer = new T.Mesh(new T.PlaneGeometry(W + 120, H + 120), this._mat({ color: map.indoor ? new T.Color('#2a2420') : new T.Color(EXPLORE_GROUND_COLORS[this._groundUnder(map)] || '#5fbf57').offsetHSL(0, -0.1, -0.12), roughness: 1 }));
         outer.rotation.x = -Math.PI / 2; outer.position.set(W / 2, -0.03, H / 2); this.world.add(outer);
-        const sky = new T.Color(map.type === 'city' ? '#9fd8ff' : this._biomeSky(map)); this.baseSky = sky.clone(); this.lampMat = null;
+        const sky = new T.Color(map.indoor ? '#2a2420' : map.type === 'city' ? '#9fd8ff' : this._biomeSky(map)); this.baseSky = sky.clone(); this.lampMat = null;
         this.world.background = sky; this.world.fog = new T.Fog(sky, this.q.fogFar * 0.4, this.q.fogFar);
         this.camera.far = this.q.fogFar + 8; this.camera.updateProjectionMatrix();         // além da névoa nada é desenhado
         // objetos por letra (instanciados)
         const cells = {};
-        for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) { const ch = map.rows[y][x]; (cells[ch] ||= []).push([x, y]); }
+        const inGym = (x, y) => map.gym && x >= map.gym.x && x < map.gym.x + map.gym.w && y >= map.gym.y && y < map.gym.y + map.gym.h;
+        for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) { if (inGym(x, y)) continue; const ch = map.rows[y][x]; (cells[ch] ||= []).push([x, y]); }
         this.anim = [];
         for (const ch in cells) this._buildCells(ch, cells[ch], map);
         this._buildings(map);
+        if (map.gym) this._gymBuilding(map.gym);
     }
     _groundUnder(map) { const b = map.biome; return b === 'cave' ? 'c' : b === 'volcano' ? 'a' : b === 'snow' ? 'n' : b === 'haunted' ? 'g' : map.type === 'city' ? '.' : '.'; }
     _biomeSky(map) { return { cave: '#2b2620', volcano: '#4a2a22', snow: '#cfe3f5', haunted: '#2a2238', lake: '#9fd8ff', forest: '#8fd0c0', meadow: '#a8dcff' }[map.biome] || '#9fd8ff'; }
@@ -188,6 +191,20 @@ class Explore3D {
         // F10.2: no nível do chão (abaixo dele ficava escondida pelo topo do bloco de base do mapa e aparecia preta)
         this._inst(geo, mat, list, (x, y) => ({ x: x + 0.5, y: -0.004, z: y + 0.5, sx: 1 }), false);
         this.anim.push({ liquid: mat, lava });
+    }
+    // F10.5: prédio do Ginásio (área declarada no mapa): paredes de pedra, telhado laranja, porta dupla, emblema e placa
+    _gymBuilding(gm) {
+        const T = this.T, cx = gm.x + gm.w / 2, cz = gm.y + gm.h / 2, front = gm.y + gm.h;
+        const add = (geo, mat, x, y, z) => { const m = new T.Mesh(geo, mat); m.position.set(x, y, z); m.castShadow = this.q.shadows !== 'blob'; m.receiveShadow = this.q.shadows !== 'blob'; this.world.add(m); return m; };
+        add(new T.BoxGeometry(gm.w, 2.2, gm.h), this._mat({ color: '#d9d2c2', roughness: 0.9 }), cx, 1.1, cz);
+        add(new T.BoxGeometry(gm.w + 0.3, 0.45, gm.h + 0.3), this._mat({ color: '#c2652a', roughness: 0.6 }), cx, 2.42, cz);
+        const ridge = add(new T.CylinderGeometry(0.01, gm.h / 2 + 0.15, 0.9, 4, 1), this._mat({ color: '#a84f1e', roughness: 0.6, flatShading: true }), cx, 3.08, cz); ridge.rotation.y = Math.PI / 4; ridge.scale.x = gm.w / gm.h;
+        for (const dx of [-0.32, 0.32]) add(new T.BoxGeometry(0.6, 1.25, 0.06), this._mat({ color: '#5a3a22', roughness: 0.7 }), gm.door.x + 0.5 + dx, 0.63, front + 0.03);
+        const emblem = add(new T.CylinderGeometry(0.42, 0.42, 0.08, 8), this._mat({ color: '#d9a441', roughness: 0.3, metalness: 0.4, emissive: '#5a3a10', emissiveIntensity: 0.4 }), gm.door.x + 0.5, 1.75, front + 0.06); emblem.rotation.x = Math.PI / 2;
+        const c = document.createElement('canvas'); c.width = 256; c.height = 64; const g = c.getContext('2d');
+        g.fillStyle = '#3a2a1a'; g.fillRect(0, 0, 256, 64); g.fillStyle = '#ffd27a'; g.font = 'bold 40px sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText('GINÁSIO', 128, 34);
+        const tex = new T.CanvasTexture(c); tex.colorSpace = T.SRGBColorSpace;
+        add(new T.PlaneGeometry(2.4, 0.6), new T.MeshBasicMaterial({ map: tex }), gm.door.x - 2, 1.7, front + 0.04);
     }
     // Prédios da cidade: letras de telhado e parede viram blocos com telhado, janelas, porta e o emblema do Centro Pokémon
     _buildings(map) {

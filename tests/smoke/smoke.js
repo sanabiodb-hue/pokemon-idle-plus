@@ -1579,6 +1579,55 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
             await context.close();
         }
 
+        // ---------- F10.5 · Viridian e o Ginásio: saída norte da Rota 1, porta do ginásio, Líder com equipe Pedra, Insígnia Rocha salva ----------
+        {
+            const { page, context } = await newPage(() => localStorage.setItem('pokemon_idle_tutorial_done', '1'), { viewport: { width: 1280, height: 800 } });
+            await page.goto(base);
+            await page.waitForFunction(() => typeof game !== 'undefined' && game.currentBattle, null, { timeout: 15000 });
+            await page.evaluate(() => { game.gameState.currentRoute = 'kanto_route1'; for (const uid of game.gameState.party) game.gameState.ownedPokemon[uid].level = 40; });
+            await page.click('[data-tab="tab-map"]'); await page.click('#explore-open');
+            await page.waitForFunction(() => gameUI.exploreView.open && gameUI.exploreView.map, null, { timeout: 20000 });
+            const talk = async () => { for (let i = 0; i < 10; i++) { if (!(await page.evaluate(() => !!gameUI.exploreView.dialogLines))) return; await page.keyboard.press('Enter'); await sleep(120); } };
+            await talk();
+            await page.evaluate(() => { const v = gameUI.exploreView; v._goTo('route', null); v.npcs.forEach(n => v.defeated.add(n.id)); v.state = { ...v.state, x: 16 * 16 + 8, y: 1 * 16 + 13, dir: 'up' }; v.grace = 99; });
+            await page.keyboard.down('ArrowUp');
+            const vir = await page.waitForFunction(() => gameUI.exploreView.map.id === 'explore_viridian', null, { timeout: 15000 }).then(() => true, () => false);
+            await page.keyboard.up('ArrowUp');
+            check('Ginásio: a saída norte da Rota 1 leva à Cidade de Viridian', vir, await page.evaluate(() => gameUI.exploreView.map.id));
+            await page.evaluate(() => { const v = gameUI.exploreView; v.state = { ...v.state, x: 6 * 16 + 8, y: 7 * 16 + 13, dir: 'up' }; });
+            await page.keyboard.press('Enter'); await sleep(300);
+            const inGym = await page.evaluate(() => ({ map: gameUI.exploreView.map.id, label: document.querySelector('#explore .ex-loc small').textContent, npcs: gameUI.exploreView.npcs.length }));
+            check('Ginásio: a porta abre o interior (3 treinadores, rótulo "Interior")', inGym.map === 'explore_gym_rock' && /Interior/.test(inGym.label) && inGym.npcs === 3, JSON.stringify(inGym));
+            await talk();
+            await page.evaluate(() => { const v = gameUI.exploreView; v.npcs.filter(n => !n.leader).forEach(n => v.defeated.add(n.id)); v.state = { ...v.state, x: 6 * 16 + 8, y: 7 * 16 + 13, dir: 'up' }; v.grace = 99; });
+            await page.keyboard.down('ArrowUp');
+            const seen = await page.waitForFunction(() => gameUI.exploreView.mode === 'cutscene' || !!gameUI.exploreView.dialogLines, null, { timeout: 15000 }).then(() => true, () => false);
+            await page.keyboard.up('ArrowUp');
+            await page.waitForFunction(() => !!gameUI.exploreView.dialogLines, null, { timeout: 10000 }).catch(() => {});
+            const intro = await page.evaluate(() => document.querySelector('#explore .ex-text').textContent);
+            check('Ginásio: a Líder Petra vê você e se apresenta', seen && /Petra/.test(intro), intro);
+            await talk();
+            await page.waitForSelector('#explore [data-m="fight"]', { timeout: 20000 }).catch(() => {});
+            const lb = await page.evaluate(() => { const b = gameUI.exploreView.battle; return { leader: !!(b && b.trainer && b.trainer.leader), music: gameUI.exploreView.music && gameUI.exploreView.music.track, types: b ? b.trainer.team.map(w => POKEMON_DATA[w.id].types.join('/')) : [] }; });
+            check('Ginásio: batalha da Líder com música própria e equipe Pedra/Terra', lb.leader && lb.music === 'leader' && lb.types.length === 3 && lb.types.every(t => /rock|ground/.test(t)), JSON.stringify(lb));
+            await page.evaluate(() => { const b = gameUI.exploreView.battle; for (const u of b.party) { u.stats = { ...u.stats, attack: 99999, speed: 99999 }; u.hp = u.maxHp; } });
+            let badgeShown = false;
+            for (let i = 0; i < 50; i++) {
+                const st = await page.evaluate(() => { const v = gameUI.exploreView; return { k: v.mode === 'world' && !v.battle ? (v.dialogLines ? 'dialog' : 'world') : v.dialogLines ? 'dialog' : v.busy ? 'busy' : 'menu', badge: !!(document.querySelector('#explore .ex-badge-show') && !document.querySelector('#explore .ex-badge-show').hidden) }; });
+                if (st.badge) badgeShown = true;
+                if (st.k === 'world') break;
+                if (st.k === 'dialog') await page.keyboard.press('Enter');
+                else if (st.k === 'menu') { await page.click('#explore [data-m="fight"]').catch(() => {}); await page.click('#explore .ex-btn.mv[data-i="1"]').catch(() => {}); }
+                await sleep(st.k === 'busy' ? 700 : 300);
+            }
+            const after = await page.evaluate(() => { game.saveNow(); return { badge: game.exploreHasBadge('rocha'), bonus: game.exploreCatchBonus() }; });
+            check('Ginásio: vencer a Líder dá a Insígnia Rocha (mostrada na tela) com +10% de captura no Explorar', badgeShown && after.badge && Math.abs(after.bonus - 0.1) < 1e-9, JSON.stringify({ badgeShown, ...after }));
+            await page.reload();
+            await page.waitForFunction(() => typeof game !== 'undefined' && game.gameState, null, { timeout: 15000 });
+            check('Ginásio: a insígnia continua depois de recarregar', await page.evaluate(() => game.exploreHasBadge('rocha')));
+            await context.close();
+        }
+
         check('整个过程中没有页面错误或 console.error', errors.length === 0, errors.slice(0, 5).join(' | '));
     } catch (e) {
         check('冒烟测试流程', false, e.stack || String(e));

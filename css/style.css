@@ -5085,6 +5085,12 @@ body.exploring { overflow: hidden; }
 #explore.ex-shopping .ex-menu { display: grid; }
 #explore.ex-shopping .ex-text { grid-column: 1; }
 #explore .ex-buy5 { text-align: center; }
+#explore .ex-badge-show { position: absolute; left: 50%; top: 38%; transform: translate(-50%, -50%); display: grid; justify-items: center; gap: 4px; padding: 18px 28px; border-radius: 18px; background: rgba(10, 14, 30, 0.9); border: 3px solid #ffd27a; box-shadow: 0 0 40px rgba(255, 210, 122, 0.45); text-align: center; z-index: 7; animation: ex-badge 0.6s ease-out; }
+#explore .ex-badge-show b { font-size: 20px; color: #ffd27a; }
+#explore .ex-badge-show small { color: #e8e8f0; font-size: 13px; }
+#explore .ex-badge-gem { width: 92px; height: 92px; clip-path: polygon(30% 0, 70% 0, 100% 30%, 100% 70%, 70% 100%, 30% 100%, 0 70%, 0 30%); background: radial-gradient(circle at 35% 30%, #fff8, transparent 45%), linear-gradient(135deg, var(--bc), #3a2a1a); animation: ex-spin 3s linear infinite; }
+@keyframes ex-badge { from { transform: translate(-50%, -50%) scale(0.3); opacity: 0; } to { transform: translate(-50%, -50%) scale(1); opacity: 1; } }
+@keyframes ex-spin { from { transform: rotateY(0deg); } to { transform: rotateY(360deg); } }
 #explore .ex-flash { position: absolute; inset: 0; pointer-events: none; opacity: 0; background: #000; z-index: 5; }
 #explore .ex-flash.go { animation: ex-flash 0.65s steps(1) forwards; }
 @keyframes ex-flash { 0%, 30%, 60% { opacity: 0.92; background: #fff; } 15%, 45%, 75% { opacity: 0; } 90% { opacity: 1; background: #000; } 100% { opacity: 0; } }
