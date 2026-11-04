@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#07030f">
+<title>Rift Tamers</title>
+<meta name="description" content="Idle 3D de criaturas geradas por genoma: batalhas automáticas, fusão genética, expedições roguelike e progresso offline simulado.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Exo+2:wght@400;600;800&family=Orbitron:wght@600;800&display=swap">
+<link rel="stylesheet" href="style.css">
+<script type="importmap">{ "imports": { "three": "./vendor/three.module.js" } }</script>
+</head>
+<body>
+<canvas id="stage"></canvas>
+<div id="overlay"></div>
+<div id="vignette"></div>
+
+<header id="hud">
+  <div class="res" id="resources"></div>
+  <div id="zone">
+    <div id="zone-name">—</div>
+    <div id="zone-stage">Estágio 1</div>
+    <div id="stage-progress"><i></i></div>
+  </div>
+  <div id="tide" title="Maré da Fenda: o tipo ativo causa +25% de dano e aparece mais"></div>
+</header>
+
+<div id="battle-bar">
+  <button id="btn-prev" class="ghost" title="Estágio anterior">◀</button>
+  <button id="btn-push" class="ghost" title="Avançar sozinho">AUTO</button>
+  <button id="btn-sync" title="Sincronia: todas as criaturas agem já, com energia">
+    <svg viewBox="0 0 100 100"><circle cx="50" cy="50" r="44" class="track"/><circle cx="50" cy="50" r="44" class="fill" id="sync-ring"/></svg>
+    <span>SYNC</span>
+  </button>
+  <button id="btn-speed" class="ghost" title="Velocidade da batalha">1×</button>
+  <button id="btn-next" class="ghost" title="Próximo estágio">▶</button>
+</div>
+
+<div id="log"></div>
+<div id="toasts"></div>
+
+<nav id="tabs">
+  <button data-tab="arena" class="on"><b>⚔</b><span>Arena</span></button>
+  <button data-tab="team"><b>◈</b><span>Equipe</span></button>
+  <button data-tab="sanctuary"><b>✿</b><span>Santuário</span></button>
+  <button data-tab="lab"><b>⚗</b><span>Fusão</span></button>
+  <button data-tab="expedition"><b>⟁</b><span>Expedição</span></button>
+  <button data-tab="dex"><b>◎</b><span>Genodex</span></button>
+  <button data-tab="upgrades"><b>▲</b><span>Evoluir</span></button>
+  <button data-tab="collapse"><b>✦</b><span>Colapso</span></button>
+  <button data-tab="settings"><b>⚙</b><span>Ajustes</span></button>
+</nav>
+
+<section id="panel" hidden>
+  <div class="panel-head"><h2 id="panel-title"></h2><button id="panel-close" class="ghost" aria-label="Fechar">✕</button></div>
+  <div id="panel-body"></div>
+</section>
+
+<div id="modal" hidden><div class="modal-card" id="modal-card"></div></div>
+<div id="boot"><div class="logo">RIFT<br>TAMERS</div><div class="sub">abrindo a Fenda…</div><div class="bar"><i></i></div></div>
+<noscript>Rift Tamers precisa de JavaScript e WebGL.</noscript>
+<script type="module" src="src/main.js"></script>
+</body>
+</html>
