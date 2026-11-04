@@ -4,9 +4,10 @@
   --txt: #ece8ff; --mute: #a49cc8; --neon: #7af7ff; --pink: #ff4fd8; --gold: #ffcf5a; --good: #6dffa8; --bad: #ff5a7a;
   --r: 16px; --font: 'Exo 2', system-ui, sans-serif; --disp: 'Orbitron', 'Exo 2', sans-serif;
   --safe-b: env(safe-area-inset-bottom, 0px);
+  color-scheme: dark;     /* visual único, escuro por escolha: o neon da Fenda */
 }
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
-html, body { margin: 0; height: 100%; background: var(--bg); color: var(--txt); font-family: var(--font); overflow: hidden; touch-action: manipulation; }
+html, body { margin: 0; height: 100%; padding: 0 !important; background: var(--bg); color: var(--txt); font-family: var(--font); overflow: hidden; touch-action: manipulation; }
 button { font: inherit; color: inherit; cursor: pointer; border: 1px solid var(--line); background: var(--glass2); border-radius: 12px; padding: 8px 12px; transition: transform .12s, background .2s, border-color .2s, box-shadow .2s; }
 button:hover:not(:disabled) { border-color: var(--neon); box-shadow: 0 0 14px rgba(122,247,255,.25); }
 button:active:not(:disabled) { transform: scale(.96); }
