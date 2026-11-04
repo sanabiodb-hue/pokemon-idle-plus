@@ -46,11 +46,25 @@ class Explore3D {
         return new T.MeshStandardMaterial(opts);
     }
     setPixelRatio(r) { this.renderer.setPixelRatio(r); this.resize(); }
+    // F10.3: fase do dia (explore-ambience.js): céu e névoa misturados à cor da fase, força e cor das luzes, postes acesos à noite
+    applyDayPhase(phase) {
+        if (!phase || !this.baseSky) return;
+        this.phase = phase;
+        const T = this.T, sky = this.baseSky.clone();
+        if (phase.sky) sky.lerp(new T.Color(phase.sky), 0.65);
+        this.world.background = sky; if (this.world.fog) this.world.fog.color.copy(sky);
+        const u = this.world.userData;
+        if (u.hemi) u.hemi.intensity = u.hemiBase * (phase.hemi / 1.25);
+        if (u.sunLight) { u.sunLight.intensity = phase.sun; u.sunLight.color.set(phase.sunColor); }
+        if (this.lampMat) this.lampMat.emissiveIntensity = phase.lamps ? 3.2 : 0.6;
+    }
+    // F10.3: folhas saltando ao pisar no mato alto
+    rustle(x, z) { this._burst(new this.T.Vector3(x, 0.25, z), '#3fae55', 10, 1.4); }
     isAnimating() { return this.fx.length > 0 || this.shakeT > 0; }
     _lights(scene, shadows) {
         const T = this.T, cast = shadows && this.q.shadows !== 'blob', wide = this.q.shadows === 'static' ? 26 : 16;
-        scene.add(new T.HemisphereLight(0xdfefff, 0x3a3a2a, this.q.shadows === 'blob' ? 1.45 : 1.25));
-        const sun = new T.DirectionalLight(0xfff4e0, 2.4); sun.position.set(10, 20, 8); sun.castShadow = cast;
+        const hemi = new T.HemisphereLight(0xdfefff, 0x3a3a2a, this.q.shadows === 'blob' ? 1.45 : 1.25); scene.add(hemi); scene.userData.hemi = hemi; scene.userData.hemiBase = hemi.intensity;
+        const sun = new T.DirectionalLight(0xfff4e0, 2.4); scene.userData.sunLight = sun; sun.position.set(10, 20, 8); sun.castShadow = cast;
         if (cast) { sun.shadow.mapSize.set(1024, 1024); Object.assign(sun.shadow.camera, { left: -wide, right: wide, top: wide, bottom: -wide, near: 1, far: 70 }); }
         if (shadows) { scene.userData.sun = sun; scene.add(sun.target); }
         scene.add(sun);
@@ -99,7 +113,7 @@ class Explore3D {
         const under = new T.Mesh(new T.BoxGeometry(W + 0.2, 2, H + 0.2), this._mat({ color: '#3b2f24', roughness: 1 })); under.position.set(W / 2, -1.01, H / 2); this.world.add(under);
         const outer = new T.Mesh(new T.PlaneGeometry(W + 120, H + 120), this._mat({ color: new T.Color(EXPLORE_GROUND_COLORS[this._groundUnder(map)] || '#5fbf57').offsetHSL(0, -0.1, -0.12), roughness: 1 }));
         outer.rotation.x = -Math.PI / 2; outer.position.set(W / 2, -0.03, H / 2); this.world.add(outer);
-        const sky = new T.Color(map.type === 'city' ? '#9fd8ff' : this._biomeSky(map));
+        const sky = new T.Color(map.type === 'city' ? '#9fd8ff' : this._biomeSky(map)); this.baseSky = sky.clone(); this.lampMat = null;
         this.world.background = sky; this.world.fog = new T.Fog(sky, this.q.fogFar * 0.4, this.q.fogFar);
         this.camera.far = this.q.fogFar + 8; this.camera.updateProjectionMatrix();         // além da névoa nada é desenhado
         // objetos por letra (instanciados)
@@ -153,7 +167,7 @@ class Explore3D {
             case '=': this._inst(new T.BoxGeometry(1, 0.5, 0.1), std('#c9a46a'), list, (x, y) => ({ x: x + 0.5, y: 0.25, z: y + 0.5, sx: 1 })); break;
             case 's': case 'z': this._inst(new T.BoxGeometry(0.7, 0.45, 0.08), std('#a77a4a'), list, (x, y) => ({ x: x + 0.5, y: 0.75, z: y + 0.5, sx: 1 })); this._inst(new T.CylinderGeometry(0.05, 0.05, 0.6, 5), std('#6b4a2e'), list, (x, y) => ({ x: x + 0.5, y: 0.3, z: y + 0.5, sx: 1 })); break;
             case 'h': this._inst(new T.BoxGeometry(0.9, 0.12, 0.35), std('#a77a4a'), list, (x, y) => ({ x: x + 0.5, y: 0.35, z: y + 0.5, sx: 1 })); break;
-            case 'l': { this._inst(new T.CylinderGeometry(0.05, 0.06, 1.6, 6), std('#3a3a46'), list, (x, y) => ({ x: x + 0.5, y: 0.8, z: y + 0.5, sx: 1 })); this._inst(new T.SphereGeometry(0.14, 10, 8), std('#fff3c4', { emissive: '#ffd27a', emissiveIntensity: 1.6 }), list, (x, y) => ({ x: x + 0.5, y: 1.65, z: y + 0.5, sx: 1 }), false); break; }
+            case 'l': { this._inst(new T.CylinderGeometry(0.05, 0.06, 1.6, 6), std('#3a3a46'), list, (x, y) => ({ x: x + 0.5, y: 0.8, z: y + 0.5, sx: 1 })); const bulb = std('#fff3c4', { emissive: '#ffd27a', emissiveIntensity: 1.6 }); this.lampMat = bulb; this._inst(new T.SphereGeometry(0.14, 10, 8), bulb, list, (x, y) => ({ x: x + 0.5, y: 1.65, z: y + 0.5, sx: 1 }), false); break; }
             case 'f': case 'y': this._inst(this.q.flowersPerCell === 1 ? new T.OctahedronGeometry(0.08, 0) : new T.SphereGeometry(0.07, 6, 4), std(ch === 'f' ? '#ff4d6d' : '#ffd23b', { emissive: ch === 'f' ? '#661020' : '#665010' }), list.flatMap(c => Array(this.q.flowersPerCell || 3).fill(c)), (x, y, i) => ({ x: x + 0.2 + j(x, y, i) * 0.6, y: 0.12, z: y + 0.2 + j(y, x, i) * 0.6, sx: 1 }), false); break;
             case 'w': this._grass(list); break;
             case '~': case 'L': this._liquid(list, ch === 'L'); break;
@@ -299,6 +313,7 @@ class Explore3D {
         this._clear(this.battle); this._lights(this.battle, false);
         const biomeCol = new T.Color(opts.ground || '#5fbf57');
         this.battle.background = new T.Color(opts.sky || '#9fd8ff');
+        if (this.phase && this.phase.sky) this.battle.background.lerp(new T.Color(this.phase.sky), 0.55);
         const floor = new T.Mesh(new T.CircleGeometry(30, 48), this._mat({ color: biomeCol, roughness: 1 })); floor.rotation.x = -Math.PI / 2; this.battle.add(floor);
         const hsl = {}; biomeCol.getHSL(hsl); const platCol = biomeCol.clone().offsetHSL(0, -0.1, hsl.l < 0.4 ? 0.12 : -0.12);
         const plat = (x, z, r) => { const m = new T.Mesh(new T.CylinderGeometry(r, r * 1.05, 0.18, 48), this._mat({ color: platCol, roughness: 0.9 })); m.position.set(x, 0.09, z); m.scale.z = 0.55; this.battle.add(m); const ring = new T.Mesh(new T.RingGeometry(r * 0.96, r, 48), new T.MeshBasicMaterial({ color: '#ffffff', transparent: true, opacity: 0.35, side: T.DoubleSide })); ring.rotation.x = -Math.PI / 2; ring.scale.y = 0.55; ring.position.set(x, 0.19, z); this.battle.add(ring); };

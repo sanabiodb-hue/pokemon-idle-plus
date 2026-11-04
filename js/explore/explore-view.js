@@ -17,7 +17,8 @@ const EXPLORE_BLOCK_MESSAGES = {
     world_hunt: 'Há uma caçada ativa no Mapa. Encerre-a para explorar.',
 };
 const EXPLORE_TOWN = 'starter_town';
-const EXPLORE_QUALITY_KEY = 'pokemon_idle_explore_quality';      // F10.1: preferência deste aparelho (não vai para o save do jogo)
+const EXPLORE_QUALITY_KEY = 'pokemon_idle_explore_quality';
+const EXPLORE_MUSIC_KEY = 'pokemon_idle_explore_music';          // F10.3: música ligada/desligada neste aparelho      // F10.1: preferência deste aparelho (não vai para o save do jogo)
 const exploreDevice = () => ({ coarse: !!(window.matchMedia && matchMedia('(pointer: coarse)').matches), dpr: window.devicePixelRatio || 1, cores: navigator.hardwareConcurrency || 0, memoryGb: navigator.deviceMemory || 0 });
 
 class ExploreView {
@@ -25,7 +26,9 @@ class ExploreView {
         this.ui = ui; this.game = ui.game;
         this.open = false; this.keep = {}; this.keys = []; this.joy = { x: 0, y: 0 }; this.path = null; this.running = false;
         this.mode = 'world'; this.busy = false; this.grace = 0; this.audio = null;
-        this.defeated = new Set(); this.taken = new Set();        // F10.2: só desta sessão (como a posição); voltam ao recarregar
+        this.defeated = new Set(); this.taken = new Set();
+        let mu = null; try { mu = localStorage.getItem(EXPLORE_MUSIC_KEY); } catch (e) { mu = null; }
+        this.musicOn = mu !== 'off'; this.music = null; this.hourOverride = null; this._phaseCheck = 0;        // F10.2: só desta sessão (como a posição); voltam ao recarregar
         // F10.1: qualidade gráfica (preferência salva neste aparelho; senão a escolha automática pelo aparelho)
         let saved = null; try { saved = JSON.parse(localStorage.getItem(EXPLORE_QUALITY_KEY) || 'null'); } catch (e) { saved = null; }
         this.qualityManual = !!(saved && saved.manual && EXPLORE_QUALITY[saved.id]);
@@ -76,9 +79,24 @@ class ExploreView {
         this._last = performance.now(); this._lastRender = this._last; this._acc = 0; this._activeUntil = 0;
         this._auto = { start: this._last, frames: 0, ms: 0 };
         this._renderQualityButton();
+        if (this.audio && !this.music) this.music = new ExploreMusic(this.audio);
+        this.setMusic(this.musicOn); this._areaMusic();
         this._raf = requestAnimationFrame((t) => this._frame(t));
     }
     // ---------------- F10.1 · qualidade ----------------
+    setMusic(on) {
+        this.musicOn = !!on;
+        try { localStorage.setItem(EXPLORE_MUSIC_KEY, on ? 'on' : 'off'); } catch (e) { /* sem armazenamento: vale nesta sessão */ }
+        if (this.music) this.music.setEnabled(on);
+        const b = this.$('.ex-music'); if (b) { b.textContent = on ? '🔊' : '🔇'; b.setAttribute('aria-pressed', on ? 'true' : 'false'); }
+    }
+    _areaMusic() { if (this.music && this.map) this.music.play(this.map.type === 'city' ? 'town' : 'route'); }
+    // fase do dia pelo relógio do aparelho (hourOverride só para testes); reaplicada a cada 30 s
+    _applyPhase() {
+        const d = new Date(), h = this.hourOverride !== null ? this.hourOverride : d.getHours() + d.getMinutes() / 60, ph = exploreDayPhase(h);
+        this.phase = ph; this.e3d.applyDayPhase(ph);
+        const el = this.$('.ex-loc small'); if (el) el.textContent = `Explorar · ${ph.id === 'night' ? '🌙' : ph.id === 'day' ? '☀️' : '🌅'} ${ph.label}`;
+    }
     _renderQualityButton() { const b = this.$('.ex-quality'); if (b) b.textContent = `⚙ ${EXPLORE_QUALITY[this.quality].label}`; }
     // Troca o preset. Trocar o antialias exige um canvas novo (o contexto WebGL não muda depois de criado); o mapa é refeito no lugar.
     setQuality(id, manual) {
@@ -106,6 +124,7 @@ class ExploreView {
     close() {
         if (!this.open || this.mode === 'battle' || this.mode === 'cutscene') return;
         this.open = false; this.mode = 'world'; this.root.classList.remove('ex-shopping'); this._bang(null);
+        if (this.music) this.music.stop();
         cancelAnimationFrame(this._raf);
         removeEventListener('keydown', this._onKeyDown, true); removeEventListener('keyup', this._onKeyUp, true); removeEventListener('resize', this._onResize);
         this.keys = []; this.joy = { x: 0, y: 0 }; this.path = null;
@@ -125,6 +144,7 @@ class ExploreView {
             <div class="ex-hud">
                 <div class="ex-loc"><small>Explorar</small><b class="ex-loc-name">—</b><span class="ex-loc-sub"></span></div>
                 <div class="ex-party"></div>
+                <button type="button" class="ex-music" title="Música: ligar ou desligar">🔊</button>
                 <button type="button" class="ex-quality" title="Qualidade gráfica: Leve, Médio ou Alto">⚙</button>
                 <button type="button" class="ex-close" aria-label="Sair do modo Explorar">✕ Sair</button>
             </div>
@@ -154,6 +174,7 @@ class ExploreView {
         // toque/clique no chão: anda até lá (busca de caminho do motor)
         this._onCanvasDown = (e) => { if (this.mode === 'world' && !this.dialogLines) this._tapTo(e.clientX, e.clientY); else if (this.dialogLines) this._advanceDialog(); };
         this.canvas.addEventListener('pointerdown', this._onCanvasDown);
+        $('.ex-music').addEventListener('click', () => this.setMusic(!this.musicOn));
         $('.ex-quality').addEventListener('click', () => { if (this.mode === 'world') this.setQuality(exploreQualityNext(this.quality), true); });
         $('.ex-panel').addEventListener('click', () => { if (this.dialogLines) this._advanceDialog(); });
     }
@@ -199,6 +220,7 @@ class ExploreView {
         this.npcs = exploreTrainerSpots(map, exploreTrainerCount(map)).map(t => ({ ...t, colors: t.klass.colors }));
         this.items = exploreItemSpots(map, exploreItemCount(map)).filter(i => !this.taken.has(i.id));
         this._rebuildCollision(); this.e3d.setNpcs(this.npcs); this.e3d.setItems(this.items); this.cut = null; this._bang(null);
+        this._applyPhase(); if (this.open) this._areaMusic();
         this._renderParty();
     }
     _rebuildCollision() { this.cmap = exploreCollisionMap(this.map, (this.npcs || []).map(n => ({ x: n.x, y: n.y }))); }
@@ -302,6 +324,7 @@ class ExploreView {
         const dt = dtMs / 1000;
         if (this.mode === 'world' && !this.dialogLines && this.map) this._move(dtMs);
         if (this.mode === 'cutscene') this._cutscene(dt);
+        this._phaseCheck += dt; if (this._phaseCheck > 30) { this._phaseCheck = 0; if (this.mode !== 'battle') this._applyPhase(); }
         if ((this.mode === 'world' || this.mode === 'cutscene' || this.mode === 'shop') && this.state) this.e3d.setTrainer(this.state, dt, this.running);
         // F10.1: algo se mexe (treinador, efeitos, animação de batalha) → teto de FPS do preset; parado → FPS de repouso.
         // A câmera ainda desliza ~0,6 s depois de parar, então conta como movimento.
@@ -345,7 +368,9 @@ class ExploreView {
         this.state = next;
         if (next.distance === prev.distance) return;
         if (this._checkTransitions()) return;
-        if (Math.floor(next.distance / WORLD_TILE_SIZE) !== Math.floor(prev.distance / WORLD_TILE_SIZE) || !next.moving) { if (this._pickItem()) return; if (this._spotted()) return; }
+        const stepped = Math.floor(next.distance / WORLD_TILE_SIZE) !== Math.floor(prev.distance / WORLD_TILE_SIZE);
+        if (stepped) { const c = this._cell(); if (this.map.rows[c.y] && this.map.rows[c.y][c.x] === 'w') { this.e3d.rustle(next.x / WORLD_TILE_SIZE, next.y / WORLD_TILE_SIZE); this._sfx('rustle'); } }
+        if (stepped || !next.moving) { if (this._pickItem()) return; if (this._spotted()) return; }
         if (this.grace > 0) { this.grace -= (next.distance - prev.distance) / WORLD_TILE_SIZE; return; }
         const enc = exploreStepEncounter(this.map, prev, next, () => this.game.rng());
         if (enc) this._encounter();
@@ -395,7 +420,7 @@ class ExploreView {
         const battle = new ExploreBattle(this.game, wild, { keep: this.keep });
         if (!battle.canFight()) { this.grace = 4; this._dialog(['Um Pokémon selvagem apareceu, mas seus Pokémon estão sem forças!', 'Volte ao Centro Pokémon na Cidade Inicial para curá-los.']); return; }
         this.mode = 'battle'; this.battle = battle; this.keys = []; this.path = null; this.busy = true;
-        this._sfx('encounter');
+        this._sfx('encounter'); if (this.music) this.music.play('wild');
         const fl = this.$('.ex-flash'); fl.classList.remove('go'); void fl.offsetWidth; fl.classList.add('go');
         setTimeout(() => {
             const g = this._groundColor();
@@ -413,7 +438,7 @@ class ExploreView {
         const battle = new ExploreBattle(this.game, team[0], { keep: this.keep, trainer: { id: n.id, cls: n.klass.cls, name: n.name, team, klass: n.klass } });
         if (!battle.canFight()) { this._dialog([`${n.klass.cls} ${n.name}: "Seus Pokémon estão sem forças. Volte depois do Centro Pokémon!"`]); this.mode = 'world'; return; }
         this.mode = 'battle'; this.battle = battle; this.busy = true; this._trainerNpc = n;
-        this._sfx('encounter');
+        this._sfx('encounter'); if (this.music) this.music.play('trainer');
         const fl = this.$('.ex-flash'); fl.classList.remove('go'); void fl.offsetWidth; fl.classList.add('go');
         setTimeout(() => {
             const g = this._groundColor();
@@ -503,6 +528,7 @@ class ExploreView {
     }
     _finish() {
         const b = this.battle, g = this.game, lines = [], me = b.me(), over = b.over;
+        if ((over === 'win' || over === 'caught') && this.music) this.music.play('victory');
         if (over === 'win' || over === 'caught') {
             const inst = me.inst, lv0 = inst.level, sp0 = inst.speciesId, name0 = me.name;
             if (over === 'caught') {
@@ -533,7 +559,7 @@ class ExploreView {
         this.battle = null; this.mode = 'world';
         this.e3d.endBattle(); this.$('.ex-battle').hidden = true; this.root.classList.remove('ex-in-battle');
         this._refreshFollower(); this.e3d.resetTrail(this.state.dir); this._renderParty();
-        this.grace = 3;
+        this.grace = 3; this._applyPhase(); this._areaMusic();
         if (lose) { this._goTo(EXPLORE_TOWN, { x: 6, y: 6, dir: 'up' }); this._center(['Seus Pokémon desmaiaram… você correu para cá.']); }
     }
 
@@ -556,6 +582,7 @@ class ExploreView {
             case 'ui': tone(880, 0.04, 'square', 0.03); break;
             case 'spotted': seq([988, 1319, 988, 1319], 0.06, 'square'); break;
             case 'item': seq([784, 988, 1175, 1568], 0.08, 'triangle'); break;
+            case 'rustle': tone(3200, 0.05, 'sawtooth', 0.008, 0, 0.4); break;
         }
     }
 }
