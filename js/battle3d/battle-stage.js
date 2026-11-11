@@ -62,7 +62,7 @@ class BattleStage3D {
         try { localStorage.setItem(BATTLE_STAGE_KEY, this.enabled ? 'on' : 'off'); } catch (e) { /* vale nesta sessão */ }
         if (this.enabled && !this.ready && !this.failed) this._load();
         this._applyClass(); this._renderButton();
-        if (this.enabled && this.ready && this.game.currentBattle) this.onStart(this.game.currentBattle);
+        if (this.enabled && this.ready) this._wake();
     }
     _applyClass() { if (this.root) this.root.classList.toggle('stage-3d', this.enabled && this.ready && !this.failed); }
     isOn() { return this.enabled && this.ready && !this.failed; }
@@ -77,8 +77,7 @@ class BattleStage3D {
         } catch (e) { this.failed = true; }
         this.loading = false; this._applyClass(); this._renderButton();
         if (this.ready) {
-            if (this.game.currentBattle) this.onStart(this.game.currentBattle);
-            this._last = performance.now(); this._raf = requestAnimationFrame((t) => this._frame(t));
+            this._watch(); this._wake();
         }
     }
     _init(T) {
@@ -202,7 +201,7 @@ class BattleStage3D {
 
     // ---------------- eventos da batalha (chamados por ui.js) ----------------
     onStart(battle) {
-        if (!this.isOn()) { this.pending = battle; return; }
+        if (!this._live()) { this.pending = battle; return; }           // invisível: só guarda a batalha para desenhar ao voltar
         if (this.game._isOfflineSimulating || !battle || !battle.wild) return;
         const wild = battle.wild, inst = this.game.getPartyInstance(this.game.gameState.activePokemonIndex); if (!inst) return;
         const route = this.game._towerMode ? null : this.game.getRoute(this.game.gameState.currentRoute), biome = this.game._towerMode ? 'cave' : battleStageBiome(route);
@@ -256,22 +255,22 @@ class BattleStage3D {
         this.layer.appendChild(el); setTimeout(() => el.remove(), 950);
     }
     onPlayerAttack(data) {
-        if (!this.isOn() || !this.me || !this.foe) return;
+        if (!this._live() || !this.me || !this.foe) return;
         const type = data.skillType || this.myTypes[0], name = data.skillName || 'Investida';
         const foe = this.foe; this._attack(this.me, foe, { name, type, power: data.skillName ? moveFxPowerOf(name, type) : 50 }, () => { if (this.foe === foe) this._hurt(foe, data); });
     }
     onEnemyAttack(data) {
-        if (!this.isOn() || !this.me || !this.foe || this.foe.userData.dying) return;
+        if (!this._live() || !this.me || !this.foe || this.foe.userData.dying) return;
         const me = this.me; this._attack(this.foe, me, moveFxWildMove(this.wildTypes, this.wildLevel), () => { if (this.me === me) this._hurt(me, data); });
     }
     onDodge() {
-        if (!this.isOn() || !this.me) return;
+        if (!this._live() || !this.me) return;
         const a = this.me, base = a.userData.base; a.userData.busy++;
         this._tw(0.3, (k) => { a.position.x = base.x - Math.sin(k * Math.PI) * 0.9; }, () => { a.position.copy(base); a.userData.busy--; });
         this._number(a, { text: 'Esquivou!', cls: 'dodge' });
     }
     onDefeated(data) {
-        if (!this.isOn() || !this.foe) return;
+        if (!this._live() || !this.foe) return;
         const f = this.foe, spr = f.userData.spr, me = this.me; f.userData.dying = true; this.stats.faints++;
         this._tw(0.45, (k) => { f.position.y = -k * 0.9; spr.material.opacity = 1 - k; f.userData.sh.material.opacity = 0.3 * (1 - k); }, () => { f.visible = false; }, 0.12);
         // a EXP voa do selvagem para o seu Pokémon
@@ -282,7 +281,7 @@ class BattleStage3D {
         }
     }
     onCapture(ok, shiny) {
-        if (!this.isOn() || !this.foe) return;
+        if (!this._live() || !this.foe) return;
         const T = this.T, at = this.foe.userData.base.clone(); this.stats.captures += ok ? 1 : 0;
         const ball = new T.Group(), r = 0.3;
         ball.add(new T.Mesh(new T.SphereGeometry(r, 16, 8, 0, Math.PI * 2, 0, Math.PI / 2), this._lambert(ok ? '#e2473f' : '#9aa0b4')));
@@ -296,30 +295,49 @@ class BattleStage3D {
         }, 0.5);
     }
     onFainted() {
-        if (!this.isOn() || !this.me) return;
+        if (!this._live() || !this.me) return;
         const a = this.me, spr = a.userData.spr; a.userData.fainted = true;
         this._tw(0.5, (k) => { a.position.y = -k * 0.9; spr.material.opacity = 1 - k * 0.85; });
     }
     onHealing(data) {
-        if (!this.isOn() || !this.me) return;
+        if (!this._live() || !this.me) return;
         const a = this.me;
         if (a.userData.fainted) { a.userData.fainted = false; a.position.copy(a.userData.base); a.userData.spr.material.opacity = 1; }
         const now = performance.now(); if (now - (this._healAt || 0) < 700) return; this._healAt = now;
         this.fx._parts(10, () => ({ p: a.userData.base.clone().add(new this.T.Vector3((Math.random() - 0.5) * 1.4, 0.2, (Math.random() - 0.5) * 0.6)), v: new this.T.Vector3(0, 1.6 + Math.random(), 0), t0: Math.random() * 0.3 }), { color: '#7dff9a', life: 0.6, size: 0.15 });
     }
-    onEvolved() { if (this.isOn() && this.me) { this.fx._flash(this._head(this.me), '#ffffff', 0.3, 2.4, 0.6, 0, 0.9); this.flash = 0.6; this.flashColor = '#ffffff'; } }
+    onEvolved() { if (this._live() && this.me) { this.fx._flash(this._head(this.me), '#ffffff', 0.3, 2.4, 0.6, 0, 0.9); this.flash = 0.6; this.flashColor = '#ffffff'; } }
 
     // ---------------- quadro ----------------
     _visible() {
         if (!this.isOn() || document.hidden || document.body.classList.contains('exploring')) return false;
         const tab = document.getElementById('tab-battle'); return !!tab && tab.classList.contains('active');
     }
+    _live() { return this.isOn() && this._visible(); }
+    // Regra do projeto: cena invisível não pede quadros. O laço para em _frame e religa aqui (aba de batalha reaberta, página
+    // de volta ao primeiro plano, modo Explorar fechado, arena religada no botão).
+    _wake() {
+        if (this._raf || !this._live()) return;
+        if (this.game.currentBattle) this.pending = this.game.currentBattle;       // redesenha o estado atual da batalha
+        this._last = performance.now() - 34;                                       // primeiro quadro sem salto de tempo
+        this._raf = requestAnimationFrame((t) => this._frame(t));
+    }
+    _watch() {
+        if (this._watching) return; this._watching = true;
+        document.addEventListener('visibilitychange', () => this._wake());
+        if (typeof MutationObserver === 'function') {
+            const mo = new MutationObserver(() => this._wake()), tab = document.getElementById('tab-battle');
+            if (tab) mo.observe(tab, { attributes: true, attributeFilter: ['class'] });
+            mo.observe(document.body, { attributes: true, attributeFilter: ['class'] });
+        }
+    }
     _frame(now) {
+        this._raf = 0;
+        if (!this._visible()) return;                                              // para de verdade: nenhum quadro pendente
         this._raf = requestAnimationFrame((t) => this._frame(t));
         const gap = now - this._last, cap = this.lite ? 62 : 31;                  // ~30 quadros/s (15 no modo leve)
         if (gap < cap) return;
         this._last = now;
-        if (!this._visible()) return;
         if (this.pending) this.onStart(this.pending);
         const dt = Math.min(0.1, gap / 1000); this.t += dt;
         const t0 = performance.now();

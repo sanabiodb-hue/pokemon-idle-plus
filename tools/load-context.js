@@ -82,6 +82,8 @@ function readFiles(files) {
     return files.map(f => fs.readFileSync(path.join(ROOT, f), 'utf8')).join('\n;\n');
 }
 
+const ACTION_OPTIONAL_FILES = ['js/action/action-balance.js', 'js/models/pokemon-models.js', 'js/action/action-maps.js', 'js/action/action-core.js', 'js/action/action-horde.js'];
+
 // 只加载数据文件（校验器使用）
 function loadData() {
     const sandbox = makeSandbox(createMemoryStorage());
@@ -96,7 +98,9 @@ function loadData() {
 function loadGameContext(opts = {}) {
     const storage = opts.storage || createMemoryStorage();
     const sandbox = makeSandbox(storage);
-    const code = readFiles(GAME_FILES) + `
+    // F12: módulos do Mundo de Ação entram se já existirem (cada dono testa a sua parte); símbolos fora da lista: ctx.get('Nome')
+    const optional = ACTION_OPTIONAL_FILES.filter(f => fs.existsSync(path.join(ROOT, f)));
+    const code = readFiles(GAME_FILES.concat(optional)) + `
 ;({
   GameCore, SaveManager, SaveCodec, sanitizeSave, processSaveObject, migrateSave, SAVE_MIGRATIONS,
   escapeHtml, safeCssColor, ptPlural, ptNumber, TYPE_NAMES,
@@ -133,6 +137,7 @@ function loadGameContext(opts = {}) {
     const ctx = vm.runInContext(code, vm.createContext(sandbox), { filename: 'game' });
     ctx.storage = storage;
     ctx.sandbox = sandbox;
+    ctx.get = (name) => vm.runInContext(String(name), sandbox);
     return ctx;
 }
 
