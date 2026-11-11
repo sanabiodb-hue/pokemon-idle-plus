@@ -1,6 +1,6 @@
 ---
 name: qa-test-automation
-description: QA e automação de testes: roda e escreve testes (node:test e smoke Playwright), investiga falhas e regressões, valida saves, migrações, importação e exportação. Use depois de qualquer mudança e para investigar bugs.
+description: (Especialista de apoio; para trabalho de rotina prefira `qa`.) QA e automação de testes: roda e escreve testes (node:test e smoke Playwright), investiga falhas e regressões, valida saves, migrações, importação e exportação. Use depois de qualquer mudança e para investigar bugs.
 model: claude-sonnet-5-5
 tools: Read, Edit, Write, Grep, Glob, Bash
 permissionMode: acceptEdits

@@ -1,6 +1,6 @@
 ---
 name: gameplay-developer
-description: Desenvolvedor de gameplay: combate, captura, evolução, progressão, habilidades, treinadores, ginásios e interação. Use para implementar ou corrigir mecânicas de jogo.
+description: (Especialista de apoio; para trabalho de rotina prefira `backend`.) Desenvolvedor de gameplay: combate, captura, evolução, progressão, habilidades, treinadores, ginásios e interação. Use para implementar ou corrigir mecânicas de jogo.
 model: claude-sonnet-5-5
 tools: Read, Edit, Write, Grep, Glob, Bash
 permissionMode: acceptEdits

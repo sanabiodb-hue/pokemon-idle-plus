@@ -9,5 +9,7 @@
   },
   "enabledPlugins": {
     "jev@jev-skill": true
-  }
+  },
+  "model": "claude-fable-5-2",
+  "agent": "chief-director"
 }

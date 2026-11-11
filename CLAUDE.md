@@ -35,27 +35,31 @@ Jogo idle de Pokémon no navegador, com mundo 3D para explorar e batalhas em 3D.
 - Arte, música e mapas são originais, feitos em código. Nada copiado de jogos existentes.
 
 ## Equipe de agentes (`.claude/agents/`)
-A sessão principal age como Diretor de Desenvolvimento (`chief-director`, Fable 5.2): planeja, delega, revisa, integra e commita. Para abrir uma sessão já nesse papel: `claude --agent chief-director`.
+O Chefe é a sessão principal: agente `chief-director` em `claude-fable-5-2`, fixado em `.claude/settings.json` (`"agent"` e `"model"`). Só o Chefe usa Fable 5.2. Ele planeja, delega, revisa, integra e commita.
 
-| Agente | Modelo | Área |
-|---|---|---|
-| `chief-director` | `claude-fable-5-2` | direção, delegação, revisão e integração |
-| `game-3d-engineer` | `claude-opus-5-5` | cenas, câmera, luz, colisão, sistemas 3D |
-| `gameplay-developer` | `claude-sonnet-5-5` | combate, captura, evolução, progressão |
-| `art-animation-3d` | `claude-opus-5-5` | visual 3D, materiais, animações, efeitos |
-| `qa-test-automation` | `claude-sonnet-5-5` | testes, regressões, smoke |
-| `ui-ux-specialist` | `claude-sonnet-5-5` | HUD, menus, painéis, mobile, acessibilidade |
-| `economy-balancing` | `claude-opus-5-5` | economia, recompensas, raridades |
-| `performance-engineer` | `claude-sonnet-5-5` | FPS, memória, carregamento |
-| `technical-researcher` | `claude-haiku-5-5` | pesquisa e levantamento (somente leitura) |
-| `pokemon-world-researcher` | `claude-opus-5-5` | fidelidade ao universo Pokémon: espécies, golpes, habitats; escreve em `docs/pokemon-research/` |
+| Agente | Modelo padrão | Troca permitida pelo Chefe | Papel neste projeto |
+|---|---|---|---|
+| `pesquisador` | `claude-haiku-5-5` | nenhuma | mapear arquivos, buscas, resumir logs (somente leitura) |
+| `arquiteto` | `claude-sonnet-5-5` | Opus, só com aprovação explícita do usuário | contrato técnico em `docs/` |
+| `frontend` | `claude-sonnet-5-5` | nenhuma | HTML/CSS, HUD, telas, cenas e efeitos 3D |
+| `backend` | `claude-sonnet-5-5` | nenhuma | regras do jogo, simulação, economia, automação, save |
+| `qa` | `claude-haiku-5-5` | Sonnet para criar/corrigir testes complexos | rodar testes e triar falhas |
+| `seguranca` | `claude-haiku-5-5` | Sonnet para auditar o `git diff` | segredos, dependências, saneamento, saves |
+| `devops` | `claude-haiku-5-5` | Sonnet para criar/editar CI/CD | ambiente, servidor local, carregamento, Git |
 
-Para trocar o modelo de um agente, edite a linha `model:` do arquivo dele.
+Especialistas de apoio, mantidos para trabalho que peça o conhecimento deles (todos em `claude-sonnet-5-5`, `technical-researcher` em `claude-haiku-5-5`): `game-3d-engineer`, `art-animation-3d`, `gameplay-developer`, `ui-ux-specialist`, `economy-balancing`, `performance-engineer`, `pokemon-world-researcher`, `qa-test-automation`, `technical-researcher`.
 
-### Regras de trabalho
-- O Diretor decide o que é técnico e rotineiro sem consultar o dono do projeto. Consulta só por preferência dele, acesso externo, custo adicional ou risco de perda de dados.
-- Tarefas independentes rodam em paralelo. Dois agentes nunca escrevem no mesmo arquivo na mesma rodada.
-- Arquivos compartilhados têm um dono por rodada: `index.html`, `css/style.css`, `js/ui.js`, `tools/load-context.js`, `tests/smoke/smoke.js`.
-- Especialista não commita nem faz push, e não usa comando destrutivo do Git. Entrega um relatório com o que fez, o que rodou e o que não verificou.
-- O Diretor confere o diff e roda os testes antes de integrar. Commit só depois de `npm test`, `npm run validate`, `git diff --check` e `npm run smoke` passarem.
+O projeto não tem servidor, banco de dados, Dockerfile nem pipeline: "backend" é a camada de regras e o save no navegador; "devops" confere ambiente e publicação estática. A troca de modelo é feita pelo Chefe no parâmetro `model` da delegação; para mudar o padrão, edite a linha `model:` do arquivo do agente.
+
+### Regras de trabalho e de economia de tokens
+- No máximo 3 subagentes simultâneos por lote. Tarefas independentes em paralelo; dois agentes nunca alteram o mesmo arquivo no mesmo lote.
+- Opus nunca em rotina. Só no `arquiteto`, para decisão arquitetural crítica, depois de o usuário aprovar.
+- Delegação com escopo fechado: objetivo exato, arquivos que pode ler, arquivos que pode alterar e o trecho do contrato. O Chefe nunca repassa o histórico da conversa.
+- Cada agente entrega um relatório curto e encerra. Nada de agente ocioso.
+- Etapas: 1) pesquisa e arquitetura → 2) implementação paralela → 3) QA, Segurança e DevOps → 4) checkpoint de entrega (o Chefe integra e commita).
+- O `qa` roda os testes antes de qualquer aprovação. Commit só depois de `npm test`, `npm run validate`, `git diff --check` e `npm run smoke` passarem.
+- Arquivos compartilhados têm um dono por lote: `index.html`, `css/style.css`, `js/ui.js`, `tools/load-context.js`, `tests/smoke/smoke.js`.
+- Especialista não commita, não faz push e não usa comando destrutivo do Git.
+- O Chefe decide o que é técnico e rotineiro. Consulta o dono do projeto só por preferência dele, acesso externo, custo adicional (incluindo usar Opus) ou risco de perda de dados.
 - Subagente não chama subagente: quem delega é sempre a sessão principal.
+- Não há ferramenta nativa para consultar o limite de uso; o controle é pelo tamanho dos lotes e por commits a cada etapa.

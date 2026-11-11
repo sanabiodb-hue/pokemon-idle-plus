@@ -1,7 +1,7 @@
 ---
 name: art-animation-3d
-description: Especialista em arte e animação 3D: modelos procedurais, materiais, texturas, animações, cenários, efeitos visuais dos golpes e qualidade visual. Use para criar ou melhorar o visual 3D.
-model: claude-opus-5-5
+description: (Especialista de apoio; para trabalho de rotina prefira `frontend`.) Especialista em arte e animação 3D: modelos procedurais, materiais, texturas, animações, cenários, efeitos visuais dos golpes e qualidade visual. Use para criar ou melhorar o visual 3D.
+model: claude-sonnet-5-5
 tools: Read, Edit, Write, Grep, Glob, Bash
 permissionMode: acceptEdits
 ---

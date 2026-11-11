@@ -1,6 +1,6 @@
 ---
 name: ui-ux-specialist
-description: Especialista em UI/UX: HUD das cenas 3D, menus, painéis de informação, inventário, mapa, experiência mobile e acessibilidade. Use para melhorar interface e usabilidade.
+description: (Especialista de apoio; para trabalho de rotina prefira `frontend`.) Especialista em UI/UX: HUD das cenas 3D, menus, painéis de informação, inventário, mapa, experiência mobile e acessibilidade. Use para melhorar interface e usabilidade.
 model: claude-sonnet-5-5
 tools: Read, Edit, Write, Grep, Glob, Bash
 permissionMode: acceptEdits

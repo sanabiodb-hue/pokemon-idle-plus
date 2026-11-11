@@ -1,7 +1,7 @@
 ---
 name: game-3d-engineer
-description: Engenheiro 3D: arquitetura das cenas Three.js, câmera, iluminação, colisão, ciclo de quadros e sistemas 3D do modo Explorar e da arena de batalha. Use para criar ou corrigir sistemas 3D.
-model: claude-opus-5-5
+description: (Especialista de apoio; para trabalho de rotina prefira `frontend`.) Engenheiro 3D: arquitetura das cenas Three.js, câmera, iluminação, colisão, ciclo de quadros e sistemas 3D do modo Explorar e da arena de batalha. Use para criar ou corrigir sistemas 3D.
+model: claude-sonnet-5-5
 tools: Read, Edit, Write, Grep, Glob, Bash
 permissionMode: acceptEdits
 ---

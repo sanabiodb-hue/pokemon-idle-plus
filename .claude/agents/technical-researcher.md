@@ -1,6 +1,6 @@
 ---
 name: technical-researcher
-description: Pesquisador técnico: consulta documentação (Three.js, WebGL, APIs do navegador), compara abordagens e bibliotecas e localiza coisas no código. Somente leitura. Use para pesquisa rápida e tarefas simples de levantamento.
+description: (Especialista de apoio; para trabalho de rotina prefira `pesquisador`.) Pesquisador técnico: consulta documentação (Three.js, WebGL, APIs do navegador), compara abordagens e bibliotecas e localiza coisas no código. Somente leitura. Use para pesquisa rápida e tarefas simples de levantamento.
 model: claude-haiku-5-5
 tools: Read, Grep, Glob, WebSearch, WebFetch
 ---

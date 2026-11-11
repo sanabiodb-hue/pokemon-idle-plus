@@ -1,7 +1,7 @@
 ---
 name: economy-balancing
-description: Designer de economia e balanceamento: ouro, preços, recompensas, raridades, chance de captura, curva de EXP e progressão. Use para analisar ou ajustar números do jogo e evitar inflação.
-model: claude-opus-5-5
+description: (Especialista de apoio; para trabalho de rotina prefira `backend`.) Designer de economia e balanceamento: ouro, preços, recompensas, raridades, chance de captura, curva de EXP e progressão. Use para analisar ou ajustar números do jogo e evitar inflação.
+model: claude-sonnet-5-5
 tools: Read, Edit, Write, Grep, Glob, Bash
 permissionMode: acceptEdits
 ---

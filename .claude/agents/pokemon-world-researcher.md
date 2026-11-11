@@ -1,7 +1,7 @@
 ---
 name: pokemon-world-researcher
 description: Diretor de pesquisa do universo Pokémon. Pesquisa espécies, proporções, cores, comportamento, habitats, regiões e sobretudo a representação visual e espacial dos golpes, e transforma isso em documentação em docs/pokemon-research/ para os desenvolvedores. Também revisa modelos, animações e ataques implementados quanto à fidelidade. Use desde o início de qualquer funcionalidade que envolva Pokémon, golpes ou ambientes.
-model: claude-opus-5-5
+model: claude-sonnet-5-5
 tools: Read, Grep, Glob, Write, Edit, WebSearch, WebFetch
 permissionMode: acceptEdits
 ---
