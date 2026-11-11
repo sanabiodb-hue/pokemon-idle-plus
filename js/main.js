@@ -51,6 +51,7 @@ window.addEventListener('DOMContentLoaded', () => {
     gameUI = new GameUI(game);
     // F10: modo Explorar (andar pela rota em 3D, encontros no mato alto e batalha por turnos); entra pela aba Mapa
     if (typeof ExploreView === 'function') gameUI.exploreView = new ExploreView(gameUI);
+    if (typeof BattleStage3D === 'function') { gameUI.battleStage = new BattleStage3D(gameUI); gameUI.battleStage.mount(); }      // F11.1: arena 3D da aba de batalha
 
     // 初次渲染
     gameUI.renderTeam();

@@ -599,8 +599,8 @@ class ExploreView {
         const s = steps.shift(), next = (ms = 900) => setTimeout(() => this._play(steps, done), ms), e = this.e3d;
         if (s.msg) this.$('.ex-text').textContent = s.msg;
         switch (s.t) {
-            case 'hit': e.attack(s.side, s.mtype, s.power, () => this._boxes()); this._sfx(s.crit || s.eff > 1 ? 'crit' : 'hit'); return next(800);
-            case 'miss': e.attack(s.side, 'normal', 30); return next();
+            case 'hit': e.attack(s.side, s.mtype, s.power, () => { this._boxes(); this._sfx(s.crit || s.eff > 1 ? 'crit' : 'hit'); }, s.move); return next(1000);
+            case 'miss': e.attack(s.side, 'normal', 30, null, 'Investida'); return next();
             case 'dot': case 'status': this._boxes(); this._sfx('hit'); return next();
             case 'heal': e.heal(s.side); this._boxes(); this._sfx('heal'); return next();
             case 'faint': e.faint(s.side); this._sfx('faint'); this._boxes(); return next(1100);

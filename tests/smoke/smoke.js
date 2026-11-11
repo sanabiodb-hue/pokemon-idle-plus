@@ -1717,6 +1717,53 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
             await context.close();
         }
 
+        // ---------- F11.1 · Arena 3D da aba de batalha e golpes com formato e área reais ----------
+        {
+            const { page, context } = await newPage(() => localStorage.setItem('pokemon_idle_tutorial_done', '1'));
+            await page.goto(base);
+            await page.waitForFunction(() => typeof game !== 'undefined' && game.currentBattle, null, { timeout: 15000 });
+            const on = await page.waitForFunction(() => gameUI.battleStage && gameUI.battleStage.isOn() && gameUI.battleStage.foe && gameUI.battleStage.me, null, { timeout: 30000 }).then(() => true, () => false);
+            const st0 = await page.evaluate(() => { const st = gameUI.battleStage, sc = document.getElementById('battle-scene'), cv = sc.querySelector('.stage3d-canvas'); return { cls: sc.classList.contains('stage-3d'), display: getComputedStyle(cv).display, w: cv.clientWidth, h: cv.clientHeight, spriteOpacity: getComputedStyle(document.getElementById('player-sprite')).opacity, btn: sc.querySelector('.stage3d-toggle').textContent, biome: st.biome, want: battleStageBiome(game.getRoute(game.gameState.currentRoute)), foe: st.foe.userData.id, wild: game.currentBattle.wild.id, me: st.me.userData.id, mine: game.getPartyInstance(game.gameState.activePokemonIndex).speciesId, info: !!document.getElementById('enemy-hp-bar') }; });
+            check('Arena 3D: a aba de batalha mostra a caça numa cena 3D (canvas ligado, sprites 2D escondidos, caixas de PS por cima)', on && st0.cls && st0.display === 'block' && st0.w > 200 && st0.h > 150 && st0.spriteOpacity === '0' && /3D/.test(st0.btn) && st0.info, JSON.stringify(st0));
+            check('Arena 3D: os dois Pokémon da batalha de verdade estão na cena e o cenário é o bioma da rota', st0.foe === st0.wild && st0.me === st0.mine && st0.biome === st0.want, JSON.stringify(st0));
+            const fought = await page.waitForFunction(() => gameUI.battleStage.stats.attacks >= 2 && gameUI.battleStage.stats.hits >= 1 && gameUI.battleStage.frames > 5, null, { timeout: 40000 }).then(() => true, () => false);
+            const dmg = await page.waitForSelector('#battle-scene .stage3d-dmg', { state: 'attached', timeout: 30000 }).then(() => true, () => false);
+            const st1 = await page.evaluate(() => { const st = gameUI.battleStage; return { stats: st.stats, last: st.lastMove, frames: st.frames, shapes: Object.keys(MOVE_FX_AREAS) }; });
+            check('Arena 3D: os golpes da caça automática viram efeitos 3D com formato próprio e número de dano flutuando', fought && dmg && st1.last && st1.shapes.includes(st1.last.shape), JSON.stringify(st1));
+            const bolt = await page.evaluate(() => { const st = gameUI.battleStage; st.onPlayerAttack({ skillName: 'Thunderbolt', skillType: 'electric', damage: 9, critical: false, typeEffectiveness: 1 }); const p = moveFxProfile('Thunderbolt', 'electric', moveFxPowerOf('Thunderbolt', 'electric')); return { last: st.lastMove, live: st.fx.live, chip: document.querySelector('#battle-scene .stage3d-move').textContent, area: p.area, text: moveFxAreaText(p) }; });
+            check('Golpes reais: Thunderbolt é um raio que cai do céu num círculo sobre o alvo (e o nome do golpe aparece)', bolt.last.shape === 'bolt' && bolt.last.side === 'me' && bolt.live >= 1 && bolt.chip === 'Thunderbolt' && bolt.area.kind === 'circle' && bolt.area.at === 'target', JSON.stringify(bolt));
+            // sair da aba pausa a arena (não gasta bateria fora da tela)
+            await page.click('[data-tab="tab-map"]'); await sleep(300);
+            const f0 = await page.evaluate(() => gameUI.battleStage.frames); await sleep(900);
+            const f1 = await page.evaluate(() => gameUI.battleStage.frames);
+            await page.click('[data-tab="tab-battle"]');
+            const back = await page.waitForFunction((f) => gameUI.battleStage.frames > f + 2, f1, { timeout: 15000 }).then(() => true, () => false);
+            check('Arena 3D: fora da aba de batalha a cena para de desenhar e volta ao reabrir', f1 - f0 <= 1 && back, JSON.stringify({ f0, f1 }));
+            // botão 3D/2D: desliga, lembra a escolha ao recarregar e liga de novo
+            await page.click('#battle-scene .stage3d-toggle');
+            const off = await page.evaluate(() => ({ cls: document.getElementById('battle-scene').classList.contains('stage-3d'), opacity: getComputedStyle(document.getElementById('player-sprite')).opacity, saved: localStorage.getItem('pokemon_idle_stage3d'), btn: document.querySelector('#battle-scene .stage3d-toggle').textContent }));
+            await page.reload();
+            await page.waitForFunction(() => typeof game !== 'undefined' && game.currentBattle && gameUI.battleStage, null, { timeout: 15000 });
+            await sleep(600);
+            const kept = await page.evaluate(() => ({ on: gameUI.battleStage.isOn(), ready: gameUI.battleStage.ready, cls: document.getElementById('battle-scene').classList.contains('stage-3d') }));
+            await page.click('#battle-scene .stage3d-toggle');
+            const again = await page.waitForFunction(() => gameUI.battleStage.isOn() && gameUI.battleStage.foe && document.getElementById('battle-scene').classList.contains('stage-3d'), null, { timeout: 30000 }).then(() => true, () => false);
+            check('Arena 3D: o botão volta para a cena 2D, a escolha fica salva no aparelho e dá para ligar de novo', !off.cls && off.opacity === '1' && off.saved === 'off' && /2D/.test(off.btn) && !kept.on && !kept.ready && !kept.cls && again, JSON.stringify({ off, kept, again }));
+            // batalha do Explorar: o golpe escolhido usa o mesmo efeito real
+            await page.evaluate(() => { for (const uid of game.gameState.party) game.gameState.ownedPokemon[uid].level = 30; game._instanceStats.clear(); });
+            await page.click('[data-tab="tab-map"]'); await page.click('#explore-open');
+            await page.waitForFunction(() => gameUI.exploreView.open && gameUI.exploreView.map, null, { timeout: 20000 });
+            for (let i = 0; i < 8; i++) { if (!(await page.evaluate(() => !!gameUI.exploreView.dialogLines))) break; await page.keyboard.press('Enter'); await sleep(120); }
+            await page.evaluate(() => { const v = gameUI.exploreView; game.gameState.currentRoute = 'kanto_route1'; v._goTo('route', null); v._encounter(); });
+            await page.waitForSelector('#explore [data-m="fight"]', { timeout: 20000 }).catch(() => {});
+            const mv = await page.evaluate(() => { const b = gameUI.exploreView.battle, i = Math.max(0, b.me().moves.findIndex(m => m.type === 'electric')); b.foe.hp = b.foe.maxHp = 9999; return { i, name: b.me().moves[i].name, type: b.me().moves[i].type, power: b.me().moves[i].power }; });
+            await page.click('#explore [data-m="fight"]'); await page.click(`#explore .ex-btn.mv[data-i="${mv.i}"]`);
+            const exFx = await page.waitForFunction(() => { const e = gameUI.exploreView.e3d; return e.lastMove && e.lastMove.side === 'me' && e.moveFx; }, null, { timeout: 20000 }).then(() => true, () => false);
+            const ex = await page.evaluate((mv) => ({ last: gameUI.exploreView.e3d.lastMove, want: moveFxProfile(mv.name, mv.type, mv.power).shape }), mv);
+            check('Golpes reais: na batalha do Explorar o golpe escolhido desenha o formato dele', exFx && ex.last.name === mv.name && ex.last.shape === ex.want, JSON.stringify({ mv, ...ex }));
+            await context.close();
+        }
+
         check('整个过程中没有页面错误或 console.error', errors.length === 0, errors.slice(0, 5).join(' | '));
     } catch (e) {
         check('冒烟测试流程', false, e.stack || String(e));

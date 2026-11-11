@@ -379,6 +379,20 @@ class GameUI {
 
     // ===================== 战斗界面 =====================
     handleBattleEvent(event, data) {
+        const stage = this.battleStage;            // F11.1: a arena 3D acompanha os mesmos eventos (só desenha)
+        if (stage) {
+            try {
+                if (event === 'start') stage.onStart(data);
+                else if (event === 'playerAttack') stage.onPlayerAttack(data);
+                else if (event === 'enemyAttack') stage.onEnemyAttack(data);
+                else if (event === 'enemyDefeated' || event === 'towerEnemyDefeated') stage.onDefeated(data);
+                else if (event === 'playerFainted' || event === 'towerPlayerFainted') stage.onFainted();
+                else if (event === 'healing') stage.onHealing(data);
+                else if (event === 'playerDodge') stage.onDodge();
+                else if (event === 'captureFailed') stage.onCapture(false, !!data.shiny);
+                else if (event === 'evolved') stage.onEvolved();
+            } catch (e) { /* a arena nunca pode travar a batalha */ }
+        }
         switch (event) {
             case 'start':
                 this.renderBattleStart(data);
@@ -2551,6 +2565,7 @@ class GameUI {
         }
         
         this.addBattleLog(message, 'catch');
+        if (this.battleStage) { try { this.battleStage.onCapture(true, !!pokemon.shiny); } catch (e) { /* só visual */ } }
 
         // 刷新队伍 / PC
         this.scheduleRenderTeam();

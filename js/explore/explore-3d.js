@@ -63,7 +63,7 @@ class Explore3D {
     }
     // F10.3: folhas saltando ao pisar no mato alto
     rustle(x, z) { this._burst(new this.T.Vector3(x, 0.25, z), '#3fae55', 10, 1.4); }
-    isAnimating() { return this.fx.length > 0 || this.shakeT > 0 || (!!this.roamers && [...this.roamers.values()].some(g => g.userData.k < 1)); }
+    isAnimating() { return this.fx.length > 0 || this.shakeT > 0 || (!!this.moveFx && this.moveFx.active) || (!!this.roamers && [...this.roamers.values()].some(g => g.userData.k < 1)); }
     _lights(scene, shadows) {
         const T = this.T, cast = shadows && this.q.shadows !== 'blob', wide = this.q.shadows === 'static' ? 26 : 16;
         const hemi = new T.HemisphereLight(0xdfefff, 0x3a3a2a, this.q.shadows === 'blob' ? 1.45 : 1.25); scene.add(hemi); scene.userData.hemi = hemi; scene.userData.hemiBase = hemi.intensity;
@@ -339,6 +339,7 @@ class Explore3D {
     // ---------------- batalha ----------------
     startBattle(opts) {
         const T = this.T;
+        if (this.moveFx) this.moveFx.clear();
         this._clear(this.battle); this._lights(this.battle, false);
         const biomeCol = new T.Color(opts.ground || '#5fbf57');
         this.battle.background = new T.Color(opts.sky || '#9fd8ff');
@@ -379,18 +380,17 @@ class Explore3D {
         this.battle.add(this.foeSpr);
         this._tween(0.5, (k) => { this.foeSpr.position.x = L.foe[0] + 6 * (1 - k) * (1 - k); });
     }
-    endBattle() { this.mode = 'world'; this._clear(this.battle); this.meSpr = this.foeSpr = this.ball = null; this.camera.far = this.q.fogFar + 8; this.camera.updateProjectionMatrix(); }
+    endBattle() { this.mode = 'world'; if (this.moveFx) this.moveFx.clear(); this._clear(this.battle); this.meSpr = this.foeSpr = this.ball = null; this.camera.far = this.q.fogFar + 8; this.camera.updateProjectionMatrix(); }
     _spr(side) { return side === 'me' ? this.meSpr : this.foeSpr; }
-    attack(side, type, power, done) {
+    // F11.1: o golpe tem o formato e a área reais dele (js/fx/move-fx.js): quem ataca avança (pancada/corte) ou dá um impulso (à distância)
+    attack(side, type, power, done, name) {
         const a = this._spr(side), d = this._spr(side === 'me' ? 'foe' : 'me'); if (!a || !d) return done && done();
-        const T = this.T, col = EXPLORE_TYPE_COLORS[type] || '#ffffff', base = a.userData.base, dir = d.position.clone().sub(base).normalize();
-        this._tween(0.25, (k) => { a.position.copy(base).addScaledVector(dir, Math.sin(k * Math.PI) * 0.8); }, () => a.position.copy(base));
-        const orb = new T.Mesh(this._sphere, new T.MeshBasicMaterial({ color: col })), big = power >= 80;
-        orb.scale.setScalar(big ? 0.32 : 0.2); this.battle.add(orb);
-        const from = base.clone().add(new T.Vector3(0, 1.2, 0)), to = d.position.clone().add(new T.Vector3(0, 1.1, 0));
-        this._tween(0.38, (k) => { orb.position.lerpVectors(from, to, k); orb.position.y += Math.sin(k * Math.PI) * (big ? 1.4 : 0.6); }, () => {
-            this.battle.remove(orb); this._burst(to, col, big ? 50 : 26, big ? 4 : 2.6); this.hit(side === 'me' ? 'foe' : 'me'); if (big) this.shakeT = 0.35; done && done();
-        });
+        const base = a.userData.base, tbase = d.userData.base || d.position, dir = tbase.clone().sub(base).normalize(), prof = moveFxProfile(name, type, power);
+        const reach = prof.melee ? base.distanceTo(tbase) - 1.3 : 0.8;
+        this._tween(prof.melee ? 0.34 : 0.25, (k) => { const s = Math.sin(k * Math.PI); a.position.copy(base).addScaledVector(dir, s * reach); a.position.y = base.y + s * (prof.melee ? 0.5 : 0.2); }, () => a.position.copy(base));
+        this.lastMove = { name: prof.name, shape: prof.shape, type: prof.type, side };
+        if (!this.moveFx) this.moveFx = new MoveFxRenderer(this.T, this.battle, { speed: 1, max: 3, onShake: (f) => { this.shakeT = Math.max(this.shakeT, 0.15 + f); } });
+        this.moveFx.play(prof, base, tbase, { onHit: () => { this.hit(side === 'me' ? 'foe' : 'me'); done && done(); }, height: 1.15, targetHeight: 1.0 });
     }
     hit(side) {
         const s = this._spr(side); if (!s) return; const base = s.userData.base;
@@ -458,6 +458,7 @@ class Explore3D {
             f.step && f.step(k);
             if (f.life <= 0) { this.fx.splice(i, 1); f.end && f.end(); }
         }
+        if (this.moveFx) this.moveFx.update(dt);
         if (this.windU) this.windU.value = this.t;
         for (const a of this.anim || []) { if (a.liquid) a.liquid.emissiveIntensity = (a.lava ? 1.2 : 0.3) + Math.sin(this.t * 2) * 0.15; if (a.glow) a.glow.emissiveIntensity = 1 + Math.sin(this.t * 3) * 0.4; }
         if (this.roamers) for (const g of this.roamers.values()) {
@@ -485,7 +486,7 @@ class Explore3D {
             this.camera.position.lerp(base, Math.min(1, dt * 3));
             if (this.shakeT > 0) { this.shakeT -= dt; this.camera.position.x += (Math.random() - 0.5) * 0.2; this.camera.position.y += (Math.random() - 0.5) * 0.2; }
             this.camera.lookAt(this.camTarget);
-            for (const s of [this.meSpr, this.foeSpr]) if (s && s.visible && s.userData.base && !this.fx.length) s.position.y = s.userData.base.y + Math.sin(this.t * 2.5 + (s === this.meSpr ? 1 : 0)) * 0.03;
+            for (const s of [this.meSpr, this.foeSpr]) if (s && s.visible && s.userData.base && !this.fx.length && !(this.moveFx && this.moveFx.active)) s.position.y = s.userData.base.y + Math.sin(this.t * 2.5 + (s === this.meSpr ? 1 : 0)) * 0.03;
             this.renderer.render(this.battle, this.camera);
         }
     }

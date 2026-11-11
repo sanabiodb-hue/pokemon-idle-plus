@@ -161,7 +161,7 @@ class ExploreBattle {
         const r = g._computeDamage(att.level, atkStat, def.stats.defense, [move.type], def.types, move.power, crit.rate, crit.multiplier);
         const dmg = isPlayer ? exploreBoostedDamage(r.damage, g.exploreDamageBonus ? g.exploreDamageBonus() : 0) : r.damage;   // F10.8: Insígnia Casulo
         def.hp = Math.max(0, def.hp - dmg);
-        out.push({ t: 'hit', side: isPlayer ? 'me' : 'foe', dmg, eff: r.typeEffectiveness, crit: r.criticalHit, mtype: move.type, power: move.power, hp: def.hp, maxHp: def.maxHp });
+        out.push({ t: 'hit', side: isPlayer ? 'me' : 'foe', dmg, eff: r.typeEffectiveness, crit: r.criticalHit, mtype: move.type, power: move.power, move: move.name, hp: def.hp, maxHp: def.maxHp });
         if (r.criticalHit) out.push({ t: 'text', msg: 'Um golpe crítico!' });
         if (r.effectivenessText) out.push({ t: 'text', msg: r.effectivenessText });
         const s = EXPLORE_TYPE_STATUS[move.type];
